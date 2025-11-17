@@ -539,7 +539,7 @@ const Game = () => {
     const state = gameStateRef.current;
 
     // Clear canvas
-    ctx.fillStyle = "hsl(var(--game-background))";
+    ctx.fillStyle = "#000000";
     ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
     // Draw ship
@@ -550,13 +550,13 @@ const Game = () => {
     // Flicker if invulnerable
     if (!state.ship.invulnerable || Math.floor(Date.now() / 100) % 2 === 0) {
       ctx.strokeStyle = state.powerUpActive.shield > 0
-        ? "hsl(var(--game-glow))"
-        : "hsl(var(--game-foreground))";
+        ? "#7FFF7F"
+        : "#FFFFFF";
       ctx.lineWidth = 2;
       ctx.shadowBlur = 10;
       ctx.shadowColor = state.powerUpActive.shield > 0
-        ? "hsl(var(--game-glow))"
-        : "hsl(var(--game-foreground))";
+        ? "#7FFF7F"
+        : "#FFFFFF";
 
       ctx.beginPath();
       ctx.moveTo(SHIP_SIZE, 0);
@@ -585,10 +585,10 @@ const Game = () => {
       ctx.translate(asteroid.pos.x, asteroid.pos.y);
       ctx.rotate(asteroid.rotation);
 
-      ctx.strokeStyle = "hsl(var(--game-foreground))";
+      ctx.strokeStyle = "#FFFFFF";
       ctx.lineWidth = 2;
       ctx.shadowBlur = 8;
-      ctx.shadowColor = "hsl(var(--game-foreground))";
+      ctx.shadowColor = "#FFFFFF";
 
       ctx.beginPath();
       asteroid.points.forEach((point, i) => {
@@ -607,9 +607,9 @@ const Game = () => {
     // Draw bullets
     state.bullets.forEach((bullet) => {
       ctx.save();
-      ctx.fillStyle = "hsl(var(--game-foreground))";
+      ctx.fillStyle = "#FFFFFF";
       ctx.shadowBlur = 10;
-      ctx.shadowColor = "hsl(var(--game-foreground))";
+      ctx.shadowColor = "#FFFFFF";
       ctx.beginPath();
       ctx.arc(bullet.pos.x, bullet.pos.y, 2, 0, Math.PI * 2);
       ctx.fill();
@@ -621,10 +621,10 @@ const Game = () => {
       ctx.save();
       ctx.translate(ufo.pos.x, ufo.pos.y);
 
-      ctx.strokeStyle = "hsl(var(--game-ufo))";
+      ctx.strokeStyle = "#FFFF66";
       ctx.lineWidth = 2;
       ctx.shadowBlur = 12;
-      ctx.shadowColor = "hsl(var(--game-ufo))";
+      ctx.shadowColor = "#FFFF66";
 
       const radius = ufo.size === "large" ? 20 : 10;
 
@@ -647,15 +647,15 @@ const Game = () => {
       ctx.translate(powerUp.pos.x, powerUp.pos.y);
       ctx.rotate(powerUp.rotation);
 
-      const color = powerUp.type === "shield" ? "var(--game-glow)"
-        : powerUp.type === "rapidFire" ? "var(--game-danger)"
-        : powerUp.type === "multiplier" ? "var(--game-ufo)"
-        : "var(--game-powerup)";
+      const color = powerUp.type === "shield" ? "#7FFF7F"
+        : powerUp.type === "rapidFire" ? "#FF6666"
+        : powerUp.type === "multiplier" ? "#FFFF66"
+        : "#CC66FF";
 
-      ctx.strokeStyle = `hsl(${color})`;
+      ctx.strokeStyle = color;
       ctx.lineWidth = 2;
       ctx.shadowBlur = 15;
-      ctx.shadowColor = `hsl(${color})`;
+      ctx.shadowColor = color;
 
       ctx.beginPath();
       for (let i = 0; i < 5; i++) {
