@@ -761,12 +761,15 @@ const Game = () => {
         </div>
         <audio
           controls
-          preload="none"
-          crossOrigin="anonymous"
+          preload="metadata"
           className="w-full"
-          autoPlay
+          onError={(e) => {
+            console.error("Audio loading error:", e);
+            toast.error("Failed to load radio stream");
+          }}
+          onCanPlay={() => console.log("Audio ready to play")}
         >
-          <source src="http://necta.burn.net:8000/nectarine" type="audio/mpeg" />
+          <source src="https://necta.burn.net:8000/nectarine" type="audio/mpeg" />
           Your browser does not support the audio element.
         </audio>
       </div>
