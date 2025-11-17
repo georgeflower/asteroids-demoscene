@@ -754,6 +754,22 @@ const Game = () => {
           <div>H : HYPERSPACE</div>
         </div>
       </div>
+
+      <div className="mt-6 flex flex-col gap-2 max-w-md">
+        <div className="text-[hsl(var(--game-foreground))] font-mono text-sm text-center">
+          BACKGROUND MUSIC: NECTARINE RADIO
+        </div>
+        <audio
+          controls
+          preload="none"
+          crossOrigin="anonymous"
+          className="w-full"
+          autoPlay
+        >
+          <source src="http://necta.burn.net:8000/nectarine" type="audio/mpeg" />
+          Your browser does not support the audio element.
+        </audio>
+      </div>
     </div>
   );
 };
