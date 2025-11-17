@@ -57,6 +57,14 @@ export default {
           border: "hsl(var(--sidebar-border))",
           ring: "hsl(var(--sidebar-ring))",
         },
+        game: {
+          background: "hsl(var(--game-background))",
+          foreground: "hsl(var(--game-foreground))",
+          glow: "hsl(var(--game-glow))",
+          danger: "hsl(var(--game-danger))",
+          powerup: "hsl(var(--game-powerup))",
+          ufo: "hsl(var(--game-ufo))",
+        },
       },
       borderRadius: {
         lg: "var(--radius)",

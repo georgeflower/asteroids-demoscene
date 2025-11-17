@@ -38,6 +38,14 @@ All colors MUST be HSL.
 
     --radius: 0.5rem;
 
+    /* Retro arcade game colors */
+    --game-background: 0 0% 0%;
+    --game-foreground: 0 0% 100%;
+    --game-glow: 120 100% 75%;
+    --game-danger: 0 100% 60%;
+    --game-powerup: 280 100% 70%;
+    --game-ufo: 60 100% 60%;
+
     --sidebar-background: 0 0% 98%;
 
     --sidebar-foreground: 240 5.3% 26.1%;
@@ -91,6 +99,14 @@ All colors MUST be HSL.
     --sidebar-accent-foreground: 240 4.8% 95.9%;
     --sidebar-border: 240 3.7% 15.9%;
     --sidebar-ring: 217.2 91.2% 59.8%;
+
+    /* Retro arcade game colors (same for dark mode) */
+    --game-background: 0 0% 0%;
+    --game-foreground: 0 0% 100%;
+    --game-glow: 120 100% 75%;
+    --game-danger: 0 100% 60%;
+    --game-powerup: 280 100% 70%;
+    --game-ufo: 60 100% 60%;
   }
 }
 
