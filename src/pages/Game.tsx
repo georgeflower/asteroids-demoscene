@@ -89,7 +89,7 @@ const Game = () => {
     pos: { x: CANVAS_WIDTH / 2, y: CANVAS_HEIGHT / 2 },
     vel: { x: 0, y: 0 },
     rotation: -Math.PI / 2,
-    rotationSpeed: 0.1,
+    rotationSpeed: 0.05,
     thrust: 0.08,
     isThrusting: false,
     invulnerable: true,
