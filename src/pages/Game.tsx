@@ -66,7 +66,7 @@ const CANVAS_HEIGHT = 600;
 const SHIP_SIZE = 10;
 const BULLET_SPEED = 7;
 const BULLET_LIFETIME = 60;
-const ASTEROID_SPEEDS = { large: 1, medium: 1.5, small: 2 };
+const ASTEROID_SPEEDS = { large: 0.5, medium: 0.8, small: 1.2 };
 const ASTEROID_POINTS = {
   large: 20,
   medium: 50,
@@ -90,7 +90,7 @@ const Game = () => {
     vel: { x: 0, y: 0 },
     rotation: -Math.PI / 2,
     rotationSpeed: 0.1,
-    thrust: 0.15,
+    thrust: 0.08,
     isThrusting: false,
     invulnerable: true,
     invulnerableTime: 120,
@@ -130,7 +130,7 @@ const Game = () => {
     const side = Math.random() < 0.5 ? 0 : CANVAS_WIDTH;
     return {
       pos: { x: side, y: Math.random() * CANVAS_HEIGHT },
-      vel: { x: (side === 0 ? 1 : -1) * 2, y: 0 },
+      vel: { x: (side === 0 ? 1 : -1) * 1.2, y: 0 },
       rotation: 0,
       size,
       shootTimer: 60 + Math.random() * 60,
@@ -352,7 +352,7 @@ const Game = () => {
 
       // Simple sine wave movement
       ufo.direction += 0.02;
-      ufo.vel.y = Math.sin(ufo.direction) * 1.5;
+      ufo.vel.y = Math.sin(ufo.direction) * 0.8;
 
       ufo.pos = wrapPosition(ufo.pos);
 
