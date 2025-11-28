@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
+import { soundEffects } from "@/utils/soundEffects";
 
 interface Vector {
   x: number;
@@ -253,6 +254,7 @@ const Game = () => {
     };
 
     gameStateRef.current.bullets.push(bullet);
+    soundEffects.shoot();
   }, []);
 
   const hyperspace = useCallback(() => {
@@ -290,10 +292,16 @@ const Game = () => {
       state.ship.rotation += state.ship.rotationSpeed;
     }
     if (keysRef.current["ArrowUp"]) {
+      if (!state.ship.isThrusting) {
+        soundEffects.startThrust();
+      }
       state.ship.isThrusting = true;
       state.ship.vel.x += Math.cos(state.ship.rotation) * state.ship.thrust;
       state.ship.vel.y += Math.sin(state.ship.rotation) * state.ship.thrust;
     } else {
+      if (state.ship.isThrusting) {
+        soundEffects.stopThrust();
+      }
       state.ship.isThrusting = false;
     }
 
@@ -347,6 +355,11 @@ const Game = () => {
       ufo.vel.y = Math.sin(ufo.direction) * 1.5;
 
       ufo.pos = wrapPosition(ufo.pos);
+
+      // UFO beep every second
+      if (Math.floor(Date.now() / 1000) % 2 === 0 && Math.floor(Date.now() / 100) % 10 === 0) {
+        soundEffects.ufoBeep();
+      }
 
       ufo.shootTimer--;
       if (ufo.shootTimer <= 0) {
@@ -447,9 +460,13 @@ const Game = () => {
           if (asteroid.size === "large") {
             newAsteroids.push(createAsteroid(asteroid.pos.x, asteroid.pos.y, "medium"));
             newAsteroids.push(createAsteroid(asteroid.pos.x, asteroid.pos.y, "medium"));
+            soundEffects.explode();
           } else if (asteroid.size === "medium") {
             newAsteroids.push(createAsteroid(asteroid.pos.x, asteroid.pos.y, "small"));
             newAsteroids.push(createAsteroid(asteroid.pos.x, asteroid.pos.y, "small"));
+            soundEffects.explode();
+          } else {
+            soundEffects.smallExplode();
           }
 
           // Chance to spawn power-up
@@ -474,6 +491,7 @@ const Game = () => {
           const multiplier = state.powerUpActive.multiplier > 0 ? 2 : 1;
           state.score += UFO_POINTS[ufo.size] * multiplier;
           setDisplayScore(state.score);
+          soundEffects.explode();
 
           const powerUp = createPowerUp(ufo.pos.x, ufo.pos.y);
           if (powerUp) state.powerUps.push(powerUp);
@@ -493,6 +511,8 @@ const Game = () => {
           state.lives--;
           setDisplayLives(state.lives);
           state.ship = createShip();
+          soundEffects.explode();
+          soundEffects.stopThrust();
           toast.error("Ship destroyed!");
 
           if (state.lives <= 0) {
@@ -512,6 +532,8 @@ const Game = () => {
           state.lives--;
           setDisplayLives(state.lives);
           state.ship = createShip();
+          soundEffects.explode();
+          soundEffects.stopThrust();
           toast.error("Ship destroyed!");
 
           if (state.lives <= 0) {
