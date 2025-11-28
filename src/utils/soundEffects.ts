@@ -52,22 +52,38 @@ class SoundEffects {
     oscillator.stop(this.audioContext.currentTime + 0.3);
   }
 
-  // Thrust sound - continuous low rumble
+  // Thrust sound - continuous white noise rumble
   startThrust() {
     if (this.thrustOscillator) return; // Already playing
 
-    this.thrustOscillator = this.audioContext.createOscillator();
+    // Create white noise using buffer source
+    const bufferSize = this.audioContext.sampleRate * 2;
+    const buffer = this.audioContext.createBuffer(1, bufferSize, this.audioContext.sampleRate);
+    const data = buffer.getChannelData(0);
+    
+    // Fill with random values for white noise
+    for (let i = 0; i < bufferSize; i++) {
+      data[i] = Math.random() * 2 - 1;
+    }
+
+    const noiseSource = this.audioContext.createBufferSource();
+    noiseSource.buffer = buffer;
+    noiseSource.loop = true;
+
+    // Low-pass filter to make it sound more like engine rumble
+    const filter = this.audioContext.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.setValueAtTime(400, this.audioContext.currentTime);
+
     this.thrustGain = this.audioContext.createGain();
+    this.thrustGain.gain.setValueAtTime(0.12, this.audioContext.currentTime);
 
-    this.thrustOscillator.type = 'sawtooth';
-    this.thrustOscillator.frequency.setValueAtTime(80, this.audioContext.currentTime);
-
-    this.thrustOscillator.connect(this.thrustGain);
+    noiseSource.connect(filter);
+    filter.connect(this.thrustGain);
     this.thrustGain.connect(this.audioContext.destination);
 
-    this.thrustGain.gain.setValueAtTime(0.15, this.audioContext.currentTime);
-
-    this.thrustOscillator.start();
+    noiseSource.start();
+    this.thrustOscillator = noiseSource as any; // Store reference for stopping
   }
 
   stopThrust() {
