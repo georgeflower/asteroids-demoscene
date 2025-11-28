@@ -786,14 +786,40 @@ const Game = () => {
           preload="metadata"
           className="w-full"
           onError={(e) => {
-            console.error("Audio loading error:", e);
-            toast.error("Failed to load radio stream");
+            const target = e.currentTarget;
+            console.error("Audio loading error:", {
+              error: e,
+              networkState: target.networkState,
+              networkStateText: ['NETWORK_EMPTY', 'NETWORK_IDLE', 'NETWORK_LOADING', 'NETWORK_NO_SOURCE'][target.networkState],
+              readyState: target.readyState,
+              readyStateText: ['HAVE_NOTHING', 'HAVE_METADATA', 'HAVE_CURRENT_DATA', 'HAVE_FUTURE_DATA', 'HAVE_ENOUGH_DATA'][target.readyState],
+              src: target.currentSrc,
+              errorCode: target.error?.code,
+              errorMessage: target.error?.message
+            });
+            toast.error(`Failed to load radio: ${target.error?.message || 'Unknown error'}`);
           }}
-          onCanPlay={() => console.log("Audio ready to play")}
+          onCanPlay={() => {
+            console.log("Audio ready to play");
+            toast.success("Radio stream loaded!");
+          }}
+          onLoadStart={() => console.log("Audio: Load started")}
+          onLoadedData={() => console.log("Audio: Data loaded")}
+          onLoadedMetadata={() => console.log("Audio: Metadata loaded")}
+          onPlay={() => console.log("Audio: Playing")}
+          onPause={() => console.log("Audio: Paused")}
+          onStalled={() => console.warn("Audio: Stalled")}
+          onSuspend={() => console.log("Audio: Suspended")}
+          onWaiting={() => console.log("Audio: Waiting for data")}
+          onAbort={() => console.warn("Audio: Aborted")}
         >
           <source src="https://necta.burn.net:8000/nectarine" type="audio/mpeg" />
+          <source src="http://necta.burn.net:8000/nectarine" type="audio/mpeg" />
           Your browser does not support the audio element.
         </audio>
+        <div className="text-[hsl(var(--game-foreground))] font-mono text-xs text-center opacity-70">
+          Stream may take a moment to load. Check browser console (F12) for debug info.
+        </div>
       </div>
     </div>
   );
