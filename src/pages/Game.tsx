@@ -779,7 +779,7 @@ const Game = () => {
 
       <div className="mt-6 flex flex-col gap-2 max-w-md">
         <div className="text-[hsl(var(--game-foreground))] font-mono text-sm text-center">
-          BACKGROUND MUSIC: NECTARINE RADIO
+          BACKGROUND MUSIC: SOMAFM DEF CON RADIO
         </div>
         <audio
           controls
@@ -797,28 +797,23 @@ const Game = () => {
               errorCode: target.error?.code,
               errorMessage: target.error?.message
             });
-            toast.error(`Failed to load radio: ${target.error?.message || 'Unknown error'}`);
+            toast.error(`Radio error: ${target.error?.message || 'Unknown error'}`);
           }}
           onCanPlay={() => {
-            console.log("Audio ready to play");
-            toast.success("Radio stream loaded!");
+            console.log("Radio ready to play");
+            toast.success("DEF CON Radio loaded!");
           }}
-          onLoadStart={() => console.log("Audio: Load started")}
-          onLoadedData={() => console.log("Audio: Data loaded")}
-          onLoadedMetadata={() => console.log("Audio: Metadata loaded")}
-          onPlay={() => console.log("Audio: Playing")}
-          onPause={() => console.log("Audio: Paused")}
-          onStalled={() => console.warn("Audio: Stalled")}
-          onSuspend={() => console.log("Audio: Suspended")}
-          onWaiting={() => console.log("Audio: Waiting for data")}
-          onAbort={() => console.warn("Audio: Aborted")}
+          onLoadStart={() => console.log("Radio: Loading...")}
+          onLoadedMetadata={() => console.log("Radio: Metadata loaded")}
+          onPlay={() => console.log("Radio: Playing")}
+          onPause={() => console.log("Radio: Paused")}
         >
-          <source src="https://necta.burn.net:8000/nectarine" type="audio/mpeg" />
-          <source src="http://necta.burn.net:8000/nectarine" type="audio/mpeg" />
+          <source src="https://ice5.somafm.com/defcon-128-mp3" type="audio/mpeg" />
+          <source src="https://ice1.somafm.com/defcon-128-mp3" type="audio/mpeg" />
           Your browser does not support the audio element.
         </audio>
         <div className="text-[hsl(var(--game-foreground))] font-mono text-xs text-center opacity-70">
-          Stream may take a moment to load. Check browser console (F12) for debug info.
+          Streaming 128kbps MP3 • Music from DEF CON hacking conference
         </div>
       </div>
     </div>
