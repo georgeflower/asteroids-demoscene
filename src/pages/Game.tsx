@@ -1885,6 +1885,28 @@ const Game = () => {
     setIsTouchDevice('ontouchstart' in window || navigator.maxTouchPoints > 0);
   }, []);
 
+  // Try to autoplay radio on first user interaction (browsers block autoplay without gesture)
+  useEffect(() => {
+    const tryPlay = () => {
+      if (radioStartedRef.current) return;
+      if (audioRef.current) {
+        audioRef.current.play().then(() => {
+          radioStartedRef.current = true;
+        }).catch(() => { /* still blocked, will retry on next interaction */ });
+      }
+    };
+    window.addEventListener("click", tryPlay, { once: false });
+    window.addEventListener("keydown", tryPlay, { once: false });
+    window.addEventListener("touchstart", tryPlay, { once: false });
+    // Also try immediately
+    tryPlay();
+    return () => {
+      window.removeEventListener("click", tryPlay);
+      window.removeEventListener("keydown", tryPlay);
+      window.removeEventListener("touchstart", tryPlay);
+    };
+  }, []);
+
   // Poll Nectarine now-playing info
   useEffect(() => {
     const fetchNowPlaying = async () => {
