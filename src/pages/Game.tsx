@@ -198,6 +198,7 @@ const Game = () => {
   const showLifeLostRef = useRef(false);
   const [isTouchDevice, setIsTouchDevice] = useState(false);
   const [nowPlaying, setNowPlaying] = useState<{ artist: string; title: string } | null>(null);
+  const nowPlayingRef = useRef<{ artist: string; title: string } | null>(null);
   const [gameMode, setGameMode] = useState<GameMode>("menu");
   const gameModeRef = useRef<GameMode>("menu");
   const [duelKills, setDuelKills] = useState<[number, number]>([0, 0]);
@@ -1865,6 +1866,18 @@ const Game = () => {
     ctx.textAlign = "right";
     ctx.fillText(`${theme.name.toUpperCase()} ZONE`, CANVAS_WIDTH - 10, 18);
     ctx.restore();
+
+    // Now playing info on canvas
+    const np = nowPlayingRef.current;
+    if (np) {
+      ctx.save();
+      ctx.globalAlpha = 0.5;
+      ctx.font = "10px monospace";
+      ctx.fillStyle = "#FFFFFF";
+      ctx.textAlign = "left";
+      ctx.fillText(`♪ ${np.artist} — ${np.title}`, 10, CANVAS_HEIGHT - 10);
+      ctx.restore();
+    }
   }, []);
 
   const gameLoop = useCallback(() => {
@@ -1911,7 +1924,7 @@ const Game = () => {
   useEffect(() => {
     const fetchNowPlaying = async () => {
       try {
-        const res = await fetch("https://scenestream.net/demovibes/xml/queue/");
+        const res = await fetch("https://corsproxy.io/?url=" + encodeURIComponent("https://scenestream.net/demovibes/xml/queue/"));
         const text = await res.text();
         const parser = new DOMParser();
         const xml = parser.parseFromString(text, "text/xml");
@@ -1920,7 +1933,9 @@ const Game = () => {
           const first = items[0];
           const artist = first.querySelector("artist")?.textContent || "Unknown";
           const title = first.querySelector("title")?.textContent || "Unknown";
-          setNowPlaying({ artist, title });
+          const info = { artist, title };
+          nowPlayingRef.current = info;
+          setNowPlaying(info);
         }
       } catch (e) {
         console.log("Could not fetch now-playing info:", e);
