@@ -1437,6 +1437,30 @@ const Game = () => {
     setIsTouchDevice('ontouchstart' in window || navigator.maxTouchPoints > 0);
   }, []);
 
+  // Poll Nectarine now-playing info
+  useEffect(() => {
+    const fetchNowPlaying = async () => {
+      try {
+        const res = await fetch("https://scenestream.net/demovibes/xml/queue/");
+        const text = await res.text();
+        const parser = new DOMParser();
+        const xml = parser.parseFromString(text, "text/xml");
+        const items = xml.querySelectorAll("entry");
+        if (items.length > 0) {
+          const first = items[0];
+          const artist = first.querySelector("artist")?.textContent || "Unknown";
+          const title = first.querySelector("title")?.textContent || "Unknown";
+          setNowPlaying({ artist, title });
+        }
+      } catch (e) {
+        console.log("Could not fetch now-playing info:", e);
+      }
+    };
+    fetchNowPlaying();
+    const interval = setInterval(fetchNowPlaying, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
   const continueAfterLifeLost = useCallback(() => {
     showLifeLostRef.current = false;
     setShowLifeLost(false);
