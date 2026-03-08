@@ -1866,6 +1866,18 @@ const Game = () => {
     ctx.textAlign = "right";
     ctx.fillText(`${theme.name.toUpperCase()} ZONE`, CANVAS_WIDTH - 10, 18);
     ctx.restore();
+
+    // Now playing info on canvas
+    const np = nowPlayingRef.current;
+    if (np) {
+      ctx.save();
+      ctx.globalAlpha = 0.5;
+      ctx.font = "10px monospace";
+      ctx.fillStyle = "#FFFFFF";
+      ctx.textAlign = "left";
+      ctx.fillText(`♪ ${np.artist} — ${np.title}`, 10, CANVAS_HEIGHT - 10);
+      ctx.restore();
+    }
   }, []);
 
   const gameLoop = useCallback(() => {
