@@ -559,6 +559,7 @@ const Game = () => {
           soundEffects.explode();
           soundEffects.stopThrust();
           toast.error("Ship destroyed!");
+          haptics.heavy();
 
           if (state.lives <= 0) {
             state.gameOver = true;
