@@ -422,6 +422,8 @@ const Game = () => {
       // Fire = button 0 (A/X), Hyperspace = button 1 (B/Circle)
       if (gp.buttons[0]?.pressed) result.fire = true;
       if (gp.buttons[1]?.pressed) result.hyperspace = true;
+      // X button (button 2) = also thrust
+      if (gp.buttons[2]?.pressed) result.up = true;
     } catch { /* no gamepad API */ }
     return result;
   };
