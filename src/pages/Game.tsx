@@ -573,6 +573,8 @@ const Game = () => {
           if (state.lives <= 0) {
             state.gameOver = true;
             setShowGameOver(true);
+            if (isHighScore(state.score)) setEnteringInitials(true);
+            setLeaderboard(loadLeaderboard());
             toast.error(`Game Over! Final Score: ${state.score}`);
           }
         }
