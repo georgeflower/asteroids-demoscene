@@ -1984,6 +1984,52 @@ const Game = () => {
     return () => clearInterval(interval);
   }, []);
 
+  // Poll Nectarine oneliner chat
+  useEffect(() => {
+    const fetchOneliner = async () => {
+      try {
+        const apiUrl = "https://scenestream.net/demovibes/xml/oneliner/";
+        const proxies = [
+          `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(apiUrl)}`,
+          `https://corsproxy.io/?${encodeURIComponent(apiUrl)}`,
+        ];
+        
+        let text = "";
+        for (const proxyUrl of proxies) {
+          try {
+            const res = await fetch(proxyUrl);
+            if (res.ok) {
+              text = await res.text();
+              break;
+            }
+          } catch {
+            continue;
+          }
+        }
+        
+        if (!text) return;
+        
+        const parser = new DOMParser();
+        const xml = parser.parseFromString(text, "text/xml");
+        const firstEntry = xml.querySelector("entry");
+        if (firstEntry) {
+          const time = firstEntry.getAttribute("time") || "";
+          if (time !== lastOnelinerTimeRef.current) {
+            lastOnelinerTimeRef.current = time;
+            const author = firstEntry.querySelector("author")?.textContent || "???";
+            const message = firstEntry.querySelector("message")?.textContent || "";
+            onelinerRef.current = { author, message };
+          }
+        }
+      } catch (e) {
+        console.log("Could not fetch oneliner:", e);
+      }
+    };
+    fetchOneliner();
+    const interval = setInterval(fetchOneliner, 15000);
+    return () => clearInterval(interval);
+  }, []);
+
   const continueAfterLifeLost = useCallback(() => {
     showLifeLostRef.current = false;
     setShowLifeLost(false);
