@@ -217,6 +217,8 @@ const Game = () => {
   const radioStartedRef = useRef(false);
   const onelinerRef = useRef<{ author: string; message: string } | null>(null);
   const lastOnelinerTimeRef = useRef<string>("");
+  const nowPlayingMarqueeXRef = useRef<number>(CANVAS_WIDTH);
+  const onelinerMarqueeXRef = useRef<number>(CANVAS_WIDTH);
 
   // Online multiplayer state
   const multiplayer = useMultiplayer();
