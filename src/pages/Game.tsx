@@ -31,17 +31,46 @@ interface Asteroid extends GameObject {
 
 interface Bullet extends GameObject {
   lifetime: number;
+  isUFO?: boolean;
 }
 
 interface UFO extends GameObject {
   size: "large" | "small";
   shootTimer: number;
   direction: number;
+  waveOffset: number;
 }
 
 interface PowerUp extends GameObject {
   type: "shield" | "rapidFire" | "extraLife" | "multiplier";
   lifetime: number;
+}
+
+interface FloatingText {
+  pos: Vector;
+  text: string;
+  color: string;
+  opacity: number;
+  lifetime: number;
+  maxLifetime: number;
+  size: number;
+}
+
+interface Particle {
+  pos: Vector;
+  vel: Vector;
+  lifetime: number;
+  maxLifetime: number;
+  color: string;
+  size: number;
+}
+
+interface Star {
+  x: number;
+  y: number;
+  brightness: number;
+  layer: number;
+  size: number;
 }
 
 interface GameState {
@@ -60,6 +89,10 @@ interface GameState {
     rapidFire: number;
     multiplier: number;
   };
+  floatingTexts: FloatingText[];
+  particles: Particle[];
+  stars: Star[];
+  ufoSpawnTimer: number;
 }
 
 const CANVAS_WIDTH = 800;
@@ -74,6 +107,11 @@ const ASTEROID_POINTS = {
   small: 100,
 };
 const UFO_POINTS = { large: 200, small: 1000 };
+const ASTEROID_COLORS: Record<string, string> = {
+  large: "#FFFFFF",
+  medium: "#88DDFF",
+  small: "#44AAFF",
+};
 
 const Game = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -114,6 +152,70 @@ const Game = () => {
     const board = loadLeaderboard();
     return board.length < 10 || score > (board[board.length - 1]?.score ?? 0);
   }, [loadLeaderboard]);
+
+  const createStars = (): Star[] => {
+    const stars: Star[] = [];
+    for (let i = 0; i < 120; i++) {
+      const layer = Math.floor(Math.random() * 3);
+      stars.push({
+        x: Math.random() * CANVAS_WIDTH,
+        y: Math.random() * CANVAS_HEIGHT,
+        brightness: 0.3 + Math.random() * 0.7,
+        layer,
+        size: layer === 0 ? 0.5 : layer === 1 ? 1 : 1.5,
+      });
+    }
+    return stars;
+  };
+
+  const spawnFloatingText = (pos: Vector, text: string, color: string, size = 16) => {
+    if (!gameStateRef.current) return;
+    gameStateRef.current.floatingTexts.push({
+      pos: { x: pos.x, y: pos.y },
+      text,
+      color,
+      opacity: 1,
+      lifetime: 90,
+      maxLifetime: 90,
+      size,
+    });
+  };
+
+  const spawnExplosion = (pos: Vector, color: string, count = 12) => {
+    if (!gameStateRef.current) return;
+    for (let i = 0; i < count; i++) {
+      const angle = (i / count) * Math.PI * 2 + (Math.random() - 0.5) * 0.5;
+      const speed = 1 + Math.random() * 3;
+      gameStateRef.current.particles.push({
+        pos: { x: pos.x, y: pos.y },
+        vel: { x: Math.cos(angle) * speed, y: Math.sin(angle) * speed },
+        lifetime: 30 + Math.random() * 30,
+        maxLifetime: 60,
+        color,
+        size: 1 + Math.random() * 2,
+      });
+    }
+  };
+
+  const spawnThrustParticle = (ship: Ship) => {
+    if (!gameStateRef.current) return;
+    const backAngle = ship.rotation + Math.PI;
+    const spread = (Math.random() - 0.5) * 0.6;
+    gameStateRef.current.particles.push({
+      pos: {
+        x: ship.pos.x + Math.cos(backAngle) * SHIP_SIZE * 0.5,
+        y: ship.pos.y + Math.sin(backAngle) * SHIP_SIZE * 0.5,
+      },
+      vel: {
+        x: Math.cos(backAngle + spread) * (1.5 + Math.random() * 2) + ship.vel.x * 0.3,
+        y: Math.sin(backAngle + spread) * (1.5 + Math.random() * 2) + ship.vel.y * 0.3,
+      },
+      lifetime: 15 + Math.random() * 15,
+      maxLifetime: 30,
+      color: Math.random() > 0.5 ? "#FF6622" : "#FFAA22",
+      size: 1 + Math.random() * 1.5,
+    });
+  };
 
   const createShip = (): Ship => ({
     pos: { x: CANVAS_WIDTH / 2, y: CANVAS_HEIGHT / 2 },
@@ -159,12 +261,13 @@ const Game = () => {
   const createUFO = (size: "large" | "small"): UFO => {
     const side = Math.random() < 0.5 ? 0 : CANVAS_WIDTH;
     return {
-      pos: { x: side, y: Math.random() * CANVAS_HEIGHT },
-      vel: { x: (side === 0 ? 1 : -1) * 1.2, y: 0 },
+      pos: { x: side, y: 50 + Math.random() * (CANVAS_HEIGHT - 100) },
+      vel: { x: (side === 0 ? 1 : -1) * (1.0 + Math.random() * 0.5), y: 0 },
       rotation: 0,
       size,
       shootTimer: 60 + Math.random() * 60,
-      direction: 0,
+      direction: side === 0 ? 1 : -1,
+      waveOffset: Math.random() * Math.PI * 2,
     };
   };
 
@@ -210,6 +313,10 @@ const Game = () => {
       gameOver: false,
       paused: false,
       powerUpActive: { shield: 0, rapidFire: 0, multiplier: 0 },
+      floatingTexts: [],
+      particles: [],
+      stars: createStars(),
+      ufoSpawnTimer: 900 + Math.random() * 600,
     };
 
     setDisplayScore(0);
@@ -246,10 +353,12 @@ const Game = () => {
     gameStateRef.current.ship = createShip();
     setDisplayWave(gameStateRef.current.wave);
 
-    if (gameStateRef.current.wave % 3 === 0) {
-      const size = gameStateRef.current.wave > 10 ? "small" : "large";
-      gameStateRef.current.ufos.push(createUFO(size));
-    }
+    spawnFloatingText(
+      { x: CANVAS_WIDTH / 2, y: CANVAS_HEIGHT / 2 },
+      `WAVE ${gameStateRef.current.wave}`,
+      "#FFFFFF",
+      28
+    );
 
     toast.success(`Wave ${gameStateRef.current.wave}!`);
   }, []);
@@ -305,6 +414,7 @@ const Game = () => {
     if (Math.random() < 0.1) {
       gameStateRef.current.lives--;
       setDisplayLives(gameStateRef.current.lives);
+      haptics.heavy();
       if (gameStateRef.current.lives <= 0) {
         gameStateRef.current.gameOver = true;
         setShowGameOver(true);
@@ -312,6 +422,7 @@ const Game = () => {
           setEnteringInitials(true);
         }
         setLeaderboard(loadLeaderboard());
+        haptics.gameOver();
       } else {
         gameStateRef.current.ship = createShip();
         showLifeLostRef.current = true;
@@ -342,6 +453,10 @@ const Game = () => {
       state.ship.isThrusting = true;
       state.ship.vel.x += Math.cos(state.ship.rotation) * state.ship.thrust;
       state.ship.vel.y += Math.sin(state.ship.rotation) * state.ship.thrust;
+      // Spawn exhaust particles
+      if (Math.random() > 0.3) {
+        spawnThrustParticle(state.ship);
+      }
     } else {
       if (state.ship.isThrusting) {
         soundEffects.stopThrust();
@@ -389,18 +504,27 @@ const Game = () => {
       return bullet.lifetime > 0;
     });
 
-    // Update UFOs
-    state.ufos.forEach((ufo) => {
+    // UFO spawn timer
+    state.ufoSpawnTimer--;
+    if (state.ufoSpawnTimer <= 0 && state.ufos.length === 0) {
+      const size = state.wave > 6 ? (Math.random() < 0.5 ? "small" : "large") : "large";
+      state.ufos.push(createUFO(size));
+      state.ufoSpawnTimer = 900 + Math.random() * 600; // 15-25s
+    }
+
+    // Update UFOs — sine wave movement, despawn off-screen
+    state.ufos = state.ufos.filter((ufo) => {
       ufo.pos.x += ufo.vel.x;
+      ufo.waveOffset += 0.03;
+      ufo.vel.y = Math.sin(ufo.waveOffset) * 1.2;
       ufo.pos.y += ufo.vel.y;
 
-      // Simple sine wave movement
-      ufo.direction += 0.02;
-      ufo.vel.y = Math.sin(ufo.direction) * 0.8;
+      // Despawn if off-screen
+      if (ufo.pos.x < -30 || ufo.pos.x > CANVAS_WIDTH + 30) {
+        return false;
+      }
 
-      ufo.pos = wrapPosition(ufo.pos);
-
-      // UFO beep every second
+      // UFO beep
       if (Math.floor(Date.now() / 1000) % 2 === 0 && Math.floor(Date.now() / 100) % 10 === 0) {
         soundEffects.ufoBeep();
       }
@@ -420,9 +544,12 @@ const Game = () => {
           },
           rotation: angle,
           lifetime: BULLET_LIFETIME,
+          isUFO: true,
         };
         state.bullets.push(bullet);
       }
+
+      return true;
     });
 
     // Update power-ups
@@ -435,25 +562,29 @@ const Game = () => {
 
       // Check collision with ship
       if (checkCollision(powerUp.pos, 15, state.ship.pos, SHIP_SIZE)) {
-        const multiplier = state.powerUpActive.multiplier > 0 ? 2 : 1;
+        const powerUpLabels: Record<string, { text: string; color: string }> = {
+          shield: { text: "SHIELD!", color: "#7FFF7F" },
+          rapidFire: { text: "RAPID FIRE!", color: "#FF6666" },
+          extraLife: { text: "+1 LIFE!", color: "#CC66FF" },
+          multiplier: { text: "2x SCORE!", color: "#FFFF66" },
+        };
+        const label = powerUpLabels[powerUp.type];
+        spawnFloatingText(powerUp.pos, label.text, label.color, 20);
+
         switch (powerUp.type) {
           case "shield":
             state.powerUpActive.shield = 300;
             state.ship.invulnerable = true;
-            toast.success("Shield activated!");
             break;
           case "rapidFire":
             state.powerUpActive.rapidFire = 600;
-            toast.success("Rapid fire activated!");
             break;
           case "extraLife":
             state.lives++;
             setDisplayLives(state.lives);
-            toast.success("Extra life!");
             break;
           case "multiplier":
             state.powerUpActive.multiplier = 900;
-            toast.success("2x Score multiplier!");
             break;
         }
         haptics.medium();
@@ -471,34 +602,53 @@ const Game = () => {
         if (state.powerUpActive[k] === 0) {
           if (k === "shield") {
             state.ship.invulnerable = false;
-            toast.info("Shield deactivated");
-          } else if (k === "rapidFire") {
-            toast.info("Rapid fire deactivated");
-          } else if (k === "multiplier") {
-            toast.info("Multiplier deactivated");
           }
         }
       }
     });
 
+    // Update floating texts
+    state.floatingTexts = state.floatingTexts.filter((ft) => {
+      ft.pos.y -= 0.5;
+      ft.lifetime--;
+      ft.opacity = ft.lifetime / ft.maxLifetime;
+      return ft.lifetime > 0;
+    });
+
+    // Update particles
+    state.particles = state.particles.filter((p) => {
+      p.pos.x += p.vel.x;
+      p.pos.y += p.vel.y;
+      p.vel.x *= 0.97;
+      p.vel.y *= 0.97;
+      p.lifetime--;
+      return p.lifetime > 0;
+    });
+
     // Collision detection: Bullets vs Asteroids
     const newAsteroids: Asteroid[] = [];
     state.bullets = state.bullets.filter((bullet) => {
+      if (bullet.isUFO) return true; // UFO bullets don't hit asteroids
       let bulletAlive = true;
       state.asteroids = state.asteroids.filter((asteroid) => {
         const radius = asteroid.size === "large" ? 40 : asteroid.size === "medium" ? 25 : 12;
         if (checkCollision(bullet.pos, 2, asteroid.pos, radius)) {
           bulletAlive = false;
           const multiplier = state.powerUpActive.multiplier > 0 ? 2 : 1;
-          state.score += ASTEROID_POINTS[asteroid.size] * multiplier;
+          const pts = ASTEROID_POINTS[asteroid.size] * multiplier;
+          state.score += pts;
           setDisplayScore(state.score);
 
+          // Floating score text
+          spawnFloatingText(asteroid.pos, `+${pts}`, ASTEROID_COLORS[asteroid.size], 14);
+          // Explosion particles
+          spawnExplosion(asteroid.pos, ASTEROID_COLORS[asteroid.size], asteroid.size === "large" ? 15 : asteroid.size === "medium" ? 10 : 6);
+
           // Check for extra life
-          if (Math.floor((state.score - ASTEROID_POINTS[asteroid.size] * multiplier) / 10000) <
-              Math.floor(state.score / 10000)) {
+          if (Math.floor((state.score - pts) / 10000) < Math.floor(state.score / 10000)) {
             state.lives++;
             setDisplayLives(state.lives);
-            toast.success("Extra life earned!");
+            spawnFloatingText(state.ship.pos, "EXTRA LIFE!", "#CC66FF", 22);
           }
 
           // Split asteroid
@@ -528,15 +678,20 @@ const Game = () => {
 
     // Collision detection: Bullets vs UFOs
     state.bullets = state.bullets.filter((bullet) => {
+      if (bullet.isUFO) return true; // UFO bullets don't destroy UFOs
       let bulletAlive = true;
       state.ufos = state.ufos.filter((ufo) => {
         const radius = ufo.size === "large" ? 20 : 10;
         if (checkCollision(bullet.pos, 2, ufo.pos, radius)) {
           bulletAlive = false;
           const multiplier = state.powerUpActive.multiplier > 0 ? 2 : 1;
-          state.score += UFO_POINTS[ufo.size] * multiplier;
+          const pts = UFO_POINTS[ufo.size] * multiplier;
+          state.score += pts;
           setDisplayScore(state.score);
           soundEffects.explode();
+
+          spawnFloatingText(ufo.pos, `+${pts}`, "#FFFF66", 18);
+          spawnExplosion(ufo.pos, "#FFFF66", 15);
 
           const powerUp = createPowerUp(ufo.pos.x, ufo.pos.y);
           if (powerUp) state.powerUps.push(powerUp);
@@ -553,12 +708,12 @@ const Game = () => {
       state.asteroids.forEach((asteroid) => {
         const radius = asteroid.size === "large" ? 40 : asteroid.size === "medium" ? 25 : 12;
         if (checkCollision(state.ship.pos, SHIP_SIZE, asteroid.pos, radius)) {
+          spawnExplosion(state.ship.pos, "#FFFFFF", 20);
           state.lives--;
           setDisplayLives(state.lives);
           state.ship = createShip();
           soundEffects.explode();
           soundEffects.stopThrust();
-          toast.error("Ship destroyed!");
           haptics.heavy();
 
           if (state.lives <= 0) {
@@ -581,12 +736,12 @@ const Game = () => {
       state.ufos.forEach((ufo) => {
         const radius = ufo.size === "large" ? 20 : 10;
         if (checkCollision(state.ship.pos, SHIP_SIZE, ufo.pos, radius)) {
+          spawnExplosion(state.ship.pos, "#FFFFFF", 20);
           state.lives--;
           setDisplayLives(state.lives);
           state.ship = createShip();
           soundEffects.explode();
           soundEffects.stopThrust();
-          toast.error("Ship destroyed!");
           haptics.heavy();
 
           if (state.lives <= 0) {
@@ -601,6 +756,35 @@ const Game = () => {
             setShowLifeLost(true);
           }
         }
+      });
+    }
+
+    // Collision detection: UFO bullets vs Ship
+    if (!state.ship.invulnerable && state.powerUpActive.shield === 0) {
+      state.bullets = state.bullets.filter((bullet) => {
+        if (!bullet.isUFO) return true;
+        if (checkCollision(bullet.pos, 2, state.ship.pos, SHIP_SIZE)) {
+          spawnExplosion(state.ship.pos, "#FFFFFF", 20);
+          state.lives--;
+          setDisplayLives(state.lives);
+          state.ship = createShip();
+          soundEffects.explode();
+          soundEffects.stopThrust();
+          haptics.heavy();
+
+          if (state.lives <= 0) {
+            state.gameOver = true;
+            setShowGameOver(true);
+            if (isHighScore(state.score)) setEnteringInitials(true);
+            setLeaderboard(loadLeaderboard());
+            haptics.gameOver();
+          } else {
+            showLifeLostRef.current = true;
+            setShowLifeLost(true);
+          }
+          return false;
+        }
+        return true;
       });
     }
 
@@ -620,8 +804,37 @@ const Game = () => {
     const state = gameStateRef.current;
 
     // Clear canvas
-    ctx.fillStyle = "#000000";
+    ctx.fillStyle = "#050510";
     ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+
+    // Draw parallax starfield
+    const time = Date.now() * 0.001;
+    state.stars.forEach((star) => {
+      const parallaxSpeed = [0.1, 0.3, 0.6][star.layer];
+      const offsetX = (time * parallaxSpeed * 10) % CANVAS_WIDTH;
+      const drawX = ((star.x - offsetX) % CANVAS_WIDTH + CANVAS_WIDTH) % CANVAS_WIDTH;
+      const twinkle = 0.7 + Math.sin(time * 2 + star.x * 0.1) * 0.3;
+      const alpha = star.brightness * twinkle;
+
+      ctx.fillStyle = `rgba(200, 220, 255, ${alpha})`;
+      ctx.beginPath();
+      ctx.arc(drawX, star.y, star.size, 0, Math.PI * 2);
+      ctx.fill();
+    });
+
+    // Draw particles
+    state.particles.forEach((p) => {
+      const alpha = p.lifetime / p.maxLifetime;
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = p.color;
+      ctx.shadowBlur = 6;
+      ctx.shadowColor = p.color;
+      ctx.beginPath();
+      ctx.arc(p.pos.x, p.pos.y, p.size * alpha, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    });
 
     // Draw ship
     ctx.save();
@@ -630,14 +843,11 @@ const Game = () => {
 
     // Flicker if invulnerable
     if (!state.ship.invulnerable || Math.floor(Date.now() / 100) % 2 === 0) {
-      ctx.strokeStyle = state.powerUpActive.shield > 0
-        ? "#7FFF7F"
-        : "#FFFFFF";
+      const shipColor = state.powerUpActive.shield > 0 ? "#7FFF7F" : "#00FFFF";
+      ctx.strokeStyle = shipColor;
       ctx.lineWidth = 2;
-      ctx.shadowBlur = 10;
-      ctx.shadowColor = state.powerUpActive.shield > 0
-        ? "#7FFF7F"
-        : "#FFFFFF";
+      ctx.shadowBlur = 15;
+      ctx.shadowColor = shipColor;
 
       ctx.beginPath();
       ctx.moveTo(SHIP_SIZE, 0);
@@ -647,29 +857,26 @@ const Game = () => {
       ctx.closePath();
       ctx.stroke();
 
-      // Draw thrust
-      if (state.ship.isThrusting && Math.floor(Date.now() / 50) % 2 === 0) {
-        ctx.beginPath();
-        ctx.moveTo(-SHIP_SIZE / 2, 0);
-        ctx.lineTo(-SHIP_SIZE * 1.5, -SHIP_SIZE / 4);
-        ctx.lineTo(-SHIP_SIZE * 1.5, SHIP_SIZE / 4);
-        ctx.closePath();
-        ctx.stroke();
-      }
+      // Second glow pass for bloom
+      ctx.shadowBlur = 25;
+      ctx.globalAlpha = 0.3;
+      ctx.stroke();
+      ctx.globalAlpha = 1;
     }
 
     ctx.restore();
 
-    // Draw asteroids
+    // Draw asteroids with color tinting
     state.asteroids.forEach((asteroid) => {
       ctx.save();
       ctx.translate(asteroid.pos.x, asteroid.pos.y);
       ctx.rotate(asteroid.rotation);
 
-      ctx.strokeStyle = "#FFFFFF";
-      ctx.lineWidth = 2;
-      ctx.shadowBlur = 8;
-      ctx.shadowColor = "#FFFFFF";
+      const color = ASTEROID_COLORS[asteroid.size];
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1.5;
+      ctx.shadowBlur = 10;
+      ctx.shadowColor = color;
 
       ctx.beginPath();
       asteroid.points.forEach((point, i) => {
@@ -682,30 +889,45 @@ const Game = () => {
       ctx.closePath();
       ctx.stroke();
 
+      // Inner glow
+      ctx.shadowBlur = 20;
+      ctx.globalAlpha = 0.15;
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+
       ctx.restore();
     });
 
     // Draw bullets
     state.bullets.forEach((bullet) => {
       ctx.save();
-      ctx.fillStyle = "#FFFFFF";
-      ctx.shadowBlur = 10;
-      ctx.shadowColor = "#FFFFFF";
+      const bColor = bullet.isUFO ? "#FF4444" : "#00FFFF";
+      ctx.fillStyle = bColor;
+      ctx.shadowBlur = 12;
+      ctx.shadowColor = bColor;
       ctx.beginPath();
-      ctx.arc(bullet.pos.x, bullet.pos.y, 2, 0, Math.PI * 2);
+      ctx.arc(bullet.pos.x, bullet.pos.y, bullet.isUFO ? 3 : 2, 0, Math.PI * 2);
       ctx.fill();
+      // Extra glow
+      ctx.shadowBlur = 20;
+      ctx.globalAlpha = 0.4;
+      ctx.beginPath();
+      ctx.arc(bullet.pos.x, bullet.pos.y, bullet.isUFO ? 5 : 4, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 1;
       ctx.restore();
     });
 
-    // Draw UFOs
+    // Draw UFOs with enhanced style
     state.ufos.forEach((ufo) => {
       ctx.save();
       ctx.translate(ufo.pos.x, ufo.pos.y);
 
-      ctx.strokeStyle = "#FFFF66";
+      const ufoColor = ufo.size === "large" ? "#FFFF44" : "#FF44FF";
+      ctx.strokeStyle = ufoColor;
       ctx.lineWidth = 2;
-      ctx.shadowBlur = 12;
-      ctx.shadowColor = "#FFFF66";
+      ctx.shadowBlur = 18;
+      ctx.shadowColor = ufoColor;
 
       const radius = ufo.size === "large" ? 20 : 10;
 
@@ -718,6 +940,15 @@ const Game = () => {
       ctx.beginPath();
       ctx.ellipse(0, -radius / 4, radius / 2, radius / 3, 0, 0, Math.PI, true);
       ctx.stroke();
+
+      // Pulsing glow
+      const pulse = 0.3 + Math.sin(Date.now() * 0.005) * 0.2;
+      ctx.globalAlpha = pulse;
+      ctx.fillStyle = ufoColor;
+      ctx.beginPath();
+      ctx.ellipse(0, 0, radius, radius / 2, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 1;
 
       ctx.restore();
     });
@@ -735,7 +966,7 @@ const Game = () => {
 
       ctx.strokeStyle = color;
       ctx.lineWidth = 2;
-      ctx.shadowBlur = 15;
+      ctx.shadowBlur = 20;
       ctx.shadowColor = color;
 
       ctx.beginPath();
@@ -751,6 +982,65 @@ const Game = () => {
 
       ctx.restore();
     });
+
+    // Draw floating texts
+    state.floatingTexts.forEach((ft) => {
+      ctx.save();
+      ctx.globalAlpha = ft.opacity;
+      ctx.font = `bold ${ft.size}px monospace`;
+      ctx.fillStyle = ft.color;
+      ctx.shadowBlur = 10;
+      ctx.shadowColor = ft.color;
+      ctx.textAlign = "center";
+      ctx.fillText(ft.text, ft.pos.x, ft.pos.y);
+      ctx.restore();
+    });
+
+    // Draw active power-up HUD bars
+    const activePowerUps: { label: string; color: string; remaining: number; max: number }[] = [];
+    if (state.powerUpActive.shield > 0) activePowerUps.push({ label: "SHIELD", color: "#7FFF7F", remaining: state.powerUpActive.shield, max: 300 });
+    if (state.powerUpActive.rapidFire > 0) activePowerUps.push({ label: "RAPID", color: "#FF6666", remaining: state.powerUpActive.rapidFire, max: 600 });
+    if (state.powerUpActive.multiplier > 0) activePowerUps.push({ label: "2x", color: "#FFFF66", remaining: state.powerUpActive.multiplier, max: 900 });
+
+    activePowerUps.forEach((pu, i) => {
+      const barX = 10;
+      const barY = 10 + i * 18;
+      const barW = 120;
+      const barH = 12;
+      const fill = pu.remaining / pu.max;
+
+      ctx.save();
+      ctx.globalAlpha = 0.6;
+      ctx.strokeStyle = pu.color;
+      ctx.lineWidth = 1;
+      ctx.strokeRect(barX, barY, barW, barH);
+      ctx.fillStyle = pu.color;
+      ctx.globalAlpha = 0.35;
+      ctx.fillRect(barX, barY, barW * fill, barH);
+      ctx.globalAlpha = 0.9;
+      ctx.font = "bold 9px monospace";
+      ctx.fillStyle = pu.color;
+      ctx.shadowBlur = 4;
+      ctx.shadowColor = pu.color;
+      ctx.fillText(pu.label, barX + 3, barY + 10);
+      ctx.restore();
+    });
+
+    // CRT scanline overlay
+    ctx.save();
+    ctx.globalAlpha = 0.04;
+    ctx.fillStyle = "#000000";
+    for (let y = 0; y < CANVAS_HEIGHT; y += 3) {
+      ctx.fillRect(0, y, CANVAS_WIDTH, 1);
+    }
+    // Vignette
+    const gradient = ctx.createRadialGradient(CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2, CANVAS_HEIGHT * 0.4, CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2, CANVAS_HEIGHT * 0.8);
+    gradient.addColorStop(0, "rgba(0,0,0,0)");
+    gradient.addColorStop(1, "rgba(0,0,0,0.3)");
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+    ctx.restore();
   }, []);
 
   const gameLoop = useCallback(() => {
