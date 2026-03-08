@@ -290,6 +290,7 @@ const Game = () => {
 
     gameStateRef.current.bullets.push(bullet);
     soundEffects.shoot();
+    haptics.light();
   }, []);
 
   const hyperspace = useCallback(() => {
