@@ -2385,6 +2385,24 @@ const Game = () => {
   }, [initGame, initDuel, showGameOver, togglePause, resumeGame, quitToMenu]);
 
 
+  // ===== ONLINE LOBBY SCREEN =====
+  if (gameMode === "online_lobby") {
+    return (
+      <div className="min-h-screen bg-[hsl(var(--game-background))] flex flex-col items-center justify-center p-4">
+        <OnlineLobby
+          onCreateRoom={() => multiplayer.createRoom()}
+          onJoinRoom={(code) => multiplayer.joinRoom(code)}
+          onBack={() => { multiplayer.disconnect(); setGameMode("menu"); }}
+          onStartGame={() => { multiplayer.startGame(); initOnline(true); }}
+          roomCode={multiplayer.roomCode}
+          isHost={multiplayer.isHost}
+          isConnected={multiplayer.isConnected}
+          opponentConnected={multiplayer.opponentConnected}
+        />
+      </div>
+    );
+  }
+
   // ===== MENU SCREEN =====
   if (gameMode === "menu") {
     return (
@@ -2418,11 +2436,22 @@ const Game = () => {
           >
             {menuSelection === 1 ? "▸ " : "  "}DUEL
           </Button>
+          <Button
+            onClick={() => setGameMode("online_lobby")}
+            className={`text-2xl px-12 py-6 font-mono tracking-wider border-2 transition-all ${
+              menuSelection === 2
+                ? "shadow-[0_0_20px_rgba(68,255,68,0.5)] border-[#44FF44] text-[#44FF44] bg-[rgba(68,255,68,0.15)]"
+                : "opacity-60 border-[#44FF44]/60 text-[#44FF44]/60"
+            }`}
+          >
+            {menuSelection === 2 ? "▸ " : "  "}ONLINE
+          </Button>
         </div>
 
         <div className="text-[hsl(var(--game-foreground))] font-mono text-xs space-y-1 opacity-60 text-center">
           <div>SOLO: Arrow Keys + Space | Gamepad supported</div>
           <div>DUEL: P1 Arrows+Space | P2 WASD+E | Gamepads 1 & 2</div>
+          <div>ONLINE: Create or join a room to duel remotely</div>
         </div>
 
         <div className="mt-8 flex flex-col gap-2 max-w-md">
