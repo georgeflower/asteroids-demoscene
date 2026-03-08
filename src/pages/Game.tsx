@@ -567,6 +567,7 @@ const Game = () => {
             if (isHighScore(state.score)) setEnteringInitials(true);
             setLeaderboard(loadLeaderboard());
             toast.error(`Game Over! Final Score: ${state.score}`);
+            haptics.gameOver();
           } else {
             showLifeLostRef.current = true;
             setShowLifeLost(true);
