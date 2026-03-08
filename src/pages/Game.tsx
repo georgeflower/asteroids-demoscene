@@ -80,10 +80,36 @@ const Game = () => {
   const keysRef = useRef<{ [key: string]: boolean }>({});
   const animationFrameRef = useRef<number>();
   const lastShotRef = useRef(0);
+  const enteringInitialsRef = useRef(false);
   const [displayScore, setDisplayScore] = useState(0);
   const [displayLives, setDisplayLives] = useState(3);
   const [displayWave, setDisplayWave] = useState(1);
   const [showGameOver, setShowGameOver] = useState(false);
+  const [showLeaderboard, setShowLeaderboard] = useState(false);
+  const [enteringInitials, setEnteringInitials] = useState(false);
+  const [initials, setInitials] = useState("");
+  const [leaderboard, setLeaderboard] = useState<{initials: string; score: number; date: string}[]>([]);
+
+  const loadLeaderboard = useCallback(() => {
+    try {
+      const stored = localStorage.getItem("asteroids-leaderboard");
+      return stored ? JSON.parse(stored) : [];
+    } catch { return []; }
+  }, []);
+
+  const saveToLeaderboard = useCallback((playerInitials: string, score: number) => {
+    const board = loadLeaderboard();
+    board.push({ initials: playerInitials.toUpperCase(), score, date: new Date().toLocaleDateString() });
+    board.sort((a: any, b: any) => b.score - a.score);
+    const top10 = board.slice(0, 10);
+    localStorage.setItem("asteroids-leaderboard", JSON.stringify(top10));
+    setLeaderboard(top10);
+  }, [loadLeaderboard]);
+
+  const isHighScore = useCallback((score: number) => {
+    const board = loadLeaderboard();
+    return board.length < 10 || score > (board[board.length - 1]?.score ?? 0);
+  }, [loadLeaderboard]);
 
   const createShip = (): Ship => ({
     pos: { x: CANVAS_WIDTH / 2, y: CANVAS_HEIGHT / 2 },
@@ -186,6 +212,9 @@ const Game = () => {
     setDisplayLives(3);
     setDisplayWave(1);
     setShowGameOver(false);
+    setEnteringInitials(false);
+    setInitials("");
+    setShowLeaderboard(false);
     toast.success("Game Started! Use Arrow Keys to move, Space to shoot");
   }, []);
 
@@ -272,6 +301,10 @@ const Game = () => {
       if (gameStateRef.current.lives <= 0) {
         gameStateRef.current.gameOver = true;
         setShowGameOver(true);
+        if (isHighScore(gameStateRef.current.score)) {
+          setEnteringInitials(true);
+        }
+        setLeaderboard(loadLeaderboard());
       }
       toast.error("Hyperspace malfunction!");
     } else {
@@ -518,6 +551,8 @@ const Game = () => {
           if (state.lives <= 0) {
             state.gameOver = true;
             setShowGameOver(true);
+            if (isHighScore(state.score)) setEnteringInitials(true);
+            setLeaderboard(loadLeaderboard());
             toast.error(`Game Over! Final Score: ${state.score}`);
           }
         }
@@ -539,6 +574,8 @@ const Game = () => {
           if (state.lives <= 0) {
             state.gameOver = true;
             setShowGameOver(true);
+            if (isHighScore(state.score)) setEnteringInitials(true);
+            setLeaderboard(loadLeaderboard());
             toast.error(`Game Over! Final Score: ${state.score}`);
           }
         }
@@ -701,9 +738,14 @@ const Game = () => {
   }, [update, draw]);
 
   useEffect(() => {
+    enteringInitialsRef.current = enteringInitials;
+  }, [enteringInitials]);
+
+  useEffect(() => {
     initGame();
 
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (enteringInitialsRef.current) return;
       keysRef.current[e.key] = true;
       if (e.key === " ") {
         e.preventDefault();
@@ -750,19 +792,82 @@ const Game = () => {
         />
 
         {showGameOver && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/80">
-            <div className="text-6xl font-mono text-[hsl(var(--game-danger))] mb-8 animate-pulse">
+          <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/80 overflow-auto py-4">
+            <div className="text-5xl font-mono text-[hsl(var(--game-danger))] mb-4 animate-pulse">
               GAME OVER
             </div>
-            <div className="text-3xl font-mono text-[hsl(var(--game-foreground))] mb-8">
+            <div className="text-2xl font-mono text-[hsl(var(--game-foreground))] mb-4">
               FINAL SCORE: {displayScore.toString().padStart(8, "0")}
             </div>
-            <Button
-              onClick={initGame}
-              className="bg-[hsl(var(--game-foreground))] text-[hsl(var(--game-background))] hover:bg-[hsl(var(--game-glow))] text-xl px-8 py-4 font-mono"
-            >
-              PLAY AGAIN
-            </Button>
+
+            {enteringInitials && (
+              <div className="mb-4 flex flex-col items-center gap-2">
+                <div className="text-lg font-mono text-[hsl(var(--game-glow))]">NEW HIGH SCORE! ENTER INITIALS:</div>
+                <div className="flex gap-2 items-center">
+                  <input
+                    type="text"
+                    maxLength={3}
+                    value={initials}
+                    onChange={(e) => setInitials(e.target.value.toUpperCase().replace(/[^A-Z]/g, ""))}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && initials.length > 0) {
+                        saveToLeaderboard(initials, displayScore);
+                        setEnteringInitials(false);
+                      }
+                      e.stopPropagation();
+                    }}
+                    autoFocus
+                    className="w-20 text-center text-2xl font-mono bg-transparent border-2 border-[hsl(var(--game-foreground))] text-[hsl(var(--game-foreground))] p-1 uppercase tracking-widest"
+                    placeholder="___"
+                  />
+                  <Button
+                    onClick={() => {
+                      if (initials.length > 0) {
+                        saveToLeaderboard(initials, displayScore);
+                        setEnteringInitials(false);
+                      }
+                    }}
+                    className="bg-[hsl(var(--game-foreground))] text-[hsl(var(--game-background))] hover:bg-[hsl(var(--game-glow))] font-mono"
+                  >
+                    OK
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {leaderboard.length > 0 && (
+              <div className="mb-4 w-72">
+                <div className="text-lg font-mono text-[hsl(var(--game-glow))] text-center mb-2">TOP SCORES</div>
+                <div className="border border-[hsl(var(--game-foreground))] p-2">
+                  {leaderboard.map((entry, i) => (
+                    <div key={i} className={`flex justify-between font-mono text-sm py-0.5 ${
+                      entry.score === displayScore && entry.initials === initials
+                        ? "text-[hsl(var(--game-glow))]"
+                        : "text-[hsl(var(--game-foreground))]"
+                    }`}>
+                      <span>{(i + 1).toString().padStart(2, " ")}. {entry.initials.padEnd(3, " ")}</span>
+                      <span>{entry.score.toString().padStart(8, "0")}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="flex gap-4">
+              <Button
+                onClick={initGame}
+                className="bg-[hsl(var(--game-foreground))] text-[hsl(var(--game-background))] hover:bg-[hsl(var(--game-glow))] text-xl px-8 py-4 font-mono"
+              >
+                PLAY AGAIN
+              </Button>
+              <Button
+                onClick={() => setShowLeaderboard(!showLeaderboard)}
+                variant="outline"
+                className="border-[hsl(var(--game-foreground))] text-[hsl(var(--game-foreground))] hover:bg-[hsl(var(--game-foreground))]/20 font-mono"
+              >
+                {showLeaderboard ? "HIDE" : "SCORES"}
+              </Button>
+            </div>
           </div>
         )}
       </div>
