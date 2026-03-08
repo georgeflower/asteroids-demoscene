@@ -2499,15 +2499,20 @@ const Game = () => {
           <div>WAVE: {displayWave}</div>
         </div>
       )}
-      {gameMode === "duel" && (
+      {(gameMode === "duel" || gameMode === "online") && (
         <div className="mb-4 flex gap-6 font-mono text-lg">
           <div style={{ color: P1_COLOR }}>
-            P1 KILLS: {duelKills[0]} DEATHS: {duelDeaths[0]}
+            P1{gameMode === "online" && multiplayer.isHost ? " (YOU)" : ""} KILLS: {duelKills[0]} DEATHS: {duelDeaths[0]}
           </div>
           <div className="text-[hsl(var(--game-foreground))] opacity-30">|</div>
           <div style={{ color: P2_COLOR }}>
-            P2 KILLS: {duelKills[1]} DEATHS: {duelDeaths[1]}
+            P2{gameMode === "online" && !multiplayer.isHost ? " (YOU)" : ""} KILLS: {duelKills[1]} DEATHS: {duelDeaths[1]}
           </div>
+          {gameMode === "online" && multiplayer.roomCode && (
+            <div className="text-[hsl(var(--game-foreground))] opacity-40 text-sm self-center">
+              ROOM: {multiplayer.roomCode}
+            </div>
+          )}
         </div>
       )}
 
