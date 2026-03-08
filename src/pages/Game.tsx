@@ -1657,7 +1657,7 @@ const Game = () => {
 
       <div className="mt-6 flex flex-col gap-2 max-w-md">
         <div className="text-[hsl(var(--game-foreground))] font-mono text-sm text-center">
-          BACKGROUND MUSIC: SOMAFM DEF CON RADIO
+          BACKGROUND MUSIC: NECTARINE DEMOSCENE RADIO
         </div>
         <audio
           controls
@@ -1665,33 +1665,16 @@ const Game = () => {
           className="w-full"
           onError={(e) => {
             const target = e.currentTarget;
-            console.error("Audio loading error:", {
-              error: e,
-              networkState: target.networkState,
-              networkStateText: ['NETWORK_EMPTY', 'NETWORK_IDLE', 'NETWORK_LOADING', 'NETWORK_NO_SOURCE'][target.networkState],
-              readyState: target.readyState,
-              readyStateText: ['HAVE_NOTHING', 'HAVE_METADATA', 'HAVE_CURRENT_DATA', 'HAVE_FUTURE_DATA', 'HAVE_ENOUGH_DATA'][target.readyState],
-              src: target.currentSrc,
-              errorCode: target.error?.code,
-              errorMessage: target.error?.message
-            });
+            console.error("Audio loading error:", target.error?.message);
             toast.error(`Radio error: ${target.error?.message || 'Unknown error'}`);
           }}
-          onCanPlay={() => {
-            console.log("Radio ready to play");
-            toast.success("DEF CON Radio loaded!");
-          }}
-          onLoadStart={() => console.log("Radio: Loading...")}
-          onLoadedMetadata={() => console.log("Radio: Metadata loaded")}
-          onPlay={() => console.log("Radio: Playing")}
-          onPause={() => console.log("Radio: Paused")}
+          onCanPlay={() => toast.success("Nectarine Radio loaded!")}
         >
-          <source src="https://ice5.somafm.com/defcon-128-mp3" type="audio/mpeg" />
-          <source src="https://ice1.somafm.com/defcon-128-mp3" type="audio/mpeg" />
+          <source src="http://pmaster.no:9000/necta" type="audio/mpeg" />
           Your browser does not support the audio element.
         </audio>
         <div className="text-[hsl(var(--game-foreground))] font-mono text-xs text-center opacity-70">
-          Streaming 128kbps MP3 • Music from DEF CON hacking conference
+          Streaming • Nectarine Demoscene Radio
         </div>
       </div>
     </div>
