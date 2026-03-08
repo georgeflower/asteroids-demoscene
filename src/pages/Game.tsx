@@ -2046,16 +2046,24 @@ const Game = () => {
         <div className="flex flex-col gap-4 items-center mb-12">
           <Button
             onClick={initGame}
-            className="bg-[hsl(var(--game-foreground))] text-[hsl(var(--game-background))] hover:bg-[hsl(var(--game-glow))] text-2xl px-12 py-6 font-mono tracking-wider"
+            className={`text-2xl px-12 py-6 font-mono tracking-wider transition-all ${
+              menuSelection === 0
+                ? "bg-[hsl(var(--game-foreground))] text-[hsl(var(--game-background))] shadow-[0_0_20px_hsl(var(--game-foreground))]"
+                : "bg-[hsl(var(--game-foreground))]/20 text-[hsl(var(--game-foreground))] border-2 border-[hsl(var(--game-foreground))]/40"
+            }`}
           >
-            SOLO
+            {menuSelection === 0 ? "▸ " : "  "}SOLO
           </Button>
           <Button
             onClick={initDuel}
-            className="text-2xl px-12 py-6 font-mono tracking-wider border-2"
-            style={{ borderColor: P2_COLOR, color: P2_COLOR, background: "transparent" }}
+            className={`text-2xl px-12 py-6 font-mono tracking-wider border-2 transition-all ${
+              menuSelection === 1
+                ? "shadow-[0_0_20px_rgba(255,136,68,0.5)]"
+                : "opacity-60"
+            }`}
+            style={{ borderColor: P2_COLOR, color: P2_COLOR, background: menuSelection === 1 ? "rgba(255,136,68,0.15)" : "transparent" }}
           >
-            DUEL
+            {menuSelection === 1 ? "▸ " : "  "}DUEL
           </Button>
         </div>
 
