@@ -2318,7 +2318,7 @@ const Game = () => {
           prev[6] = btnStart;
 
           // Start button toggles pause during gameplay
-          if (justStart && (gameModeRef.current === "solo" || gameModeRef.current === "duel") && !showLifeLostRef.current && !showGameOver) {
+          if (justStart && (gameModeRef.current === "solo" || gameModeRef.current === "duel" || gameModeRef.current === "online") && !showLifeLostRef.current && !showGameOver) {
             togglePause();
           }
 
