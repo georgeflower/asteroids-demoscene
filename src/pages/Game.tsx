@@ -300,6 +300,10 @@ const Game = () => {
       if (gameStateRef.current.lives <= 0) {
         gameStateRef.current.gameOver = true;
         setShowGameOver(true);
+        if (isHighScore(gameStateRef.current.score)) {
+          setEnteringInitials(true);
+        }
+        setLeaderboard(loadLeaderboard());
       }
       toast.error("Hyperspace malfunction!");
     } else {
