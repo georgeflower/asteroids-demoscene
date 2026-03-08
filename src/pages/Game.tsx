@@ -1912,7 +1912,7 @@ const Game = () => {
   useEffect(() => {
     const fetchNowPlaying = async () => {
       try {
-        const res = await fetch("https://scenestream.net/demovibes/xml/queue/");
+        const res = await fetch("https://corsproxy.io/?url=" + encodeURIComponent("https://scenestream.net/demovibes/xml/queue/"));
         const text = await res.text();
         const parser = new DOMParser();
         const xml = parser.parseFromString(text, "text/xml");
@@ -1921,7 +1921,9 @@ const Game = () => {
           const first = items[0];
           const artist = first.querySelector("artist")?.textContent || "Unknown";
           const title = first.querySelector("title")?.textContent || "Unknown";
-          setNowPlaying({ artist, title });
+          const info = { artist, title };
+          nowPlayingRef.current = info;
+          setNowPlaying(info);
         }
       } catch (e) {
         console.log("Could not fetch now-playing info:", e);
