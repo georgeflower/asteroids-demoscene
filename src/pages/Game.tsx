@@ -204,7 +204,10 @@ const Game = () => {
   const [duelDeaths, setDuelDeaths] = useState<[number, number]>([0, 0]);
   const [menuSelection, setMenuSelection] = useState(0); // 0=solo, 1=duel
   const [gameOverSelection, setGameOverSelection] = useState(0); // 0=play again, 1=menu
-  const prevGamepadButtonRef = useRef<boolean[]>([false, false, false, false, false, false]);
+  const [isPaused, setIsPaused] = useState(false);
+  const isPausedRef = useRef(false);
+  const [pauseSelection, setPauseSelection] = useState(0); // 0=resume, 1=quit
+  const prevGamepadButtonRef = useRef<boolean[]>([false, false, false, false, false, false, false]);
 
   // Keep ref in sync
   useEffect(() => { gameModeRef.current = gameMode; }, [gameMode]);
@@ -744,6 +747,7 @@ const Game = () => {
 
   // ===== DUEL UPDATE =====
   const updateDuel = useCallback(() => {
+    if (isPausedRef.current) return;
     const ds = duelStateRef.current;
     if (!ds) return;
 
@@ -983,6 +987,7 @@ const Game = () => {
 
   // ===== SOLO UPDATE (original) =====
   const update = useCallback(() => {
+    if (isPausedRef.current) return;
     if (!gameStateRef.current || gameStateRef.current.gameOver || gameStateRef.current.paused || showLifeLostRef.current) return;
 
     const state = gameStateRef.current;
@@ -1905,9 +1910,61 @@ const Game = () => {
     setShowLifeLost(false);
   }, []);
 
+  const quitToMenu = useCallback(() => {
+    gameStateRef.current = null;
+    duelStateRef.current = null;
+    setGameMode("menu");
+    setShowGameOver(false);
+    setShowLifeLost(false);
+    showLifeLostRef.current = false;
+    isPausedRef.current = false;
+    setIsPaused(false);
+    soundEffects.stopThrust();
+  }, []);
+
+    const togglePause = useCallback(() => {
+    setIsPaused(isPausedRef.current);
+    setPauseSelection(0);
+    if (isPausedRef.current) {
+      soundEffects.stopThrust();
+    }
+  }, []);
+
+  const resumeGame = useCallback(() => {
+    isPausedRef.current = false;
+    setIsPaused(false);
+  }, []);
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (enteringInitialsRef.current) return;
+
+      // Pause toggle on Escape
+      if (e.key === "Escape" && (gameModeRef.current === "solo" || gameModeRef.current === "duel")) {
+        if (!showLifeLostRef.current && !showGameOver) {
+          e.preventDefault();
+          togglePause();
+          return;
+        }
+      }
+
+      // When paused, handle pause menu navigation
+      if (isPausedRef.current) {
+        if (e.key === "ArrowUp" || e.key === "ArrowDown" || e.key === "w" || e.key === "W" || e.key === "s" || e.key === "S") {
+          e.preventDefault();
+          setPauseSelection(s => s === 0 ? 1 : 0);
+        }
+        if (e.key === " " || e.key === "Enter") {
+          e.preventDefault();
+          setPauseSelection(s => {
+            if (s === 0) resumeGame();
+            else { resumeGame(); quitToMenu(); }
+            return s;
+          });
+        }
+        return;
+      }
+
       if (showLifeLostRef.current) {
         if (e.key === " " || e.key === "Enter") {
           e.preventDefault();
@@ -1937,7 +1994,7 @@ const Game = () => {
       window.removeEventListener("keyup", handleKeyUp);
       if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
     };
-  }, [shootBullet, hyperspace, gameLoop]);
+  }, [shootBullet, hyperspace, gameLoop, togglePause, resumeGame, quitToMenu, showGameOver]);
 
   // Gamepad polling for menus and overlays
   useEffect(() => {
@@ -1953,6 +2010,7 @@ const Game = () => {
           const downAxis = (gp.axes[1] ?? 0) > GAMEPAD_DEADZONE;
           const dpadUp = gp.buttons[12]?.pressed ?? false;
           const dpadDown = gp.buttons[13]?.pressed ?? false;
+          const btnStart = gp.buttons[9]?.pressed ?? false;
           const up = upAxis || dpadUp;
           const down = downAxis || dpadDown;
           const prev = prevGamepadButtonRef.current;
@@ -1960,12 +2018,31 @@ const Game = () => {
           const justUp = up && !prev[2];
           const justDown = down && !prev[3];
           const justB = btnB && !prev[1];
+          const justStart = btnStart && !prev[6];
           prev[0] = btnA;
           prev[1] = btnB;
           prev[2] = up;
           prev[3] = down;
+          prev[6] = btnStart;
 
-          if (gameModeRef.current === "menu") {
+          // Start button toggles pause during gameplay
+          if (justStart && (gameModeRef.current === "solo" || gameModeRef.current === "duel") && !showLifeLostRef.current && !showGameOver) {
+            togglePause();
+          }
+
+          // When paused, handle pause menu
+          if (isPausedRef.current) {
+            if (justUp || justDown) {
+              setPauseSelection(s => s === 0 ? 1 : 0);
+            }
+            if (justA) {
+              setPauseSelection(s => {
+                if (s === 0) resumeGame();
+                else { resumeGame(); quitToMenu(); }
+                return s;
+              });
+            }
+          } else if (gameModeRef.current === "menu") {
             if (justUp || justDown) {
               setMenuSelection(s => s === 0 ? 1 : 0);
             }
@@ -2020,17 +2097,8 @@ const Game = () => {
     };
     rafId = requestAnimationFrame(poll);
     return () => cancelAnimationFrame(rafId);
-  }, [initGame, initDuel, showGameOver]);
+  }, [initGame, initDuel, showGameOver, togglePause, resumeGame, quitToMenu]);
 
-  const quitToMenu = useCallback(() => {
-    gameStateRef.current = null;
-    duelStateRef.current = null;
-    setGameMode("menu");
-    setShowGameOver(false);
-    setShowLifeLost(false);
-    showLifeLostRef.current = false;
-    soundEffects.stopThrust();
-  }, []);
 
   // ===== MENU SCREEN =====
   if (gameMode === "menu") {
@@ -2236,8 +2304,43 @@ const Game = () => {
           </div>
         )}
 
+        {/* Pause overlay */}
+        {isPaused && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/75 z-10">
+            <div className="text-5xl font-mono text-[hsl(var(--game-foreground))] mb-8 tracking-widest animate-pulse"
+              style={{ textShadow: "0 0 30px hsl(var(--game-foreground))" }}>
+              PAUSED
+            </div>
+            <div className="flex flex-col gap-4 items-center mb-8">
+              <Button
+                onClick={resumeGame}
+                className={`text-xl px-10 py-5 font-mono tracking-wider transition-all ${
+                  pauseSelection === 0
+                    ? "bg-[hsl(var(--game-foreground))] text-[hsl(var(--game-background))] shadow-[0_0_20px_hsl(var(--game-foreground))]"
+                    : "bg-[hsl(var(--game-foreground))]/20 text-[hsl(var(--game-foreground))] border border-[hsl(var(--game-foreground))]/40"
+                }`}
+              >
+                {pauseSelection === 0 ? "▸ " : "  "}RESUME
+              </Button>
+              <Button
+                onClick={() => { resumeGame(); quitToMenu(); }}
+                className={`text-xl px-10 py-5 font-mono tracking-wider transition-all ${
+                  pauseSelection === 1
+                    ? "bg-[hsl(var(--game-danger))] text-[hsl(var(--game-background))] shadow-[0_0_20px_hsl(var(--game-danger))]"
+                    : "bg-[hsl(var(--game-foreground))]/10 text-[hsl(var(--game-foreground))]/60 border border-[hsl(var(--game-foreground))]/20"
+                }`}
+              >
+                {pauseSelection === 1 ? "▸ " : "  "}QUIT TO MENU
+              </Button>
+            </div>
+            <div className="text-[hsl(var(--game-foreground))] font-mono text-xs opacity-40">
+              ESC or START to resume
+            </div>
+          </div>
+        )}
+
         {/* Duel quit button */}
-        {gameMode === "duel" && (
+        {gameMode === "duel" && !isPaused && (
           <div className="absolute top-2 right-2">
             <Button
               onClick={quitToMenu}
