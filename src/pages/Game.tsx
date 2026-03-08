@@ -89,6 +89,9 @@ const Game = () => {
   const [enteringInitials, setEnteringInitials] = useState(false);
   const [initials, setInitials] = useState("");
   const [leaderboard, setLeaderboard] = useState<{initials: string; score: number; date: string}[]>([]);
+  const [showLifeLost, setShowLifeLost] = useState(false);
+  const showLifeLostRef = useRef(false);
+  const [isTouchDevice, setIsTouchDevice] = useState(false);
 
   const loadLeaderboard = useCallback(() => {
     try {
