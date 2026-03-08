@@ -2371,16 +2371,9 @@ const Game = () => {
                 });
               }
             }
-          } else if (gameModeRef.current === "duel") {
-            // B button to quit duel
+          } else if (gameModeRef.current === "duel" || gameModeRef.current === "online") {
             if (justB) {
-              gameStateRef.current = null;
-              duelStateRef.current = null;
-              setGameMode("menu");
-              setShowGameOver(false);
-              setShowLifeLost(false);
-              showLifeLostRef.current = false;
-              soundEffects.stopThrust();
+              quitToMenu();
             }
           }
         }
