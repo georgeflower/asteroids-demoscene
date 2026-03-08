@@ -1924,16 +1924,18 @@ const Game = () => {
   useEffect(() => {
     const fetchNowPlaying = async () => {
       try {
-        const res = await fetch("https://corsproxy.io/?url=" + encodeURIComponent("https://scenestream.net/demovibes/xml/queue/"));
+        const proxyUrl = "https://api.allorigins.win/raw?url=" + encodeURIComponent("https://scenestream.net/demovibes/xml/queue/");
+        const res = await fetch(proxyUrl);
         const text = await res.text();
         const parser = new DOMParser();
         const xml = parser.parseFromString(text, "text/xml");
-        const items = xml.querySelectorAll("entry");
-        if (items.length > 0) {
-          const first = items[0];
-          const artist = first.querySelector("artist")?.textContent || "Unknown";
-          const title = first.querySelector("title")?.textContent || "Unknown";
-          const info = { artist, title };
+        const nowEntry = xml.querySelector("now > entry");
+        if (nowEntry) {
+          const artists = nowEntry.querySelectorAll("artist");
+          const artistName = Array.from(artists).map(a => a.textContent).join(" & ") || "Unknown";
+          const songEl = nowEntry.querySelector("song");
+          const songTitle = songEl?.textContent || "Unknown";
+          const info = { artist: artistName, title: songTitle };
           nowPlayingRef.current = info;
           setNowPlaying(info);
         }
