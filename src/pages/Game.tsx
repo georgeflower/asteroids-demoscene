@@ -1658,8 +1658,15 @@ const Game = () => {
 
       <div className="mt-6 flex flex-col gap-2 max-w-md">
         <div className="text-[hsl(var(--game-foreground))] font-mono text-sm text-center">
-          BACKGROUND MUSIC: NECTARINE DEMOSCENE RADIO
+          🎵 NECTARINE DEMOSCENE RADIO
         </div>
+        {nowPlaying && (
+          <div className="text-[hsl(var(--game-foreground))] font-mono text-xs text-center animate-pulse">
+            <span className="opacity-90">{nowPlaying.artist}</span>
+            <span className="opacity-50"> — </span>
+            <span className="opacity-80">{nowPlaying.title}</span>
+          </div>
+        )}
         <audio
           controls
           preload="metadata"
@@ -1674,8 +1681,8 @@ const Game = () => {
           <source src="https://nectarine.inversi0n.org/necta192.mp3" type="audio/mpeg" />
           Your browser does not support the audio element.
         </audio>
-        <div className="text-[hsl(var(--game-foreground))] font-mono text-xs text-center opacity-70">
-          Streaming • Nectarine Demoscene Radio
+        <div className="text-[hsl(var(--game-foreground))] font-mono text-xs text-center opacity-50">
+          scenestream.net
         </div>
       </div>
     </div>
