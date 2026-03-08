@@ -171,6 +171,7 @@ const Game = () => {
   const [showLifeLost, setShowLifeLost] = useState(false);
   const showLifeLostRef = useRef(false);
   const [isTouchDevice, setIsTouchDevice] = useState(false);
+  const [nowPlaying, setNowPlaying] = useState<{ artist: string; title: string } | null>(null);
 
   const loadLeaderboard = useCallback(() => {
     try {
@@ -1436,6 +1437,30 @@ const Game = () => {
     setIsTouchDevice('ontouchstart' in window || navigator.maxTouchPoints > 0);
   }, []);
 
+  // Poll Nectarine now-playing info
+  useEffect(() => {
+    const fetchNowPlaying = async () => {
+      try {
+        const res = await fetch("https://scenestream.net/demovibes/xml/queue/");
+        const text = await res.text();
+        const parser = new DOMParser();
+        const xml = parser.parseFromString(text, "text/xml");
+        const items = xml.querySelectorAll("entry");
+        if (items.length > 0) {
+          const first = items[0];
+          const artist = first.querySelector("artist")?.textContent || "Unknown";
+          const title = first.querySelector("title")?.textContent || "Unknown";
+          setNowPlaying({ artist, title });
+        }
+      } catch (e) {
+        console.log("Could not fetch now-playing info:", e);
+      }
+    };
+    fetchNowPlaying();
+    const interval = setInterval(fetchNowPlaying, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
   const continueAfterLifeLost = useCallback(() => {
     showLifeLostRef.current = false;
     setShowLifeLost(false);
@@ -1657,8 +1682,15 @@ const Game = () => {
 
       <div className="mt-6 flex flex-col gap-2 max-w-md">
         <div className="text-[hsl(var(--game-foreground))] font-mono text-sm text-center">
-          BACKGROUND MUSIC: NECTARINE DEMOSCENE RADIO
+          🎵 NECTARINE DEMOSCENE RADIO
         </div>
+        {nowPlaying && (
+          <div className="text-[hsl(var(--game-foreground))] font-mono text-xs text-center animate-pulse">
+            <span className="opacity-90">{nowPlaying.artist}</span>
+            <span className="opacity-50"> — </span>
+            <span className="opacity-80">{nowPlaying.title}</span>
+          </div>
+        )}
         <audio
           controls
           preload="metadata"
@@ -1673,8 +1705,8 @@ const Game = () => {
           <source src="https://nectarine.inversi0n.org/necta192.mp3" type="audio/mpeg" />
           Your browser does not support the audio element.
         </audio>
-        <div className="text-[hsl(var(--game-foreground))] font-mono text-xs text-center opacity-70">
-          Streaming • Nectarine Demoscene Radio
+        <div className="text-[hsl(var(--game-foreground))] font-mono text-xs text-center opacity-50">
+          scenestream.net
         </div>
       </div>
     </div>
