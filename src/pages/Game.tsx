@@ -2269,7 +2269,7 @@ const Game = () => {
       if (gameModeRef.current === "solo") {
         if (e.key === " ") { e.preventDefault(); shootBullet(); }
         if (e.key === "h" || e.key === "H") { e.preventDefault(); hyperspace(); }
-      } else if (gameModeRef.current === "duel") {
+      } else if (gameModeRef.current === "duel" || gameModeRef.current === "online") {
         if (e.key === " ") { e.preventDefault(); }
         if (e.key === "e" || e.key === "E") { e.preventDefault(); }
       }
