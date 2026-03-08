@@ -537,6 +537,116 @@ const Game = () => {
     toast.success("DUEL MODE! P1: Arrows+Space | P2: WASD+E");
   }, []);
 
+  // ===== ONLINE HELPERS =====
+  const applyNetState = useCallback((net: DuelNetState) => {
+    const ds = duelStateRef.current;
+    if (!ds) return;
+
+    ds.ship1.pos = { x: net.ship1.x, y: net.ship1.y };
+    ds.ship1.vel = { x: net.ship1.vx, y: net.ship1.vy };
+    ds.ship1.rotation = net.ship1.rot;
+    ds.ship1.isThrusting = net.ship1.thrust;
+    ds.ship1.invulnerable = net.ship1.invuln;
+    ds.ship1.invulnerableTime = net.ship1.invulnTime;
+
+    ds.ship2.pos = { x: net.ship2.x, y: net.ship2.y };
+    ds.ship2.vel = { x: net.ship2.vx, y: net.ship2.vy };
+    ds.ship2.rotation = net.ship2.rot;
+    ds.ship2.isThrusting = net.ship2.thrust;
+    ds.ship2.invulnerable = net.ship2.invuln;
+    ds.ship2.invulnerableTime = net.ship2.invulnTime;
+
+    ds.bullets1 = net.bullets1.map(b => ({
+      pos: { x: b.x, y: b.y }, vel: { x: b.vx, y: b.vy },
+      rotation: b.rot, lifetime: b.lifetime, owner: b.owner,
+    }));
+    ds.bullets2 = net.bullets2.map(b => ({
+      pos: { x: b.x, y: b.y }, vel: { x: b.vx, y: b.vy },
+      rotation: b.rot, lifetime: b.lifetime, owner: b.owner,
+    }));
+
+    ds.asteroids = net.asteroids.map(a => {
+      const pts: Vector[] = [];
+      for (let j = 0; j < a.points.length; j += 2) {
+        pts.push({ x: a.points[j], y: a.points[j + 1] });
+      }
+      return {
+        pos: { x: a.x, y: a.y }, vel: { x: a.vx, y: a.vy },
+        rotation: a.rot, size: a.size as "large" | "medium" | "small",
+        rotationSpeed: a.rotSpeed, points: pts,
+      };
+    });
+
+    ds.aliens = net.aliens.map(a => ({
+      pos: { x: a.x, y: a.y }, vel: { x: a.vx, y: a.vy },
+      rotation: 0, type: a.type as "brown" | "greenMan",
+      hp: 1, moveTimer: 0, shootTimer: 999, zigzagPhase: 0,
+    }));
+
+    const prevK0 = ds.kills[0], prevK1 = ds.kills[1];
+    ds.kills = net.kills;
+    ds.deaths = net.deaths;
+    ds.respawnTimer = net.respawnTimer;
+
+    for (const event of net.events) {
+      if (event.type === "explosion" || event.type === "kill" || event.type === "die_env") {
+        spawnExplosionTo(ds.particles, { x: event.x, y: event.y }, event.color, event.count);
+        soundEffects.explode();
+      }
+      if (event.type === "kill" && event.killer !== undefined) {
+        const color = event.killer === 0 ? P1_COLOR : P2_COLOR;
+        spawnFloatingTextTo(ds.floatingTexts, { x: event.x, y: event.y }, `P${event.killer + 1} KILL!`, color, 20);
+      }
+    }
+
+    if (net.kills[0] !== prevK0 || net.kills[1] !== prevK1) {
+      setDuelKills([...net.kills]);
+      setDuelDeaths([...net.deaths]);
+    }
+  }, []);
+
+  const updateOnlineVisuals = useCallback(() => {
+    const ds = duelStateRef.current;
+    if (!ds) return;
+    ds.floatingTexts = ds.floatingTexts.filter((ft) => {
+      ft.pos.y -= 0.5; ft.lifetime--;
+      ft.opacity = ft.lifetime / ft.maxLifetime;
+      return ft.lifetime > 0;
+    });
+    ds.particles = ds.particles.filter((p) => {
+      p.pos.x += p.vel.x; p.pos.y += p.vel.y;
+      p.vel.x *= 0.97; p.vel.y *= 0.97;
+      p.lifetime--;
+      return p.lifetime > 0;
+    });
+  }, []);
+
+  const initOnline = useCallback((isHost: boolean) => {
+    duelStateRef.current = {
+      ship1: createShip(CANVAS_WIDTH * 0.25, CANVAS_HEIGHT / 2),
+      ship2: createShip(CANVAS_WIDTH * 0.75, CANVAS_HEIGHT / 2),
+      bullets1: [], bullets2: [], asteroids: [], aliens: [],
+      kills: [0, 0], deaths: [0, 0], respawnTimer: [0, 0],
+      floatingTexts: [], particles: [], stars: createStars(),
+      alienSpawnTimer: 800, asteroidSpawnTimer: 600,
+    };
+    duelStateRef.current.ship1.rotation = 0;
+    duelStateRef.current.ship2.rotation = Math.PI;
+    gameStateRef.current = null;
+    setShowGameOver(false); setShowLifeLost(false);
+    showLifeLostRef.current = false;
+    setDuelKills([0, 0]); setDuelDeaths([0, 0]);
+    setGameMode("online");
+    broadcastTickRef.current = 0;
+
+    if (isHost) {
+      const worker = new Worker(new URL('../workers/gameWorker.ts', import.meta.url), { type: 'module' });
+      workerRef.current = worker;
+      worker.postMessage({ type: 'init' });
+    }
+    toast.success(isHost ? "Game started! You are HOST (P1)" : "Game started! You are GUEST (P2)");
+  }, []);
+
   const nextWave = useCallback(() => {
     if (!gameStateRef.current) return;
     const state = gameStateRef.current;
