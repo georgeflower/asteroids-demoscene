@@ -208,6 +208,8 @@ const Game = () => {
   const isPausedRef = useRef(false);
   const [pauseSelection, setPauseSelection] = useState(0); // 0=resume, 1=quit
   const prevGamepadButtonRef = useRef<boolean[]>([false, false, false, false, false, false, false]);
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const radioStartedRef = useRef(false);
 
   // Keep ref in sync
   useEffect(() => { gameModeRef.current = gameMode; }, [gameMode]);
@@ -1883,6 +1885,28 @@ const Game = () => {
     setIsTouchDevice('ontouchstart' in window || navigator.maxTouchPoints > 0);
   }, []);
 
+  // Try to autoplay radio on first user interaction (browsers block autoplay without gesture)
+  useEffect(() => {
+    const tryPlay = () => {
+      if (radioStartedRef.current) return;
+      if (audioRef.current) {
+        audioRef.current.play().then(() => {
+          radioStartedRef.current = true;
+        }).catch(() => { /* still blocked, will retry on next interaction */ });
+      }
+    };
+    window.addEventListener("click", tryPlay, { once: false });
+    window.addEventListener("keydown", tryPlay, { once: false });
+    window.addEventListener("touchstart", tryPlay, { once: false });
+    // Also try immediately
+    tryPlay();
+    return () => {
+      window.removeEventListener("click", tryPlay);
+      window.removeEventListener("keydown", tryPlay);
+      window.removeEventListener("touchstart", tryPlay);
+    };
+  }, []);
+
   // Poll Nectarine now-playing info
   useEffect(() => {
     const fetchNowPlaying = async () => {
@@ -2155,8 +2179,10 @@ const Game = () => {
             </div>
           )}
           <audio
+            ref={audioRef}
             controls
-            preload="metadata"
+            autoPlay
+            preload="auto"
             className="w-full"
             onError={(e) => {
               const target = e.currentTarget;
@@ -2463,18 +2489,17 @@ const Game = () => {
           </div>
         )}
         <audio
+          ref={audioRef}
           controls
-          preload="metadata"
+          autoPlay
+          preload="auto"
           className="w-full"
           onError={(e) => {
             const target = e.currentTarget;
             console.error("Audio loading error:", target.error?.message);
-            toast.error(`Radio error: ${target.error?.message || 'Unknown error'}`);
           }}
-          onCanPlay={() => toast.success("Nectarine Radio loaded!")}
         >
           <source src="https://nectarine.inversi0n.org/necta192.mp3" type="audio/mpeg" />
-          Your browser does not support the audio element.
         </audio>
         <div className="text-[hsl(var(--game-foreground))] font-mono text-xs text-center opacity-50">
           scenestream.net
