@@ -202,6 +202,9 @@ const Game = () => {
   const gameModeRef = useRef<GameMode>("menu");
   const [duelKills, setDuelKills] = useState<[number, number]>([0, 0]);
   const [duelDeaths, setDuelDeaths] = useState<[number, number]>([0, 0]);
+  const [menuSelection, setMenuSelection] = useState(0); // 0=solo, 1=duel
+  const [gameOverSelection, setGameOverSelection] = useState(0); // 0=play again, 1=menu
+  const prevGamepadButtonRef = useRef<boolean[]>([false, false, false, false, false, false]);
 
   // Keep ref in sync
   useEffect(() => { gameModeRef.current = gameMode; }, [gameMode]);
