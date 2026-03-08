@@ -1670,7 +1670,7 @@ const Game = () => {
           }}
           onCanPlay={() => toast.success("Nectarine Radio loaded!")}
         >
-          <source src="http://pmaster.no:9000/necta" type="audio/mpeg" />
+          <source src="https://nectarine.inversi0n.org/necta192.mp3" type="audio/mpeg" />
           Your browser does not support the audio element.
         </audio>
         <div className="text-[hsl(var(--game-foreground))] font-mono text-xs text-center opacity-70">
