@@ -202,6 +202,9 @@ const Game = () => {
   const gameModeRef = useRef<GameMode>("menu");
   const [duelKills, setDuelKills] = useState<[number, number]>([0, 0]);
   const [duelDeaths, setDuelDeaths] = useState<[number, number]>([0, 0]);
+  const [menuSelection, setMenuSelection] = useState(0); // 0=solo, 1=duel
+  const [gameOverSelection, setGameOverSelection] = useState(0); // 0=play again, 1=menu
+  const prevGamepadButtonRef = useRef<boolean[]>([false, false, false, false, false, false]);
 
   // Keep ref in sync
   useEffect(() => { gameModeRef.current = gameMode; }, [gameMode]);
@@ -1936,6 +1939,89 @@ const Game = () => {
     };
   }, [shootBullet, hyperspace, gameLoop]);
 
+  // Gamepad polling for menus and overlays
+  useEffect(() => {
+    let rafId: number;
+    const poll = () => {
+      try {
+        const gamepads = navigator.getGamepads();
+        const gp = gamepads[0] || gamepads[1];
+        if (gp) {
+          const btnA = gp.buttons[0]?.pressed ?? false;
+          const btnB = gp.buttons[1]?.pressed ?? false;
+          const upAxis = (gp.axes[1] ?? 0) < -GAMEPAD_DEADZONE;
+          const downAxis = (gp.axes[1] ?? 0) > GAMEPAD_DEADZONE;
+          const dpadUp = gp.buttons[12]?.pressed ?? false;
+          const dpadDown = gp.buttons[13]?.pressed ?? false;
+          const up = upAxis || dpadUp;
+          const down = downAxis || dpadDown;
+          const prev = prevGamepadButtonRef.current;
+          const justA = btnA && !prev[0];
+          const justUp = up && !prev[2];
+          const justDown = down && !prev[3];
+          const justB = btnB && !prev[1];
+          prev[0] = btnA;
+          prev[1] = btnB;
+          prev[2] = up;
+          prev[3] = down;
+
+          if (gameModeRef.current === "menu") {
+            if (justUp || justDown) {
+              setMenuSelection(s => s === 0 ? 1 : 0);
+            }
+            if (justA) {
+              setMenuSelection(s => {
+                if (s === 0) initGame();
+                else initDuel();
+                return s;
+              });
+            }
+          } else if (showLifeLostRef.current) {
+            if (justA) {
+              showLifeLostRef.current = false;
+              setShowLifeLost(false);
+            }
+          } else if (showGameOver) {
+            if (!enteringInitialsRef.current) {
+              if (justUp || justDown) {
+                setGameOverSelection(s => s === 0 ? 1 : 0);
+              }
+              if (justA) {
+                setGameOverSelection(s => {
+                  if (s === 0) initGame();
+                  else {
+                    gameStateRef.current = null;
+                    duelStateRef.current = null;
+                    setGameMode("menu");
+                    setShowGameOver(false);
+                    setShowLifeLost(false);
+                    showLifeLostRef.current = false;
+                    soundEffects.stopThrust();
+                  }
+                  return s;
+                });
+              }
+            }
+          } else if (gameModeRef.current === "duel") {
+            // B button to quit duel
+            if (justB) {
+              gameStateRef.current = null;
+              duelStateRef.current = null;
+              setGameMode("menu");
+              setShowGameOver(false);
+              setShowLifeLost(false);
+              showLifeLostRef.current = false;
+              soundEffects.stopThrust();
+            }
+          }
+        }
+      } catch { /* no gamepad */ }
+      rafId = requestAnimationFrame(poll);
+    };
+    rafId = requestAnimationFrame(poll);
+    return () => cancelAnimationFrame(rafId);
+  }, [initGame, initDuel, showGameOver]);
+
   const quitToMenu = useCallback(() => {
     gameStateRef.current = null;
     duelStateRef.current = null;
@@ -1960,16 +2046,24 @@ const Game = () => {
         <div className="flex flex-col gap-4 items-center mb-12">
           <Button
             onClick={initGame}
-            className="bg-[hsl(var(--game-foreground))] text-[hsl(var(--game-background))] hover:bg-[hsl(var(--game-glow))] text-2xl px-12 py-6 font-mono tracking-wider"
+            className={`text-2xl px-12 py-6 font-mono tracking-wider transition-all ${
+              menuSelection === 0
+                ? "bg-[hsl(var(--game-foreground))] text-[hsl(var(--game-background))] shadow-[0_0_20px_hsl(var(--game-foreground))]"
+                : "bg-[hsl(var(--game-foreground))]/20 text-[hsl(var(--game-foreground))] border-2 border-[hsl(var(--game-foreground))]/40"
+            }`}
           >
-            SOLO
+            {menuSelection === 0 ? "▸ " : "  "}SOLO
           </Button>
           <Button
             onClick={initDuel}
-            className="text-2xl px-12 py-6 font-mono tracking-wider border-2"
-            style={{ borderColor: P2_COLOR, color: P2_COLOR, background: "transparent" }}
+            className={`text-2xl px-12 py-6 font-mono tracking-wider border-2 transition-all ${
+              menuSelection === 1
+                ? "shadow-[0_0_20px_rgba(255,136,68,0.5)]"
+                : "opacity-60"
+            }`}
+            style={{ borderColor: P2_COLOR, color: P2_COLOR, background: menuSelection === 1 ? "rgba(255,136,68,0.15)" : "transparent" }}
           >
-            DUEL
+            {menuSelection === 1 ? "▸ " : "  "}DUEL
           </Button>
         </div>
 
@@ -2119,16 +2213,24 @@ const Game = () => {
             <div className="flex gap-4">
               <Button
                 onClick={initGame}
-                className="bg-[hsl(var(--game-foreground))] text-[hsl(var(--game-background))] hover:bg-[hsl(var(--game-glow))] text-xl px-8 py-4 font-mono"
+                className={`text-xl px-8 py-4 font-mono transition-all ${
+                  gameOverSelection === 0
+                    ? "bg-[hsl(var(--game-foreground))] text-[hsl(var(--game-background))] shadow-[0_0_15px_hsl(var(--game-foreground))]"
+                    : "bg-[hsl(var(--game-foreground))]/20 text-[hsl(var(--game-foreground))] border border-[hsl(var(--game-foreground))]/40"
+                }`}
               >
-                PLAY AGAIN
+                {gameOverSelection === 0 ? "▸ " : ""}PLAY AGAIN
               </Button>
               <Button
                 onClick={quitToMenu}
                 variant="outline"
-                className="border-[hsl(var(--game-foreground))] text-[hsl(var(--game-foreground))] hover:bg-[hsl(var(--game-foreground))]/20 font-mono"
+                className={`font-mono transition-all ${
+                  gameOverSelection === 1
+                    ? "border-[hsl(var(--game-foreground))] text-[hsl(var(--game-foreground))] bg-[hsl(var(--game-foreground))]/20 shadow-[0_0_15px_hsl(var(--game-foreground))]"
+                    : "border-[hsl(var(--game-foreground))]/40 text-[hsl(var(--game-foreground))]/60"
+                }`}
               >
-                MENU
+                {gameOverSelection === 1 ? "▸ " : ""}MENU
               </Button>
             </div>
           </div>
