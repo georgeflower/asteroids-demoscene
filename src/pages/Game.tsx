@@ -738,9 +738,14 @@ const Game = () => {
   }, [update, draw]);
 
   useEffect(() => {
+    enteringInitialsRef.current = enteringInitials;
+  }, [enteringInitials]);
+
+  useEffect(() => {
     initGame();
 
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (enteringInitialsRef.current) return;
       keysRef.current[e.key] = true;
       if (e.key === " ") {
         e.preventDefault();
