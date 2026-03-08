@@ -171,6 +171,7 @@ const Game = () => {
   const [showLifeLost, setShowLifeLost] = useState(false);
   const showLifeLostRef = useRef(false);
   const [isTouchDevice, setIsTouchDevice] = useState(false);
+  const [nowPlaying, setNowPlaying] = useState<{ artist: string; title: string } | null>(null);
 
   const loadLeaderboard = useCallback(() => {
     try {
