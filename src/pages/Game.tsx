@@ -2213,16 +2213,24 @@ const Game = () => {
             <div className="flex gap-4">
               <Button
                 onClick={initGame}
-                className="bg-[hsl(var(--game-foreground))] text-[hsl(var(--game-background))] hover:bg-[hsl(var(--game-glow))] text-xl px-8 py-4 font-mono"
+                className={`text-xl px-8 py-4 font-mono transition-all ${
+                  gameOverSelection === 0
+                    ? "bg-[hsl(var(--game-foreground))] text-[hsl(var(--game-background))] shadow-[0_0_15px_hsl(var(--game-foreground))]"
+                    : "bg-[hsl(var(--game-foreground))]/20 text-[hsl(var(--game-foreground))] border border-[hsl(var(--game-foreground))]/40"
+                }`}
               >
-                PLAY AGAIN
+                {gameOverSelection === 0 ? "▸ " : ""}PLAY AGAIN
               </Button>
               <Button
                 onClick={quitToMenu}
                 variant="outline"
-                className="border-[hsl(var(--game-foreground))] text-[hsl(var(--game-foreground))] hover:bg-[hsl(var(--game-foreground))]/20 font-mono"
+                className={`font-mono transition-all ${
+                  gameOverSelection === 1
+                    ? "border-[hsl(var(--game-foreground))] text-[hsl(var(--game-foreground))] bg-[hsl(var(--game-foreground))]/20 shadow-[0_0_15px_hsl(var(--game-foreground))]"
+                    : "border-[hsl(var(--game-foreground))]/40 text-[hsl(var(--game-foreground))]/60"
+                }`}
               >
-                MENU
+                {gameOverSelection === 1 ? "▸ " : ""}MENU
               </Button>
             </div>
           </div>
