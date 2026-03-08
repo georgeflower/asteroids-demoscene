@@ -1910,9 +1910,50 @@ const Game = () => {
     setShowLifeLost(false);
   }, []);
 
+  const togglePause = useCallback(() => {
+    isPausedRef.current = !isPausedRef.current;
+    setIsPaused(isPausedRef.current);
+    setPauseSelection(0);
+    if (isPausedRef.current) {
+      soundEffects.stopThrust();
+    }
+  }, []);
+
+  const resumeGame = useCallback(() => {
+    isPausedRef.current = false;
+    setIsPaused(false);
+  }, []);
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (enteringInitialsRef.current) return;
+
+      // Pause toggle on Escape
+      if (e.key === "Escape" && (gameModeRef.current === "solo" || gameModeRef.current === "duel")) {
+        if (!showLifeLostRef.current && !showGameOver) {
+          e.preventDefault();
+          togglePause();
+          return;
+        }
+      }
+
+      // When paused, handle pause menu navigation
+      if (isPausedRef.current) {
+        if (e.key === "ArrowUp" || e.key === "ArrowDown" || e.key === "w" || e.key === "W" || e.key === "s" || e.key === "S") {
+          e.preventDefault();
+          setPauseSelection(s => s === 0 ? 1 : 0);
+        }
+        if (e.key === " " || e.key === "Enter") {
+          e.preventDefault();
+          setPauseSelection(s => {
+            if (s === 0) resumeGame();
+            else { resumeGame(); quitToMenu(); }
+            return s;
+          });
+        }
+        return;
+      }
+
       if (showLifeLostRef.current) {
         if (e.key === " " || e.key === "Enter") {
           e.preventDefault();
@@ -1942,7 +1983,7 @@ const Game = () => {
       window.removeEventListener("keyup", handleKeyUp);
       if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
     };
-  }, [shootBullet, hyperspace, gameLoop]);
+  }, [shootBullet, hyperspace, gameLoop, togglePause, resumeGame, quitToMenu, showGameOver]);
 
   // Gamepad polling for menus and overlays
   useEffect(() => {
