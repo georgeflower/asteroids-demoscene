@@ -1922,7 +1922,7 @@ const Game = () => {
     soundEffects.stopThrust();
   }, []);
 
-    isPausedRef.current = !isPausedRef.current;
+    const togglePause = useCallback(() => {
     setIsPaused(isPausedRef.current);
     setPauseSelection(0);
     if (isPausedRef.current) {
