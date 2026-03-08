@@ -159,7 +159,7 @@ interface DuelState {
   asteroidSpawnTimer: number;
 }
 
-type GameMode = "menu" | "solo" | "duel";
+type GameMode = "menu" | "solo" | "duel" | "online_lobby" | "online";
 
 const CANVAS_WIDTH = 800;
 const CANVAS_HEIGHT = 600;
