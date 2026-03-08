@@ -2191,6 +2191,12 @@ const Game = () => {
           >
             <source src="https://nectarine.inversi0n.org/necta192.mp3" type="audio/mpeg" />
           </audio>
+          <div className="text-[hsl(var(--game-foreground))] font-mono text-xs text-center opacity-60 mt-1">
+            Thanks to <a href="https://www.scenestream.net/demovibes/streams/" target="_blank" rel="noopener noreferrer" className="underline hover:opacity-80">Nectarine Demoscene Radio</a> for the music!
+          </div>
+          <div className="text-[hsl(var(--game-foreground))] font-mono text-[10px] text-center opacity-40 mt-0.5">
+            Streaming demoscene & chiptune tracks 24/7
+          </div>
         </div>
       </div>
     );
