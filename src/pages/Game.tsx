@@ -1999,6 +1999,7 @@ const Game = () => {
           const downAxis = (gp.axes[1] ?? 0) > GAMEPAD_DEADZONE;
           const dpadUp = gp.buttons[12]?.pressed ?? false;
           const dpadDown = gp.buttons[13]?.pressed ?? false;
+          const btnStart = gp.buttons[9]?.pressed ?? false;
           const up = upAxis || dpadUp;
           const down = downAxis || dpadDown;
           const prev = prevGamepadButtonRef.current;
@@ -2006,12 +2007,31 @@ const Game = () => {
           const justUp = up && !prev[2];
           const justDown = down && !prev[3];
           const justB = btnB && !prev[1];
+          const justStart = btnStart && !prev[6];
           prev[0] = btnA;
           prev[1] = btnB;
           prev[2] = up;
           prev[3] = down;
+          prev[6] = btnStart;
 
-          if (gameModeRef.current === "menu") {
+          // Start button toggles pause during gameplay
+          if (justStart && (gameModeRef.current === "solo" || gameModeRef.current === "duel") && !showLifeLostRef.current && !showGameOver) {
+            togglePause();
+          }
+
+          // When paused, handle pause menu
+          if (isPausedRef.current) {
+            if (justUp || justDown) {
+              setPauseSelection(s => s === 0 ? 1 : 0);
+            }
+            if (justA) {
+              setPauseSelection(s => {
+                if (s === 0) resumeGame();
+                else { resumeGame(); quitToMenu(); }
+                return s;
+              });
+            }
+          } else if (gameModeRef.current === "menu") {
             if (justUp || justDown) {
               setMenuSelection(s => s === 0 ? 1 : 0);
             }
@@ -2066,7 +2086,7 @@ const Game = () => {
     };
     rafId = requestAnimationFrame(poll);
     return () => cancelAnimationFrame(rafId);
-  }, [initGame, initDuel, showGameOver]);
+  }, [initGame, initDuel, showGameOver, togglePause, resumeGame, quitToMenu]);
 
   const quitToMenu = useCallback(() => {
     gameStateRef.current = null;
