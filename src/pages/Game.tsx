@@ -757,10 +757,27 @@ const Game = () => {
   }, [enteringInitials]);
 
   useEffect(() => {
+    setIsTouchDevice('ontouchstart' in window || navigator.maxTouchPoints > 0);
+  }, []);
+
+  const continueAfterLifeLost = useCallback(() => {
+    showLifeLostRef.current = false;
+    setShowLifeLost(false);
+  }, []);
+
+  useEffect(() => {
     initGame();
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (enteringInitialsRef.current) return;
+      if (showLifeLostRef.current) {
+        if (e.key === " " || e.key === "Enter") {
+          e.preventDefault();
+          showLifeLostRef.current = false;
+          setShowLifeLost(false);
+        }
+        return;
+      }
       keysRef.current[e.key] = true;
       if (e.key === " ") {
         e.preventDefault();
