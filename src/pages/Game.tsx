@@ -218,6 +218,8 @@ const Game = () => {
     setEnteringInitials(false);
     setInitials("");
     setShowLeaderboard(false);
+    setShowLifeLost(false);
+    showLifeLostRef.current = false;
     toast.success("Game Started! Use Arrow Keys to move, Space to shoot");
   }, []);
 
