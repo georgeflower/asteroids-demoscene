@@ -1939,6 +1939,89 @@ const Game = () => {
     };
   }, [shootBullet, hyperspace, gameLoop]);
 
+  // Gamepad polling for menus and overlays
+  useEffect(() => {
+    let rafId: number;
+    const poll = () => {
+      try {
+        const gamepads = navigator.getGamepads();
+        const gp = gamepads[0] || gamepads[1];
+        if (gp) {
+          const btnA = gp.buttons[0]?.pressed ?? false;
+          const btnB = gp.buttons[1]?.pressed ?? false;
+          const upAxis = (gp.axes[1] ?? 0) < -GAMEPAD_DEADZONE;
+          const downAxis = (gp.axes[1] ?? 0) > GAMEPAD_DEADZONE;
+          const dpadUp = gp.buttons[12]?.pressed ?? false;
+          const dpadDown = gp.buttons[13]?.pressed ?? false;
+          const up = upAxis || dpadUp;
+          const down = downAxis || dpadDown;
+          const prev = prevGamepadButtonRef.current;
+          const justA = btnA && !prev[0];
+          const justUp = up && !prev[2];
+          const justDown = down && !prev[3];
+          const justB = btnB && !prev[1];
+          prev[0] = btnA;
+          prev[1] = btnB;
+          prev[2] = up;
+          prev[3] = down;
+
+          if (gameModeRef.current === "menu") {
+            if (justUp || justDown) {
+              setMenuSelection(s => s === 0 ? 1 : 0);
+            }
+            if (justA) {
+              setMenuSelection(s => {
+                if (s === 0) initGame();
+                else initDuel();
+                return s;
+              });
+            }
+          } else if (showLifeLostRef.current) {
+            if (justA) {
+              showLifeLostRef.current = false;
+              setShowLifeLost(false);
+            }
+          } else if (showGameOver) {
+            if (!enteringInitialsRef.current) {
+              if (justUp || justDown) {
+                setGameOverSelection(s => s === 0 ? 1 : 0);
+              }
+              if (justA) {
+                setGameOverSelection(s => {
+                  if (s === 0) initGame();
+                  else {
+                    gameStateRef.current = null;
+                    duelStateRef.current = null;
+                    setGameMode("menu");
+                    setShowGameOver(false);
+                    setShowLifeLost(false);
+                    showLifeLostRef.current = false;
+                    soundEffects.stopThrust();
+                  }
+                  return s;
+                });
+              }
+            }
+          } else if (gameModeRef.current === "duel") {
+            // B button to quit duel
+            if (justB) {
+              gameStateRef.current = null;
+              duelStateRef.current = null;
+              setGameMode("menu");
+              setShowGameOver(false);
+              setShowLifeLost(false);
+              showLifeLostRef.current = false;
+              soundEffects.stopThrust();
+            }
+          }
+        }
+      } catch { /* no gamepad */ }
+      rafId = requestAnimationFrame(poll);
+    };
+    rafId = requestAnimationFrame(poll);
+    return () => cancelAnimationFrame(rafId);
+  }, [initGame, initDuel, showGameOver]);
+
   const quitToMenu = useCallback(() => {
     gameStateRef.current = null;
     duelStateRef.current = null;
