@@ -747,6 +747,7 @@ const Game = () => {
 
   // ===== DUEL UPDATE =====
   const updateDuel = useCallback(() => {
+    if (isPausedRef.current) return;
     const ds = duelStateRef.current;
     if (!ds) return;
 
