@@ -1924,9 +1924,31 @@ const Game = () => {
   useEffect(() => {
     const fetchNowPlaying = async () => {
       try {
-        const proxyUrl = "https://api.allorigins.win/raw?url=" + encodeURIComponent("https://scenestream.net/demovibes/xml/queue/");
-        const res = await fetch(proxyUrl);
-        const text = await res.text();
+        // Try multiple CORS proxies as fallbacks
+        const apiUrl = "https://scenestream.net/demovibes/xml/queue/";
+        const proxies = [
+          `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(apiUrl)}`,
+          `https://corsproxy.io/?${encodeURIComponent(apiUrl)}`,
+        ];
+        
+        let text = "";
+        for (const proxyUrl of proxies) {
+          try {
+            const res = await fetch(proxyUrl);
+            if (res.ok) {
+              text = await res.text();
+              break;
+            }
+          } catch {
+            continue;
+          }
+        }
+        
+        if (!text) {
+          console.log("All CORS proxies failed");
+          return;
+        }
+        
         const parser = new DOMParser();
         const xml = parser.parseFromString(text, "text/xml");
         const nowEntry = xml.querySelector("now > entry");
