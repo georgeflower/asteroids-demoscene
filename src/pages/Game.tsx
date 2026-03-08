@@ -208,6 +208,8 @@ const Game = () => {
   const isPausedRef = useRef(false);
   const [pauseSelection, setPauseSelection] = useState(0); // 0=resume, 1=quit
   const prevGamepadButtonRef = useRef<boolean[]>([false, false, false, false, false, false, false]);
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const radioStartedRef = useRef(false);
 
   // Keep ref in sync
   useEffect(() => { gameModeRef.current = gameMode; }, [gameMode]);
