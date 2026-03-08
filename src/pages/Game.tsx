@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { soundEffects } from "@/utils/soundEffects";
+import { haptics } from "@/utils/haptics";
 
 interface Vector {
   x: number;
@@ -289,6 +290,7 @@ const Game = () => {
 
     gameStateRef.current.bullets.push(bullet);
     soundEffects.shoot();
+    haptics.light();
   }, []);
 
   const hyperspace = useCallback(() => {
@@ -454,6 +456,7 @@ const Game = () => {
             toast.success("2x Score multiplier!");
             break;
         }
+        haptics.medium();
         return false;
       }
 
@@ -556,6 +559,7 @@ const Game = () => {
           soundEffects.explode();
           soundEffects.stopThrust();
           toast.error("Ship destroyed!");
+          haptics.heavy();
 
           if (state.lives <= 0) {
             state.gameOver = true;
@@ -563,6 +567,7 @@ const Game = () => {
             if (isHighScore(state.score)) setEnteringInitials(true);
             setLeaderboard(loadLeaderboard());
             toast.error(`Game Over! Final Score: ${state.score}`);
+            haptics.gameOver();
           } else {
             showLifeLostRef.current = true;
             setShowLifeLost(true);
@@ -582,6 +587,7 @@ const Game = () => {
           soundEffects.explode();
           soundEffects.stopThrust();
           toast.error("Ship destroyed!");
+          haptics.heavy();
 
           if (state.lives <= 0) {
             state.gameOver = true;
@@ -589,6 +595,7 @@ const Game = () => {
             if (isHighScore(state.score)) setEnteringInitials(true);
             setLeaderboard(loadLeaderboard());
             toast.error(`Game Over! Final Score: ${state.score}`);
+            haptics.gameOver();
           } else {
             showLifeLostRef.current = true;
             setShowLifeLost(true);
