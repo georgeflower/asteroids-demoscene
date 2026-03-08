@@ -322,7 +322,7 @@ const Game = () => {
   }, []);
 
   const update = useCallback(() => {
-    if (!gameStateRef.current || gameStateRef.current.gameOver || gameStateRef.current.paused) return;
+    if (!gameStateRef.current || gameStateRef.current.gameOver || gameStateRef.current.paused || showLifeLostRef.current) return;
 
     const state = gameStateRef.current;
 
