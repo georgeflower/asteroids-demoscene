@@ -310,6 +310,10 @@ const Game = () => {
           setEnteringInitials(true);
         }
         setLeaderboard(loadLeaderboard());
+      } else {
+        gameStateRef.current.ship = createShip();
+        showLifeLostRef.current = true;
+        setShowLifeLost(true);
       }
       toast.error("Hyperspace malfunction!");
     } else {
