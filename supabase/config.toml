@@ -1,1 +1,4 @@
 project_id = "ctrucihctxgwzprpaylb"
+
+[functions.scenestream-proxy]
+verify_jwt = false
