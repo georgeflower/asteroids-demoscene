@@ -80,6 +80,7 @@ const Game = () => {
   const keysRef = useRef<{ [key: string]: boolean }>({});
   const animationFrameRef = useRef<number>();
   const lastShotRef = useRef(0);
+  const enteringInitialsRef = useRef(false);
   const [displayScore, setDisplayScore] = useState(0);
   const [displayLives, setDisplayLives] = useState(3);
   const [displayWave, setDisplayWave] = useState(1);
