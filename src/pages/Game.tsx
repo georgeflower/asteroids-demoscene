@@ -1804,7 +1804,7 @@ const Game = () => {
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    if (gameModeRef.current === "duel" && duelStateRef.current) {
+    if ((gameModeRef.current === "duel" || gameModeRef.current === "online") && duelStateRef.current) {
       const ds = duelStateRef.current;
       drawCommon(ctx, ds.stars, ds.particles, ds.floatingTexts, ds.asteroids, ds.aliens, "#050510", ["#FFFFFF", "#88DDFF", "#44AAFF"]);
 
