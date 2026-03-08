@@ -2304,8 +2304,43 @@ const Game = () => {
           </div>
         )}
 
+        {/* Pause overlay */}
+        {isPaused && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/75 z-10">
+            <div className="text-5xl font-mono text-[hsl(var(--game-foreground))] mb-8 tracking-widest animate-pulse"
+              style={{ textShadow: "0 0 30px hsl(var(--game-foreground))" }}>
+              PAUSED
+            </div>
+            <div className="flex flex-col gap-4 items-center mb-8">
+              <Button
+                onClick={resumeGame}
+                className={`text-xl px-10 py-5 font-mono tracking-wider transition-all ${
+                  pauseSelection === 0
+                    ? "bg-[hsl(var(--game-foreground))] text-[hsl(var(--game-background))] shadow-[0_0_20px_hsl(var(--game-foreground))]"
+                    : "bg-[hsl(var(--game-foreground))]/20 text-[hsl(var(--game-foreground))] border border-[hsl(var(--game-foreground))]/40"
+                }`}
+              >
+                {pauseSelection === 0 ? "▸ " : "  "}RESUME
+              </Button>
+              <Button
+                onClick={() => { resumeGame(); quitToMenu(); }}
+                className={`text-xl px-10 py-5 font-mono tracking-wider transition-all ${
+                  pauseSelection === 1
+                    ? "bg-[hsl(var(--game-danger))] text-[hsl(var(--game-background))] shadow-[0_0_20px_hsl(var(--game-danger))]"
+                    : "bg-[hsl(var(--game-foreground))]/10 text-[hsl(var(--game-foreground))]/60 border border-[hsl(var(--game-foreground))]/20"
+                }`}
+              >
+                {pauseSelection === 1 ? "▸ " : "  "}QUIT TO MENU
+              </Button>
+            </div>
+            <div className="text-[hsl(var(--game-foreground))] font-mono text-xs opacity-40">
+              ESC or START to resume
+            </div>
+          </div>
+        )}
+
         {/* Duel quit button */}
-        {gameMode === "duel" && (
+        {gameMode === "duel" && !isPaused && (
           <div className="absolute top-2 right-2">
             <Button
               onClick={quitToMenu}
