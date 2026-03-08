@@ -34,6 +34,7 @@ interface Bullet extends GameObject {
   isUFO?: boolean;
   isAlien?: boolean;
   color?: string;
+  owner?: number; // 1 or 2 for duel mode
 }
 
 interface UFO extends GameObject {
@@ -137,6 +138,25 @@ interface GameState {
   bossDefeated: boolean;
 }
 
+interface DuelState {
+  ship1: Ship;
+  ship2: Ship;
+  bullets1: Bullet[];
+  bullets2: Bullet[];
+  asteroids: Asteroid[];
+  aliens: Alien[];
+  kills: [number, number];
+  deaths: [number, number];
+  respawnTimer: [number, number];
+  floatingTexts: FloatingText[];
+  particles: Particle[];
+  stars: Star[];
+  alienSpawnTimer: number;
+  asteroidSpawnTimer: number;
+}
+
+type GameMode = "menu" | "solo" | "duel";
+
 const CANVAS_WIDTH = 800;
 const CANVAS_HEIGHT = 600;
 const SHIP_SIZE = 10;
@@ -145,6 +165,10 @@ const BULLET_LIFETIME = 60;
 const ASTEROID_SPEEDS = { large: 0.5, medium: 0.8, small: 1.2 };
 const ASTEROID_POINTS = { large: 20, medium: 50, small: 100 };
 const UFO_POINTS = { large: 200, small: 1000 };
+const GAMEPAD_DEADZONE = 0.2;
+
+const P1_COLOR = "#00FFFF";
+const P2_COLOR = "#FF8844";
 
 const getTheme = (wave: number): ColorTheme => {
   const idx = Math.floor((wave - 1) / 5) % COLOR_THEMES.length;
@@ -156,9 +180,11 @@ const getSpeedScale = (wave: number): number => 1 + wave * 0.05;
 const Game = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const gameStateRef = useRef<GameState | null>(null);
+  const duelStateRef = useRef<DuelState | null>(null);
   const keysRef = useRef<{ [key: string]: boolean }>({});
   const animationFrameRef = useRef<number>();
   const lastShotRef = useRef(0);
+  const lastShotP2Ref = useRef(0);
   const enteringInitialsRef = useRef(false);
   const [displayScore, setDisplayScore] = useState(0);
   const [displayLives, setDisplayLives] = useState(3);
@@ -172,6 +198,13 @@ const Game = () => {
   const showLifeLostRef = useRef(false);
   const [isTouchDevice, setIsTouchDevice] = useState(false);
   const [nowPlaying, setNowPlaying] = useState<{ artist: string; title: string } | null>(null);
+  const [gameMode, setGameMode] = useState<GameMode>("menu");
+  const gameModeRef = useRef<GameMode>("menu");
+  const [duelKills, setDuelKills] = useState<[number, number]>([0, 0]);
+  const [duelDeaths, setDuelDeaths] = useState<[number, number]>([0, 0]);
+
+  // Keep ref in sync
+  useEffect(() => { gameModeRef.current = gameMode; }, [gameMode]);
 
   const loadLeaderboard = useCallback(() => {
     try {
@@ -209,9 +242,8 @@ const Game = () => {
     return stars;
   };
 
-  const spawnFloatingText = (pos: Vector, text: string, color: string, size = 16) => {
-    if (!gameStateRef.current) return;
-    gameStateRef.current.floatingTexts.push({
+  const spawnFloatingTextTo = (arr: FloatingText[], pos: Vector, text: string, color: string, size = 16) => {
+    arr.push({
       pos: { x: pos.x, y: pos.y },
       text,
       color,
@@ -222,12 +254,19 @@ const Game = () => {
     });
   };
 
-  const spawnExplosion = (pos: Vector, color: string, count = 12) => {
-    if (!gameStateRef.current) return;
+  const spawnFloatingText = (pos: Vector, text: string, color: string, size = 16) => {
+    if (gameModeRef.current === "duel" && duelStateRef.current) {
+      spawnFloatingTextTo(duelStateRef.current.floatingTexts, pos, text, color, size);
+    } else if (gameStateRef.current) {
+      spawnFloatingTextTo(gameStateRef.current.floatingTexts, pos, text, color, size);
+    }
+  };
+
+  const spawnExplosionTo = (arr: Particle[], pos: Vector, color: string, count = 12) => {
     for (let i = 0; i < count; i++) {
       const angle = (i / count) * Math.PI * 2 + (Math.random() - 0.5) * 0.5;
       const speed = 1 + Math.random() * 3;
-      gameStateRef.current.particles.push({
+      arr.push({
         pos: { x: pos.x, y: pos.y },
         vel: { x: Math.cos(angle) * speed, y: Math.sin(angle) * speed },
         lifetime: 30 + Math.random() * 30,
@@ -238,11 +277,18 @@ const Game = () => {
     }
   };
 
-  const spawnThrustParticle = (ship: Ship) => {
-    if (!gameStateRef.current) return;
+  const spawnExplosion = (pos: Vector, color: string, count = 12) => {
+    if (gameModeRef.current === "duel" && duelStateRef.current) {
+      spawnExplosionTo(duelStateRef.current.particles, pos, color, count);
+    } else if (gameStateRef.current) {
+      spawnExplosionTo(gameStateRef.current.particles, pos, color, count);
+    }
+  };
+
+  const spawnThrustParticle = (ship: Ship, particles: Particle[]) => {
     const backAngle = ship.rotation + Math.PI;
     const spread = (Math.random() - 0.5) * 0.6;
-    gameStateRef.current.particles.push({
+    particles.push({
       pos: {
         x: ship.pos.x + Math.cos(backAngle) * SHIP_SIZE * 0.5,
         y: ship.pos.y + Math.sin(backAngle) * SHIP_SIZE * 0.5,
@@ -258,8 +304,8 @@ const Game = () => {
     });
   };
 
-  const createShip = (): Ship => ({
-    pos: { x: CANVAS_WIDTH / 2, y: CANVAS_HEIGHT / 2 },
+  const createShip = (x?: number, y?: number): Ship => ({
+    pos: { x: x ?? CANVAS_WIDTH / 2, y: y ?? CANVAS_HEIGHT / 2 },
     vel: { x: 0, y: 0 },
     rotation: -Math.PI / 2,
     rotationSpeed: 0.05,
@@ -281,7 +327,6 @@ const Game = () => {
     }
 
     const angle = Math.random() * Math.PI * 2;
-    // Wider speed variance for large asteroids
     const variance = size === "large" ? (0.3 + Math.random() * 1.2) : (0.8 + Math.random() * 0.4);
     const speed = ASTEROID_SPEEDS[size] * variance * getSpeedScale(wave);
 
@@ -353,6 +398,28 @@ const Game = () => {
     };
   };
 
+  // ===== Gamepad helpers =====
+  const readGamepad = (index: number): { left: boolean; right: boolean; up: boolean; fire: boolean; hyperspace: boolean } => {
+    const result = { left: false, right: false, up: false, fire: false, hyperspace: false };
+    try {
+      const gamepads = navigator.getGamepads();
+      const gp = gamepads[index];
+      if (!gp) return result;
+      // Axes
+      if (gp.axes[0] < -GAMEPAD_DEADZONE) result.left = true;
+      if (gp.axes[0] > GAMEPAD_DEADZONE) result.right = true;
+      if (gp.axes[1] < -GAMEPAD_DEADZONE) result.up = true;
+      // D-pad (buttons 12-15 on standard layout)
+      if (gp.buttons[14]?.pressed) result.left = true;
+      if (gp.buttons[15]?.pressed) result.right = true;
+      if (gp.buttons[12]?.pressed) result.up = true;
+      // Fire = button 0 (A/X), Hyperspace = button 1 (B/Circle)
+      if (gp.buttons[0]?.pressed) result.fire = true;
+      if (gp.buttons[1]?.pressed) result.hyperspace = true;
+    } catch { /* no gamepad API */ }
+    return result;
+  };
+
   const initGame = useCallback(() => {
     const asteroids: Asteroid[] = [];
     for (let i = 0; i < 4; i++) {
@@ -388,6 +455,7 @@ const Game = () => {
       bossDefeated: false,
     };
 
+    duelStateRef.current = null;
     setDisplayScore(0);
     setDisplayLives(3);
     setDisplayWave(1);
@@ -397,7 +465,52 @@ const Game = () => {
     setShowLeaderboard(false);
     setShowLifeLost(false);
     showLifeLostRef.current = false;
+    setGameMode("solo");
     toast.success("Game Started! Use Arrow Keys to move, Space to shoot");
+  }, []);
+
+  const initDuel = useCallback(() => {
+    const asteroids: Asteroid[] = [];
+    for (let i = 0; i < 3; i++) {
+      let x: number, y: number;
+      do {
+        x = Math.random() * CANVAS_WIDTH;
+        y = Math.random() * CANVAS_HEIGHT;
+      } while (
+        Math.hypot(x - CANVAS_WIDTH * 0.25, y - CANVAS_HEIGHT / 2) < 100 ||
+        Math.hypot(x - CANVAS_WIDTH * 0.75, y - CANVAS_HEIGHT / 2) < 100
+      );
+      asteroids.push(createAsteroid(x, y, "large", 1));
+    }
+
+    duelStateRef.current = {
+      ship1: createShip(CANVAS_WIDTH * 0.25, CANVAS_HEIGHT / 2),
+      ship2: createShip(CANVAS_WIDTH * 0.75, CANVAS_HEIGHT / 2),
+      bullets1: [],
+      bullets2: [],
+      asteroids,
+      aliens: [],
+      kills: [0, 0],
+      deaths: [0, 0],
+      respawnTimer: [0, 0],
+      floatingTexts: [],
+      particles: [],
+      stars: createStars(),
+      alienSpawnTimer: 800,
+      asteroidSpawnTimer: 600,
+    };
+    // Point ships at each other
+    duelStateRef.current.ship1.rotation = 0;
+    duelStateRef.current.ship2.rotation = Math.PI;
+
+    gameStateRef.current = null;
+    setShowGameOver(false);
+    setShowLifeLost(false);
+    showLifeLostRef.current = false;
+    setDuelKills([0, 0]);
+    setDuelDeaths([0, 0]);
+    setGameMode("duel");
+    toast.success("DUEL MODE! P1: Arrows+Space | P2: WASD+E");
   }, []);
 
   const nextWave = useCallback(() => {
@@ -408,7 +521,6 @@ const Game = () => {
     const isBossWave = state.wave % 5 === 0;
 
     if (isBossWave && !state.bossDefeated) {
-      // Boss wave — spawn boss, no asteroids yet
       state.boss = createBoss(state.wave);
       state.asteroids = [];
       state.aliens = [];
@@ -460,7 +572,6 @@ const Game = () => {
       28
     );
 
-    // Announce theme change
     if ((state.wave - 1) % 5 === 0 && state.wave > 1) {
       spawnFloatingText(
         { x: CANVAS_WIDTH / 2, y: CANVAS_HEIGHT / 2 + 35 },
@@ -480,18 +591,15 @@ const Game = () => {
     };
   };
 
-  // Edge-wrap with homing nudge for asteroids
   const wrapAsteroidPosition = (asteroid: Asteroid, shipPos: Vector): void => {
     const oldX = asteroid.pos.x;
     const oldY = asteroid.pos.y;
     asteroid.pos = wrapPosition(asteroid.pos);
 
-    // Detect if wrapping occurred
     const wrapped = Math.abs(asteroid.pos.x - oldX) > CANVAS_WIDTH * 0.5 ||
                     Math.abs(asteroid.pos.y - oldY) > CANVAS_HEIGHT * 0.5;
 
     if (wrapped) {
-      // Nudge velocity toward ship (~8 degrees)
       const toShipAngle = Math.atan2(shipPos.y - asteroid.pos.y, shipPos.x - asteroid.pos.x);
       const currentAngle = Math.atan2(asteroid.vel.y, asteroid.vel.x);
       const speed = Math.hypot(asteroid.vel.x, asteroid.vel.y);
@@ -500,7 +608,7 @@ const Game = () => {
       while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
       while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
 
-      const nudge = Math.sign(angleDiff) * Math.min(Math.abs(angleDiff), 0.14); // ~8 degrees
+      const nudge = Math.sign(angleDiff) * Math.min(Math.abs(angleDiff), 0.14);
       const newAngle = currentAngle + nudge;
       asteroid.vel.x = Math.cos(newAngle) * speed;
       asteroid.vel.y = Math.sin(newAngle) * speed;
@@ -536,15 +644,40 @@ const Game = () => {
   }, [isHighScore, loadLeaderboard]);
 
   const shootBullet = useCallback(() => {
-    if (!gameStateRef.current || gameStateRef.current.gameOver) return;
+    if (gameModeRef.current === "solo") {
+      if (!gameStateRef.current || gameStateRef.current.gameOver) return;
+      const now = Date.now();
+      const fireRate = gameStateRef.current.powerUpActive.rapidFire > 0 ? 100 : 250;
+      if (now - lastShotRef.current < fireRate) return;
+      lastShotRef.current = now;
 
+      const { ship } = gameStateRef.current;
+      gameStateRef.current.bullets.push({
+        pos: { ...ship.pos },
+        vel: {
+          x: Math.cos(ship.rotation) * BULLET_SPEED + ship.vel.x,
+          y: Math.sin(ship.rotation) * BULLET_SPEED + ship.vel.y,
+        },
+        rotation: ship.rotation,
+        lifetime: BULLET_LIFETIME,
+      });
+      soundEffects.shoot();
+      haptics.light();
+    }
+  }, []);
+
+  const shootBulletDuel = useCallback((player: 1 | 2) => {
+    if (!duelStateRef.current) return;
+    const ds = duelStateRef.current;
     const now = Date.now();
-    const fireRate = gameStateRef.current.powerUpActive.rapidFire > 0 ? 100 : 250;
-    if (now - lastShotRef.current < fireRate) return;
-    lastShotRef.current = now;
+    const ref = player === 1 ? lastShotRef : lastShotP2Ref;
+    if (now - ref.current < 250) return;
+    ref.current = now;
 
-    const { ship } = gameStateRef.current;
-    const bullet: Bullet = {
+    const ship = player === 1 ? ds.ship1 : ds.ship2;
+    if (ship.invulnerableTime > 60) return; // don't shoot while freshly respawning
+    const bullets = player === 1 ? ds.bullets1 : ds.bullets2;
+    bullets.push({
       pos: { ...ship.pos },
       vel: {
         x: Math.cos(ship.rotation) * BULLET_SPEED + ship.vel.x,
@@ -552,11 +685,9 @@ const Game = () => {
       },
       rotation: ship.rotation,
       lifetime: BULLET_LIFETIME,
-    };
-
-    gameStateRef.current.bullets.push(bullet);
+      owner: player,
+    });
     soundEffects.shoot();
-    haptics.light();
   }, []);
 
   const hyperspace = useCallback(() => {
@@ -576,25 +707,307 @@ const Game = () => {
     }
   }, [loseLife]);
 
+  // ===== Ship update helper =====
+  const updateShipMovement = (ship: Ship, left: boolean, right: boolean, up: boolean, particles: Particle[]) => {
+    if (left) ship.rotation -= ship.rotationSpeed;
+    if (right) ship.rotation += ship.rotationSpeed;
+    if (up) {
+      ship.isThrusting = true;
+      ship.vel.x += Math.cos(ship.rotation) * ship.thrust;
+      ship.vel.y += Math.sin(ship.rotation) * ship.thrust;
+      if (Math.random() > 0.3) spawnThrustParticle(ship, particles);
+    } else {
+      ship.isThrusting = false;
+    }
+
+    const maxSpeed = 8;
+    const speed = Math.hypot(ship.vel.x, ship.vel.y);
+    if (speed > maxSpeed) {
+      ship.vel.x = (ship.vel.x / speed) * maxSpeed;
+      ship.vel.y = (ship.vel.y / speed) * maxSpeed;
+    }
+
+    ship.vel.x *= 0.99;
+    ship.vel.y *= 0.99;
+    ship.pos.x += ship.vel.x;
+    ship.pos.y += ship.vel.y;
+    ship.pos = wrapPosition(ship.pos);
+
+    if (ship.invulnerableTime > 0) {
+      ship.invulnerableTime--;
+      if (ship.invulnerableTime === 0) ship.invulnerable = false;
+    }
+  };
+
+  // ===== DUEL UPDATE =====
+  const updateDuel = useCallback(() => {
+    const ds = duelStateRef.current;
+    if (!ds) return;
+
+    const keys = keysRef.current;
+    const gp0 = readGamepad(0);
+    const gp1 = readGamepad(1);
+
+    // P1: Arrow keys or gamepad 0
+    const p1Left = keys["ArrowLeft"] || gp0.left;
+    const p1Right = keys["ArrowRight"] || gp0.right;
+    const p1Up = keys["ArrowUp"] || gp0.up;
+    const p1Fire = keys[" "] || gp0.fire;
+
+    // P2: WASD or gamepad 1
+    const p2Left = keys["a"] || keys["A"] || gp1.left;
+    const p2Right = keys["d"] || keys["D"] || gp1.right;
+    const p2Up = keys["w"] || keys["W"] || gp1.up;
+    const p2Fire = keys["e"] || keys["E"] || gp1.fire;
+
+    // Handle respawn timers
+    for (let p = 0; p < 2; p++) {
+      if (ds.respawnTimer[p] > 0) {
+        ds.respawnTimer[p]--;
+        if (ds.respawnTimer[p] === 0) {
+          const ship = p === 0 ? ds.ship1 : ds.ship2;
+          ship.pos = { x: Math.random() * CANVAS_WIDTH, y: Math.random() * CANVAS_HEIGHT };
+          ship.vel = { x: 0, y: 0 };
+          ship.invulnerable = true;
+          ship.invulnerableTime = 120;
+        }
+      }
+    }
+
+    // Update ships
+    if (ds.respawnTimer[0] === 0) updateShipMovement(ds.ship1, p1Left, p1Right, p1Up, ds.particles);
+    if (ds.respawnTimer[1] === 0) updateShipMovement(ds.ship2, p2Left, p2Right, p2Up, ds.particles);
+
+    // Firing
+    if (p1Fire && ds.respawnTimer[0] === 0) shootBulletDuel(1);
+    if (p2Fire && ds.respawnTimer[1] === 0) shootBulletDuel(2);
+
+    // Update bullets
+    const updateBullets = (bullets: Bullet[]) => bullets.filter((b) => {
+      b.pos.x += b.vel.x;
+      b.pos.y += b.vel.y;
+      b.pos = wrapPosition(b.pos);
+      b.lifetime--;
+      return b.lifetime > 0;
+    });
+    ds.bullets1 = updateBullets(ds.bullets1);
+    ds.bullets2 = updateBullets(ds.bullets2);
+
+    // Update asteroids (no homing in duel — just wrap)
+    ds.asteroids.forEach((asteroid) => {
+      asteroid.pos.x += asteroid.vel.x;
+      asteroid.pos.y += asteroid.vel.y;
+      asteroid.pos = wrapPosition(asteroid.pos);
+      asteroid.rotation += asteroid.rotationSpeed;
+    });
+
+    // Spawn new asteroids periodically
+    ds.asteroidSpawnTimer--;
+    if (ds.asteroidSpawnTimer <= 0 && ds.asteroids.length < 6) {
+      const edge = Math.random();
+      let x: number, y: number;
+      if (edge < 0.25) { x = 0; y = Math.random() * CANVAS_HEIGHT; }
+      else if (edge < 0.5) { x = CANVAS_WIDTH; y = Math.random() * CANVAS_HEIGHT; }
+      else if (edge < 0.75) { x = Math.random() * CANVAS_WIDTH; y = 0; }
+      else { x = Math.random() * CANVAS_WIDTH; y = CANVAS_HEIGHT; }
+      ds.asteroids.push(createAsteroid(x, y, "large", 1));
+      ds.asteroidSpawnTimer = 500 + Math.random() * 400;
+    }
+
+    // Spawn aliens occasionally
+    ds.alienSpawnTimer--;
+    if (ds.alienSpawnTimer <= 0 && ds.aliens.length < 2) {
+      ds.aliens.push(createAlien(Math.random() < 0.7 ? "brown" : "greenMan", 3));
+      ds.alienSpawnTimer = 600 + Math.random() * 400;
+    }
+
+    // Update aliens (move toward center-ish, no specific target)
+    ds.aliens = ds.aliens.filter((alien) => {
+      alien.moveTimer++;
+      alien.zigzagPhase += 0.05;
+      alien.pos.x += alien.vel.x;
+      alien.pos.y += alien.vel.y;
+      if (alien.pos.x < -60 || alien.pos.x > CANVAS_WIDTH + 60) {
+        if (alien.moveTimer > 120) return false;
+      }
+      if (alien.pos.y < 0) alien.pos.y = CANVAS_HEIGHT;
+      if (alien.pos.y > CANVAS_HEIGHT) alien.pos.y = 0;
+      return true;
+    });
+
+    // ===== Collisions =====
+    const killPlayer = (playerIdx: 0 | 1, killerIdx: 0 | 1) => {
+      const ship = playerIdx === 0 ? ds.ship1 : ds.ship2;
+      spawnExplosionTo(ds.particles, ship.pos, playerIdx === 0 ? P1_COLOR : P2_COLOR, 20);
+      soundEffects.explode();
+      ds.deaths[playerIdx]++;
+      ds.kills[killerIdx]++;
+      ds.respawnTimer[playerIdx] = 120; // 2 seconds
+      ship.pos = { x: -100, y: -100 }; // off screen
+      ship.vel = { x: 0, y: 0 };
+      ship.invulnerable = true;
+      ship.invulnerableTime = 999;
+      setDuelKills([...ds.kills]);
+      setDuelDeaths([...ds.deaths]);
+      spawnFloatingTextTo(ds.floatingTexts, ship.pos, `P${killerIdx + 1} KILL!`, killerIdx === 0 ? P1_COLOR : P2_COLOR, 20);
+    };
+
+    const dieToEnvironment = (playerIdx: 0 | 1) => {
+      const ship = playerIdx === 0 ? ds.ship1 : ds.ship2;
+      spawnExplosionTo(ds.particles, ship.pos, playerIdx === 0 ? P1_COLOR : P2_COLOR, 20);
+      soundEffects.explode();
+      ds.deaths[playerIdx]++;
+      ds.respawnTimer[playerIdx] = 120;
+      ship.pos = { x: -100, y: -100 };
+      ship.vel = { x: 0, y: 0 };
+      ship.invulnerable = true;
+      ship.invulnerableTime = 999;
+      setDuelDeaths([...ds.deaths]);
+    };
+
+    // P1 bullets vs P2 ship
+    if (!ds.ship2.invulnerable && ds.respawnTimer[1] === 0) {
+      ds.bullets1 = ds.bullets1.filter((b) => {
+        if (checkCollision(b.pos, 2, ds.ship2.pos, SHIP_SIZE)) {
+          killPlayer(1, 0);
+          return false;
+        }
+        return true;
+      });
+    }
+
+    // P2 bullets vs P1 ship
+    if (!ds.ship1.invulnerable && ds.respawnTimer[0] === 0) {
+      ds.bullets2 = ds.bullets2.filter((b) => {
+        if (checkCollision(b.pos, 2, ds.ship1.pos, SHIP_SIZE)) {
+          killPlayer(0, 1);
+          return false;
+        }
+        return true;
+      });
+    }
+
+    // Bullets vs asteroids (both players)
+    const newAsteroids: Asteroid[] = [];
+    const bulletVsAsteroids = (bullets: Bullet[]) => {
+      return bullets.filter((bullet) => {
+        let alive = true;
+        ds.asteroids = ds.asteroids.filter((asteroid) => {
+          const radius = asteroid.size === "large" ? 40 : asteroid.size === "medium" ? 25 : 12;
+          if (checkCollision(bullet.pos, 2, asteroid.pos, radius)) {
+            alive = false;
+            spawnExplosionTo(ds.particles, asteroid.pos, "#FFFFFF", 8);
+            if (asteroid.size === "large") {
+              newAsteroids.push(createAsteroid(asteroid.pos.x, asteroid.pos.y, "medium", 1));
+              newAsteroids.push(createAsteroid(asteroid.pos.x, asteroid.pos.y, "medium", 1));
+            } else if (asteroid.size === "medium") {
+              newAsteroids.push(createAsteroid(asteroid.pos.x, asteroid.pos.y, "small", 1));
+              newAsteroids.push(createAsteroid(asteroid.pos.x, asteroid.pos.y, "small", 1));
+            }
+            return false;
+          }
+          return true;
+        });
+        return alive;
+      });
+    };
+    ds.bullets1 = bulletVsAsteroids(ds.bullets1);
+    ds.bullets2 = bulletVsAsteroids(ds.bullets2);
+    ds.asteroids.push(...newAsteroids);
+
+    // Bullets vs aliens
+    const bulletVsAliens = (bullets: Bullet[]) => {
+      return bullets.filter((bullet) => {
+        let alive = true;
+        ds.aliens = ds.aliens.filter((alien) => {
+          if (checkCollision(bullet.pos, 2, alien.pos, 12)) {
+            alive = false;
+            alien.hp--;
+            if (alien.hp <= 0) {
+              spawnExplosionTo(ds.particles, alien.pos, "#AA6633", 10);
+              return false;
+            }
+          }
+          return true;
+        });
+        return alive;
+      });
+    };
+    ds.bullets1 = bulletVsAliens(ds.bullets1);
+    ds.bullets2 = bulletVsAliens(ds.bullets2);
+
+    // Ships vs asteroids
+    for (let p = 0; p < 2; p++) {
+      const ship = p === 0 ? ds.ship1 : ds.ship2;
+      if (ship.invulnerable || ds.respawnTimer[p] > 0) continue;
+      for (const asteroid of ds.asteroids) {
+        const radius = asteroid.size === "large" ? 40 : asteroid.size === "medium" ? 25 : 12;
+        if (checkCollision(ship.pos, SHIP_SIZE, asteroid.pos, radius)) {
+          dieToEnvironment(p as 0 | 1);
+          break;
+        }
+      }
+    }
+
+    // Ships vs aliens
+    for (let p = 0; p < 2; p++) {
+      const ship = p === 0 ? ds.ship1 : ds.ship2;
+      if (ship.invulnerable || ds.respawnTimer[p] > 0) continue;
+      for (const alien of ds.aliens) {
+        if (checkCollision(ship.pos, SHIP_SIZE, alien.pos, 12)) {
+          dieToEnvironment(p as 0 | 1);
+          break;
+        }
+      }
+    }
+
+    // Update floating texts & particles
+    ds.floatingTexts = ds.floatingTexts.filter((ft) => {
+      ft.pos.y -= 0.5;
+      ft.lifetime--;
+      ft.opacity = ft.lifetime / ft.maxLifetime;
+      return ft.lifetime > 0;
+    });
+    ds.particles = ds.particles.filter((p) => {
+      p.pos.x += p.vel.x;
+      p.pos.y += p.vel.y;
+      p.vel.x *= 0.97;
+      p.vel.y *= 0.97;
+      p.lifetime--;
+      return p.lifetime > 0;
+    });
+  }, [shootBulletDuel]);
+
+  // ===== SOLO UPDATE (original) =====
   const update = useCallback(() => {
     if (!gameStateRef.current || gameStateRef.current.gameOver || gameStateRef.current.paused || showLifeLostRef.current) return;
 
     const state = gameStateRef.current;
     const theme = getTheme(state.wave);
+    const gp0 = readGamepad(0);
 
-    // Update ship
-    if (keysRef.current["ArrowLeft"]) state.ship.rotation -= state.ship.rotationSpeed;
-    if (keysRef.current["ArrowRight"]) state.ship.rotation += state.ship.rotationSpeed;
-    if (keysRef.current["ArrowUp"]) {
+    // Update ship — keyboard OR gamepad
+    const p1Left = keysRef.current["ArrowLeft"] || gp0.left;
+    const p1Right = keysRef.current["ArrowRight"] || gp0.right;
+    const p1Up = keysRef.current["ArrowUp"] || gp0.up;
+
+    if (p1Left) state.ship.rotation -= state.ship.rotationSpeed;
+    if (p1Right) state.ship.rotation += state.ship.rotationSpeed;
+    if (p1Up) {
       if (!state.ship.isThrusting) soundEffects.startThrust();
       state.ship.isThrusting = true;
       state.ship.vel.x += Math.cos(state.ship.rotation) * state.ship.thrust;
       state.ship.vel.y += Math.sin(state.ship.rotation) * state.ship.thrust;
-      if (Math.random() > 0.3) spawnThrustParticle(state.ship);
+      const particles = state.particles;
+      if (Math.random() > 0.3) spawnThrustParticle(state.ship, particles);
     } else {
       if (state.ship.isThrusting) soundEffects.stopThrust();
       state.ship.isThrusting = false;
     }
+
+    // Gamepad fire
+    if (gp0.fire) shootBullet();
+    if (gp0.hyperspace) hyperspace();
 
     const maxSpeed = 8;
     const speed = Math.hypot(state.ship.vel.x, state.ship.vel.y);
@@ -631,7 +1044,7 @@ const Game = () => {
       return bullet.lifetime > 0;
     });
 
-    // UFO spawn timer — faster at higher waves
+    // UFO spawn timer
     state.ufoSpawnTimer--;
     if (state.ufoSpawnTimer <= 0 && state.ufos.length === 0 && !state.boss) {
       const size = state.wave > 6 ? (Math.random() < 0.5 ? "small" : "large") : "large";
@@ -691,10 +1104,8 @@ const Game = () => {
       alien.zigzagPhase += 0.05;
 
       if (alien.type === "brown") {
-        // Kamikaze — erratic zigzag toward ship
         const toShip = Math.atan2(state.ship.pos.y - alien.pos.y, state.ship.pos.x - alien.pos.x);
         const zigzag = Math.sin(alien.zigzagPhase * 3) * 0.8;
-        const spd = Math.hypot(alien.vel.x, alien.vel.y);
         alien.vel.x += Math.cos(toShip + zigzag) * 0.08;
         alien.vel.y += Math.sin(toShip + zigzag) * 0.08;
         const curSpd = Math.hypot(alien.vel.x, alien.vel.y);
@@ -704,7 +1115,6 @@ const Game = () => {
           alien.vel.y = (alien.vel.y / curSpd) * maxSpd;
         }
       } else {
-        // Green man — slow drift, shoots
         alien.vel.x *= 0.99;
         alien.vel.y += Math.sin(alien.zigzagPhase) * 0.02;
 
@@ -726,13 +1136,11 @@ const Game = () => {
       alien.pos.x += alien.vel.x;
       alien.pos.y += alien.vel.y;
 
-      // Remove if way off-screen
       if (alien.pos.x < -60 || alien.pos.x > CANVAS_WIDTH + 60 ||
           alien.pos.y < -60 || alien.pos.y > CANVAS_HEIGHT + 60) {
-        if (alien.moveTimer > 120) return false; // Only if they've been alive a bit
+        if (alien.moveTimer > 120) return false;
       }
 
-      // Wrap Y
       if (alien.pos.y < 0) alien.pos.y = CANVAS_HEIGHT;
       if (alien.pos.y > CANVAS_HEIGHT) alien.pos.y = 0;
 
@@ -746,22 +1154,18 @@ const Game = () => {
       if (boss.hitFlash > 0) boss.hitFlash--;
 
       if (!boss.entered) {
-        // Move into screen
         boss.pos.y += 0.8;
         if (boss.pos.y >= boss.targetY) {
           boss.entered = true;
           boss.vel.x = 0.5;
         }
       } else {
-        // Drift side to side
         boss.pos.x += boss.vel.x;
         if (boss.pos.x < 100 || boss.pos.x > CANVAS_WIDTH - 100) {
           boss.vel.x *= -1;
         }
-        // Bob
         boss.pos.y = boss.targetY + Math.sin(boss.phase) * 30;
 
-        // Shoot spread
         boss.shootTimer--;
         if (boss.shootTimer <= 0) {
           boss.shootTimer = Math.max(40, 90 - state.wave * 3);
@@ -952,7 +1356,6 @@ const Game = () => {
           spawnFloatingText(bullet.pos, "HIT!", "#FF88FF", 14);
 
           if (state.boss!.hp <= 0) {
-            // Boss defeated
             const pts = (2000 + state.wave * 200) * (state.powerUpActive.multiplier > 0 ? 2 : 1);
             state.score += pts;
             setDisplayScore(state.score);
@@ -961,7 +1364,6 @@ const Game = () => {
             spawnExplosion(state.boss!.pos, "#FFFF44", 20);
             soundEffects.explode();
 
-            // Guaranteed power-up
             const types: PowerUp["type"][] = ["shield", "rapidFire", "extraLife", "multiplier"];
             state.powerUps.push({
               pos: { ...state.boss!.pos },
@@ -1037,57 +1439,18 @@ const Game = () => {
     if (noEnemies) {
       nextWave();
     }
-  }, [nextWave, loseLife]);
+  }, [nextWave, loseLife, shootBullet, hyperspace]);
 
-  const draw = useCallback(() => {
-    const canvas = canvasRef.current;
-    if (!canvas || !gameStateRef.current) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-    const state = gameStateRef.current;
-    const theme = getTheme(state.wave);
-
-    // Clear
-    ctx.fillStyle = theme.bg;
-    ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
-
-    // Parallax starfield
-    const time = Date.now() * 0.001;
-    state.stars.forEach((star) => {
-      const parallaxSpeed = [0.1, 0.3, 0.6][star.layer];
-      const offsetX = (time * parallaxSpeed * 10) % CANVAS_WIDTH;
-      const drawX = ((star.x - offsetX) % CANVAS_WIDTH + CANVAS_WIDTH) % CANVAS_WIDTH;
-      const twinkle = 0.7 + Math.sin(time * 2 + star.x * 0.1) * 0.3;
-      ctx.fillStyle = `rgba(200, 220, 255, ${star.brightness * twinkle})`;
-      ctx.beginPath();
-      ctx.arc(drawX, star.y, star.size, 0, Math.PI * 2);
-      ctx.fill();
-    });
-
-    // Particles
-    state.particles.forEach((p) => {
-      const alpha = p.lifetime / p.maxLifetime;
-      ctx.save();
-      ctx.globalAlpha = alpha;
-      ctx.fillStyle = p.color;
-      ctx.shadowBlur = 6;
-      ctx.shadowColor = p.color;
-      ctx.beginPath();
-      ctx.arc(p.pos.x, p.pos.y, p.size * alpha, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.restore();
-    });
-
-    // Ship
+  // ===== DRAW SHIP HELPER =====
+  const drawShip = (ctx: CanvasRenderingContext2D, ship: Ship, color: string, label?: string) => {
     ctx.save();
-    ctx.translate(state.ship.pos.x, state.ship.pos.y);
-    ctx.rotate(state.ship.rotation);
-    if (!state.ship.invulnerable || Math.floor(Date.now() / 100) % 2 === 0) {
-      const shipColor = state.powerUpActive.shield > 0 ? "#7FFF7F" : theme.ship;
-      ctx.strokeStyle = shipColor;
+    ctx.translate(ship.pos.x, ship.pos.y);
+    ctx.rotate(ship.rotation);
+    if (!ship.invulnerable || Math.floor(Date.now() / 100) % 2 === 0) {
+      ctx.strokeStyle = color;
       ctx.lineWidth = 2;
       ctx.shadowBlur = 15;
-      ctx.shadowColor = shipColor;
+      ctx.shadowColor = color;
       ctx.beginPath();
       ctx.moveTo(SHIP_SIZE, 0);
       ctx.lineTo(-SHIP_SIZE, -SHIP_SIZE / 2);
@@ -1101,14 +1464,58 @@ const Game = () => {
       ctx.globalAlpha = 1;
     }
     ctx.restore();
+    // Draw label above ship
+    if (label) {
+      ctx.save();
+      ctx.font = "bold 8px monospace";
+      ctx.fillStyle = color;
+      ctx.textAlign = "center";
+      ctx.globalAlpha = 0.7;
+      ctx.fillText(label, ship.pos.x, ship.pos.y - 18);
+      ctx.restore();
+    }
+  };
+
+  // ===== DRAW COMMON ELEMENTS =====
+  const drawCommon = (ctx: CanvasRenderingContext2D, stars: Star[], particles: Particle[], floatingTexts: FloatingText[], asteroids: Asteroid[], aliens: Alien[], bgColor: string, asteroidColors: string[]) => {
+    // Clear
+    ctx.fillStyle = bgColor;
+    ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+
+    // Parallax starfield
+    const time = Date.now() * 0.001;
+    stars.forEach((star) => {
+      const parallaxSpeed = [0.1, 0.3, 0.6][star.layer];
+      const offsetX = (time * parallaxSpeed * 10) % CANVAS_WIDTH;
+      const drawX = ((star.x - offsetX) % CANVAS_WIDTH + CANVAS_WIDTH) % CANVAS_WIDTH;
+      const twinkle = 0.7 + Math.sin(time * 2 + star.x * 0.1) * 0.3;
+      ctx.fillStyle = `rgba(200, 220, 255, ${star.brightness * twinkle})`;
+      ctx.beginPath();
+      ctx.arc(drawX, star.y, star.size, 0, Math.PI * 2);
+      ctx.fill();
+    });
+
+    // Particles
+    particles.forEach((p) => {
+      const alpha = p.lifetime / p.maxLifetime;
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = p.color;
+      ctx.shadowBlur = 6;
+      ctx.shadowColor = p.color;
+      ctx.beginPath();
+      ctx.arc(p.pos.x, p.pos.y, p.size * alpha, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    });
 
     // Asteroids
-    state.asteroids.forEach((asteroid) => {
+    asteroids.forEach((asteroid) => {
       ctx.save();
       ctx.translate(asteroid.pos.x, asteroid.pos.y);
       ctx.rotate(asteroid.rotation);
       const colorIdx = asteroid.size === "large" ? 0 : asteroid.size === "medium" ? 1 : 2;
-      const color = theme.asteroids[colorIdx];
+      const color = asteroidColors[colorIdx];
       ctx.strokeStyle = color;
       ctx.lineWidth = 1.5;
       ctx.shadowBlur = 10;
@@ -1127,10 +1534,118 @@ const Game = () => {
       ctx.restore();
     });
 
-    // Bullets
-    state.bullets.forEach((bullet) => {
+    // Brown aliens
+    aliens.filter(a => a.type === "brown").forEach((alien) => {
       ctx.save();
-      const bColor = bullet.color || (bullet.isUFO ? "#FF4444" : theme.ship);
+      ctx.translate(alien.pos.x, alien.pos.y);
+      ctx.rotate(Math.atan2(alien.vel.y, alien.vel.x));
+      ctx.strokeStyle = "#AA6633";
+      ctx.fillStyle = "#553311";
+      ctx.lineWidth = 2;
+      ctx.shadowBlur = 10;
+      ctx.shadowColor = "#AA6633";
+      ctx.beginPath();
+      ctx.moveTo(12, 0);
+      ctx.lineTo(-6, -8);
+      ctx.lineTo(-10, -4);
+      ctx.lineTo(-8, 0);
+      ctx.lineTo(-10, 4);
+      ctx.lineTo(-6, 8);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(-6, -8);
+      ctx.lineTo(-2, -14);
+      ctx.moveTo(-6, 8);
+      ctx.lineTo(-2, 14);
+      ctx.stroke();
+      ctx.restore();
+    });
+
+    // Green men
+    aliens.filter(a => a.type === "greenMan").forEach((alien) => {
+      ctx.save();
+      ctx.translate(alien.pos.x, alien.pos.y);
+      ctx.strokeStyle = "#44FF44";
+      ctx.fillStyle = "#115511";
+      ctx.lineWidth = 2;
+      ctx.shadowBlur = 12;
+      ctx.shadowColor = "#44FF44";
+      ctx.beginPath();
+      ctx.arc(0, -8, 6, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = "#FFFFFF";
+      ctx.beginPath();
+      ctx.arc(-3, -9, 2, 0, Math.PI * 2);
+      ctx.arc(3, -9, 2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#000000";
+      ctx.beginPath();
+      ctx.arc(-3, -9, 1, 0, Math.PI * 2);
+      ctx.arc(3, -9, 1, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = "#44FF44";
+      ctx.beginPath();
+      ctx.moveTo(0, -2);
+      ctx.lineTo(0, 8);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(0, 2);
+      ctx.lineTo(-8, -1);
+      ctx.moveTo(0, 2);
+      ctx.lineTo(8, 5);
+      ctx.stroke();
+      ctx.strokeStyle = "#FFFF00";
+      ctx.beginPath();
+      ctx.moveTo(8, 5);
+      ctx.lineTo(14, 3);
+      ctx.stroke();
+      ctx.strokeStyle = "#44FF44";
+      ctx.beginPath();
+      ctx.moveTo(0, 8);
+      ctx.lineTo(-5, 16);
+      ctx.moveTo(0, 8);
+      ctx.lineTo(5, 16);
+      ctx.stroke();
+      ctx.restore();
+    });
+
+    // Floating texts
+    floatingTexts.forEach((ft) => {
+      ctx.save();
+      ctx.globalAlpha = ft.opacity;
+      ctx.font = `bold ${ft.size}px monospace`;
+      ctx.fillStyle = ft.color;
+      ctx.shadowBlur = 10;
+      ctx.shadowColor = ft.color;
+      ctx.textAlign = "center";
+      ctx.fillText(ft.text, ft.pos.x, ft.pos.y);
+      ctx.restore();
+    });
+
+    // CRT scanline overlay
+    ctx.save();
+    ctx.globalAlpha = 0.04;
+    ctx.fillStyle = "#000000";
+    for (let y = 0; y < CANVAS_HEIGHT; y += 3) {
+      ctx.fillRect(0, y, CANVAS_WIDTH, 1);
+    }
+    const gradient = ctx.createRadialGradient(CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2, CANVAS_HEIGHT * 0.4, CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2, CANVAS_HEIGHT * 0.8);
+    gradient.addColorStop(0, "rgba(0,0,0,0)");
+    gradient.addColorStop(1, "rgba(0,0,0,0.3)");
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+    ctx.restore();
+  };
+
+  // ===== DRAW BULLETS HELPER =====
+  const drawBullets = (ctx: CanvasRenderingContext2D, bullets: Bullet[], defaultColor: string) => {
+    bullets.forEach((bullet) => {
+      ctx.save();
+      const bColor = bullet.color || defaultColor;
       ctx.fillStyle = bColor;
       ctx.shadowBlur = 12;
       ctx.shadowColor = bColor;
@@ -1145,6 +1660,41 @@ const Game = () => {
       ctx.globalAlpha = 1;
       ctx.restore();
     });
+  };
+
+  const draw = useCallback(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    if (gameModeRef.current === "duel" && duelStateRef.current) {
+      const ds = duelStateRef.current;
+      drawCommon(ctx, ds.stars, ds.particles, ds.floatingTexts, ds.asteroids, ds.aliens, "#050510", ["#FFFFFF", "#88DDFF", "#44AAFF"]);
+
+      // Draw ships
+      if (ds.respawnTimer[0] === 0) drawShip(ctx, ds.ship1, P1_COLOR, "P1");
+      if (ds.respawnTimer[1] === 0) drawShip(ctx, ds.ship2, P2_COLOR, "P2");
+
+      // Draw bullets
+      drawBullets(ctx, ds.bullets1, P1_COLOR);
+      drawBullets(ctx, ds.bullets2, P2_COLOR);
+
+      return;
+    }
+
+    if (!gameStateRef.current) return;
+    const state = gameStateRef.current;
+    const theme = getTheme(state.wave);
+
+    drawCommon(ctx, state.stars, state.particles, state.floatingTexts, state.asteroids, state.aliens, theme.bg, theme.asteroids);
+
+    // Ship
+    const shipColor = state.powerUpActive.shield > 0 ? "#7FFF7F" : theme.ship;
+    drawShip(ctx, state.ship, shipColor);
+
+    // Bullets
+    drawBullets(ctx, state.bullets, theme.ship);
 
     // UFOs
     state.ufos.forEach((ufo) => {
@@ -1172,92 +1722,6 @@ const Game = () => {
       ctx.restore();
     });
 
-    // Brown aliens
-    state.aliens.filter(a => a.type === "brown").forEach((alien) => {
-      ctx.save();
-      ctx.translate(alien.pos.x, alien.pos.y);
-      ctx.rotate(Math.atan2(alien.vel.y, alien.vel.x));
-      ctx.strokeStyle = "#AA6633";
-      ctx.fillStyle = "#553311";
-      ctx.lineWidth = 2;
-      ctx.shadowBlur = 10;
-      ctx.shadowColor = "#AA6633";
-      // Angular insect-like shape
-      ctx.beginPath();
-      ctx.moveTo(12, 0);
-      ctx.lineTo(-6, -8);
-      ctx.lineTo(-10, -4);
-      ctx.lineTo(-8, 0);
-      ctx.lineTo(-10, 4);
-      ctx.lineTo(-6, 8);
-      ctx.closePath();
-      ctx.fill();
-      ctx.stroke();
-      // Antennae
-      ctx.beginPath();
-      ctx.moveTo(-6, -8);
-      ctx.lineTo(-2, -14);
-      ctx.moveTo(-6, 8);
-      ctx.lineTo(-2, 14);
-      ctx.stroke();
-      ctx.restore();
-    });
-
-    // Green men
-    state.aliens.filter(a => a.type === "greenMan").forEach((alien) => {
-      ctx.save();
-      ctx.translate(alien.pos.x, alien.pos.y);
-      ctx.strokeStyle = "#44FF44";
-      ctx.fillStyle = "#115511";
-      ctx.lineWidth = 2;
-      ctx.shadowBlur = 12;
-      ctx.shadowColor = "#44FF44";
-      // Head
-      ctx.beginPath();
-      ctx.arc(0, -8, 6, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.stroke();
-      // Eyes
-      ctx.fillStyle = "#FFFFFF";
-      ctx.beginPath();
-      ctx.arc(-3, -9, 2, 0, Math.PI * 2);
-      ctx.arc(3, -9, 2, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = "#000000";
-      ctx.beginPath();
-      ctx.arc(-3, -9, 1, 0, Math.PI * 2);
-      ctx.arc(3, -9, 1, 0, Math.PI * 2);
-      ctx.fill();
-      // Body
-      ctx.strokeStyle = "#44FF44";
-      ctx.beginPath();
-      ctx.moveTo(0, -2);
-      ctx.lineTo(0, 8);
-      ctx.stroke();
-      // Arms
-      ctx.beginPath();
-      ctx.moveTo(0, 2);
-      ctx.lineTo(-8, -1);
-      ctx.moveTo(0, 2);
-      ctx.lineTo(8, 5);
-      ctx.stroke();
-      // Gun
-      ctx.strokeStyle = "#FFFF00";
-      ctx.beginPath();
-      ctx.moveTo(8, 5);
-      ctx.lineTo(14, 3);
-      ctx.stroke();
-      // Legs
-      ctx.strokeStyle = "#44FF44";
-      ctx.beginPath();
-      ctx.moveTo(0, 8);
-      ctx.lineTo(-5, 16);
-      ctx.moveTo(0, 8);
-      ctx.lineTo(5, 16);
-      ctx.stroke();
-      ctx.restore();
-    });
-
     // Boss
     if (state.boss) {
       const boss = state.boss;
@@ -1268,7 +1732,6 @@ const Game = () => {
       ctx.shadowBlur = 30;
       ctx.shadowColor = bossColor;
 
-      // Tentacles
       const tentCount = boss.tentacles;
       for (let i = 0; i < tentCount; i++) {
         const baseAngle = (i / tentCount) * Math.PI * 2;
@@ -1287,7 +1750,6 @@ const Game = () => {
         ctx.stroke();
       }
 
-      // Body
       const pulse = 1 + Math.sin(boss.phase * 3) * 0.05;
       const bodyR = 45 * pulse;
       ctx.fillStyle = boss.hitFlash > 0 ? "#FFFFFF" : "#331133";
@@ -1298,7 +1760,6 @@ const Game = () => {
       ctx.fill();
       ctx.stroke();
 
-      // Eye
       ctx.fillStyle = bossColor;
       ctx.beginPath();
       ctx.arc(0, -5, 12, 0, Math.PI * 2);
@@ -1308,7 +1769,6 @@ const Game = () => {
       ctx.arc(0, -5, 6, 0, Math.PI * 2);
       ctx.fill();
 
-      // HP bar
       ctx.restore();
       ctx.save();
       const barW = 200;
@@ -1356,19 +1816,6 @@ const Game = () => {
       ctx.restore();
     });
 
-    // Floating texts
-    state.floatingTexts.forEach((ft) => {
-      ctx.save();
-      ctx.globalAlpha = ft.opacity;
-      ctx.font = `bold ${ft.size}px monospace`;
-      ctx.fillStyle = ft.color;
-      ctx.shadowBlur = 10;
-      ctx.shadowColor = ft.color;
-      ctx.textAlign = "center";
-      ctx.fillText(ft.text, ft.pos.x, ft.pos.y);
-      ctx.restore();
-    });
-
     // Power-up HUD bars
     const activePowerUps: { label: string; color: string; remaining: number; max: number }[] = [];
     if (state.powerUpActive.shield > 0) activePowerUps.push({ label: "SHIELD", color: "#7FFF7F", remaining: state.powerUpActive.shield, max: 300 });
@@ -1406,28 +1853,17 @@ const Game = () => {
     ctx.textAlign = "right";
     ctx.fillText(`${theme.name.toUpperCase()} ZONE`, CANVAS_WIDTH - 10, 18);
     ctx.restore();
-
-    // CRT scanline overlay
-    ctx.save();
-    ctx.globalAlpha = 0.04;
-    ctx.fillStyle = "#000000";
-    for (let y = 0; y < CANVAS_HEIGHT; y += 3) {
-      ctx.fillRect(0, y, CANVAS_WIDTH, 1);
-    }
-    const gradient = ctx.createRadialGradient(CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2, CANVAS_HEIGHT * 0.4, CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2, CANVAS_HEIGHT * 0.8);
-    gradient.addColorStop(0, "rgba(0,0,0,0)");
-    gradient.addColorStop(1, "rgba(0,0,0,0.3)");
-    ctx.globalAlpha = 1;
-    ctx.fillStyle = gradient;
-    ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
-    ctx.restore();
   }, []);
 
   const gameLoop = useCallback(() => {
-    update();
+    if (gameModeRef.current === "duel") {
+      updateDuel();
+    } else if (gameModeRef.current === "solo") {
+      update();
+    }
     draw();
     animationFrameRef.current = requestAnimationFrame(gameLoop);
-  }, [update, draw]);
+  }, [update, updateDuel, draw]);
 
   useEffect(() => {
     enteringInitialsRef.current = enteringInitials;
@@ -1467,8 +1903,6 @@ const Game = () => {
   }, []);
 
   useEffect(() => {
-    initGame();
-
     const handleKeyDown = (e: KeyboardEvent) => {
       if (enteringInitialsRef.current) return;
       if (showLifeLostRef.current) {
@@ -1480,8 +1914,13 @@ const Game = () => {
         return;
       }
       keysRef.current[e.key] = true;
-      if (e.key === " ") { e.preventDefault(); shootBullet(); }
-      if (e.key === "h" || e.key === "H") { e.preventDefault(); hyperspace(); }
+      if (gameModeRef.current === "solo") {
+        if (e.key === " ") { e.preventDefault(); shootBullet(); }
+        if (e.key === "h" || e.key === "H") { e.preventDefault(); hyperspace(); }
+      } else if (gameModeRef.current === "duel") {
+        if (e.key === " ") { e.preventDefault(); }
+        if (e.key === "e" || e.key === "E") { e.preventDefault(); }
+      }
     };
 
     const handleKeyUp = (e: KeyboardEvent) => { keysRef.current[e.key] = false; };
@@ -1495,15 +1934,98 @@ const Game = () => {
       window.removeEventListener("keyup", handleKeyUp);
       if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
     };
-  }, [initGame, shootBullet, hyperspace, gameLoop]);
+  }, [shootBullet, hyperspace, gameLoop]);
+
+  const quitToMenu = useCallback(() => {
+    gameStateRef.current = null;
+    duelStateRef.current = null;
+    setGameMode("menu");
+    setShowGameOver(false);
+    setShowLifeLost(false);
+    showLifeLostRef.current = false;
+    soundEffects.stopThrust();
+  }, []);
+
+  // ===== MENU SCREEN =====
+  if (gameMode === "menu") {
+    return (
+      <div className="min-h-screen bg-[hsl(var(--game-background))] flex flex-col items-center justify-center p-4">
+        <div className="text-6xl font-mono text-[hsl(var(--game-foreground))] mb-2 tracking-widest" style={{ textShadow: "0 0 30px hsl(var(--game-foreground))" }}>
+          ASTEROIDS
+        </div>
+        <div className="text-sm font-mono text-[hsl(var(--game-foreground))] opacity-50 mb-12">
+          DEMOSCENE EDITION
+        </div>
+
+        <div className="flex flex-col gap-4 items-center mb-12">
+          <Button
+            onClick={initGame}
+            className="bg-[hsl(var(--game-foreground))] text-[hsl(var(--game-background))] hover:bg-[hsl(var(--game-glow))] text-2xl px-12 py-6 font-mono tracking-wider"
+          >
+            SOLO
+          </Button>
+          <Button
+            onClick={initDuel}
+            className="text-2xl px-12 py-6 font-mono tracking-wider border-2"
+            style={{ borderColor: P2_COLOR, color: P2_COLOR, background: "transparent" }}
+          >
+            DUEL
+          </Button>
+        </div>
+
+        <div className="text-[hsl(var(--game-foreground))] font-mono text-xs space-y-1 opacity-60 text-center">
+          <div>SOLO: Arrow Keys + Space | Gamepad supported</div>
+          <div>DUEL: P1 Arrows+Space | P2 WASD+E | Gamepads 1 & 2</div>
+        </div>
+
+        <div className="mt-8 flex flex-col gap-2 max-w-md">
+          <div className="text-[hsl(var(--game-foreground))] font-mono text-sm text-center">
+            🎵 NECTARINE DEMOSCENE RADIO
+          </div>
+          {nowPlaying && (
+            <div className="text-[hsl(var(--game-foreground))] font-mono text-xs text-center animate-pulse">
+              <span className="opacity-90">{nowPlaying.artist}</span>
+              <span className="opacity-50"> — </span>
+              <span className="opacity-80">{nowPlaying.title}</span>
+            </div>
+          )}
+          <audio
+            controls
+            preload="metadata"
+            className="w-full"
+            onError={(e) => {
+              const target = e.currentTarget;
+              console.error("Audio loading error:", target.error?.message);
+            }}
+          >
+            <source src="https://nectarine.inversi0n.org/necta192.mp3" type="audio/mpeg" />
+          </audio>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[hsl(var(--game-background))] flex flex-col items-center justify-center p-4">
-      <div className="mb-4 flex gap-8 text-[hsl(var(--game-foreground))] text-xl font-mono">
-        <div>SCORE: {displayScore.toString().padStart(8, "0")}</div>
-        <div>LIVES: {displayLives}</div>
-        <div>WAVE: {displayWave}</div>
-      </div>
+      {/* HUD */}
+      {gameMode === "solo" && (
+        <div className="mb-4 flex gap-8 text-[hsl(var(--game-foreground))] text-xl font-mono">
+          <div>SCORE: {displayScore.toString().padStart(8, "0")}</div>
+          <div>LIVES: {displayLives}</div>
+          <div>WAVE: {displayWave}</div>
+        </div>
+      )}
+      {gameMode === "duel" && (
+        <div className="mb-4 flex gap-6 font-mono text-lg">
+          <div style={{ color: P1_COLOR }}>
+            P1 KILLS: {duelKills[0]} DEATHS: {duelDeaths[0]}
+          </div>
+          <div className="text-[hsl(var(--game-foreground))] opacity-30">|</div>
+          <div style={{ color: P2_COLOR }}>
+            P2 KILLS: {duelKills[1]} DEATHS: {duelDeaths[1]}
+          </div>
+        </div>
+      )}
 
       <div className="relative">
         <canvas
@@ -1514,7 +2036,7 @@ const Game = () => {
           style={{ touchAction: 'none' }}
         />
 
-        {showLifeLost && !showGameOver && (
+        {showLifeLost && !showGameOver && gameMode === "solo" && (
           <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/70">
             <div className="text-4xl font-mono text-[hsl(var(--game-danger))] mb-6 animate-pulse">
               LIFE LOST!
@@ -1532,7 +2054,7 @@ const Game = () => {
           </div>
         )}
 
-        {showGameOver && (
+        {showGameOver && gameMode === "solo" && (
           <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/80 overflow-auto py-4">
             <div className="text-5xl font-mono text-[hsl(var(--game-danger))] mb-4 animate-pulse">
               GAME OVER
@@ -1602,18 +2124,32 @@ const Game = () => {
                 PLAY AGAIN
               </Button>
               <Button
-                onClick={() => setShowLeaderboard(!showLeaderboard)}
+                onClick={quitToMenu}
                 variant="outline"
                 className="border-[hsl(var(--game-foreground))] text-[hsl(var(--game-foreground))] hover:bg-[hsl(var(--game-foreground))]/20 font-mono"
               >
-                {showLeaderboard ? "HIDE" : "SCORES"}
+                MENU
               </Button>
             </div>
           </div>
         )}
+
+        {/* Duel quit button */}
+        {gameMode === "duel" && (
+          <div className="absolute top-2 right-2">
+            <Button
+              onClick={quitToMenu}
+              variant="outline"
+              size="sm"
+              className="border-[hsl(var(--game-foreground))] text-[hsl(var(--game-foreground))] hover:bg-[hsl(var(--game-foreground))]/20 font-mono text-xs opacity-50 hover:opacity-100"
+            >
+              QUIT
+            </Button>
+          </div>
+        )}
       </div>
 
-      {isTouchDevice && (
+      {isTouchDevice && gameMode === "solo" && (
         <div
           className="mt-4 w-full max-w-[800px] select-none"
           style={{ touchAction: 'none', userSelect: 'none', WebkitUserSelect: 'none' }}
@@ -1671,12 +2207,24 @@ const Game = () => {
       {!isTouchDevice && (
         <div className="mt-6 text-[hsl(var(--game-foreground))] font-mono text-sm space-y-2">
           <div className="text-center">CONTROLS:</div>
-          <div className="grid grid-cols-2 gap-x-8 gap-y-1">
-            <div>← → : ROTATE</div>
-            <div>↑ : THRUST</div>
-            <div>SPACE : FIRE</div>
-            <div>H : HYPERSPACE</div>
-          </div>
+          {gameMode === "solo" && (
+            <div className="grid grid-cols-2 gap-x-8 gap-y-1">
+              <div>← → : ROTATE</div>
+              <div>↑ : THRUST</div>
+              <div>SPACE : FIRE</div>
+              <div>H : HYPERSPACE</div>
+            </div>
+          )}
+          {gameMode === "duel" && (
+            <div className="grid grid-cols-2 gap-x-12 gap-y-1 text-xs">
+              <div style={{ color: P1_COLOR }}>P1: ← → ROTATE</div>
+              <div style={{ color: P2_COLOR }}>P2: A D ROTATE</div>
+              <div style={{ color: P1_COLOR }}>P1: ↑ THRUST</div>
+              <div style={{ color: P2_COLOR }}>P2: W THRUST</div>
+              <div style={{ color: P1_COLOR }}>P1: SPACE FIRE</div>
+              <div style={{ color: P2_COLOR }}>P2: E FIRE</div>
+            </div>
+          )}
         </div>
       )}
 
