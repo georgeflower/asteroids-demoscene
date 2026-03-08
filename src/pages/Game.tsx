@@ -2120,6 +2120,7 @@ const Game = () => {
           const songTitle = songEl?.textContent || "Unknown";
           const info = { artist: artistName, title: songTitle };
           nowPlayingRef.current = info;
+          nowPlayingMarqueeXRef.current = CANVAS_WIDTH;
           setNowPlaying(info);
         }
       } catch (e) {
