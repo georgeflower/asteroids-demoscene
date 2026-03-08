@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from "react";
+import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { soundEffects } from "@/utils/soundEffects";
@@ -1934,35 +1935,16 @@ const Game = () => {
     };
   }, []);
 
-  // Poll Nectarine now-playing info
+  // Poll Nectarine now-playing info via edge function
   useEffect(() => {
     const fetchNowPlaying = async () => {
       try {
-        // Try multiple CORS proxies as fallbacks
-        const apiUrl = "https://scenestream.net/demovibes/xml/queue/";
-        const proxies = [
-          `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(apiUrl)}`,
-          `https://corsproxy.io/?${encodeURIComponent(apiUrl)}`,
-        ];
+        const { data, error } = await supabase.functions.invoke("scenestream-proxy", {
+          body: { endpoint: "/demovibes/xml/queue/" },
+        });
+        if (error) throw error;
         
-        let text = "";
-        for (const proxyUrl of proxies) {
-          try {
-            const res = await fetch(proxyUrl);
-            if (res.ok) {
-              text = await res.text();
-              break;
-            }
-          } catch {
-            continue;
-          }
-        }
-        
-        if (!text) {
-          console.log("All CORS proxies failed");
-          return;
-        }
-        
+        const text = typeof data === "string" ? data : JSON.stringify(data);
         const parser = new DOMParser();
         const xml = parser.parseFromString(text, "text/xml");
         const nowEntry = xml.querySelector("now > entry");
@@ -1984,31 +1966,16 @@ const Game = () => {
     return () => clearInterval(interval);
   }, []);
 
-  // Poll Nectarine oneliner chat
+  // Poll Nectarine oneliner chat via edge function
   useEffect(() => {
     const fetchOneliner = async () => {
       try {
-        const apiUrl = "https://scenestream.net/demovibes/xml/oneliner/";
-        const proxies = [
-          `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(apiUrl)}`,
-          `https://corsproxy.io/?${encodeURIComponent(apiUrl)}`,
-        ];
+        const { data, error } = await supabase.functions.invoke("scenestream-proxy", {
+          body: { endpoint: "/demovibes/xml/oneliner/" },
+        });
+        if (error) throw error;
         
-        let text = "";
-        for (const proxyUrl of proxies) {
-          try {
-            const res = await fetch(proxyUrl);
-            if (res.ok) {
-              text = await res.text();
-              break;
-            }
-          } catch {
-            continue;
-          }
-        }
-        
-        if (!text) return;
-        
+        const text = typeof data === "string" ? data : JSON.stringify(data);
         const parser = new DOMParser();
         const xml = parser.parseFromString(text, "text/xml");
         const firstEntry = xml.querySelector("entry");
