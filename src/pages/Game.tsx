@@ -198,6 +198,7 @@ const Game = () => {
   const showLifeLostRef = useRef(false);
   const [isTouchDevice, setIsTouchDevice] = useState(false);
   const [nowPlaying, setNowPlaying] = useState<{ artist: string; title: string } | null>(null);
+  const nowPlayingRef = useRef<{ artist: string; title: string } | null>(null);
   const [gameMode, setGameMode] = useState<GameMode>("menu");
   const gameModeRef = useRef<GameMode>("menu");
   const [duelKills, setDuelKills] = useState<[number, number]>([0, 0]);
