@@ -987,6 +987,7 @@ const Game = () => {
 
   // ===== SOLO UPDATE (original) =====
   const update = useCallback(() => {
+    if (isPausedRef.current) return;
     if (!gameStateRef.current || gameStateRef.current.gameOver || gameStateRef.current.paused || showLifeLostRef.current) return;
 
     const state = gameStateRef.current;
