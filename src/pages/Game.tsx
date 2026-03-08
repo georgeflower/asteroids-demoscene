@@ -2157,8 +2157,10 @@ const Game = () => {
             </div>
           )}
           <audio
+            ref={audioRef}
             controls
-            preload="metadata"
+            autoPlay
+            preload="auto"
             className="w-full"
             onError={(e) => {
               const target = e.currentTarget;
