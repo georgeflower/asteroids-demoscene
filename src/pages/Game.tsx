@@ -2152,6 +2152,7 @@ const Game = () => {
             const author = firstEntry.querySelector("author")?.textContent || "???";
             const message = firstEntry.querySelector("message")?.textContent || "";
             onelinerRef.current = { author, message };
+            onelinerMarqueeXRef.current = CANVAS_WIDTH;
           }
         }
       } catch (e) {
