@@ -211,6 +211,8 @@ const Game = () => {
   const prevGamepadButtonRef = useRef<boolean[]>([false, false, false, false, false, false, false]);
   const audioRef = useRef<HTMLAudioElement>(null);
   const radioStartedRef = useRef(false);
+  const onelinerRef = useRef<{ author: string; message: string } | null>(null);
+  const lastOnelinerTimeRef = useRef<string>("");
 
   // Keep ref in sync
   useEffect(() => { gameModeRef.current = gameMode; }, [gameMode]);
