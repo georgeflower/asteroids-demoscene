@@ -2467,18 +2467,17 @@ const Game = () => {
           </div>
         )}
         <audio
+          ref={audioRef}
           controls
-          preload="metadata"
+          autoPlay
+          preload="auto"
           className="w-full"
           onError={(e) => {
             const target = e.currentTarget;
             console.error("Audio loading error:", target.error?.message);
-            toast.error(`Radio error: ${target.error?.message || 'Unknown error'}`);
           }}
-          onCanPlay={() => toast.success("Nectarine Radio loaded!")}
         >
           <source src="https://nectarine.inversi0n.org/necta192.mp3" type="audio/mpeg" />
-          Your browser does not support the audio element.
         </audio>
         <div className="text-[hsl(var(--game-foreground))] font-mono text-xs text-center opacity-50">
           scenestream.net
