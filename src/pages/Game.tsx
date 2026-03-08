@@ -1910,7 +1910,18 @@ const Game = () => {
     setShowLifeLost(false);
   }, []);
 
-  const togglePause = useCallback(() => {
+  const quitToMenu = useCallback(() => {
+    gameStateRef.current = null;
+    duelStateRef.current = null;
+    setGameMode("menu");
+    setShowGameOver(false);
+    setShowLifeLost(false);
+    showLifeLostRef.current = false;
+    isPausedRef.current = false;
+    setIsPaused(false);
+    soundEffects.stopThrust();
+  }, []);
+
     isPausedRef.current = !isPausedRef.current;
     setIsPaused(isPausedRef.current);
     setPauseSelection(0);
