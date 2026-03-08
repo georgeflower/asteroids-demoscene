@@ -207,7 +207,7 @@ const Game = () => {
   const gameModeRef = useRef<GameMode>("menu");
   const [duelKills, setDuelKills] = useState<[number, number]>([0, 0]);
   const [duelDeaths, setDuelDeaths] = useState<[number, number]>([0, 0]);
-  const [menuSelection, setMenuSelection] = useState(0); // 0=solo, 1=duel
+  const [menuSelection, setMenuSelection] = useState(0); // 0=solo, 1=duel, 2=online
   const [gameOverSelection, setGameOverSelection] = useState(0); // 0=play again, 1=menu
   const [isPaused, setIsPaused] = useState(false);
   const isPausedRef = useRef(false);
@@ -217,6 +217,13 @@ const Game = () => {
   const radioStartedRef = useRef(false);
   const onelinerRef = useRef<{ author: string; message: string } | null>(null);
   const lastOnelinerTimeRef = useRef<string>("");
+
+  // Online multiplayer state
+  const multiplayer = useMultiplayer();
+  const workerRef = useRef<Worker | null>(null);
+  const broadcastTickRef = useRef(0);
+  const isHostRef = useRef(false);
+  const isConnectedRef = useRef(false);
 
   // Keep ref in sync
   useEffect(() => { gameModeRef.current = gameMode; }, [gameMode]);
