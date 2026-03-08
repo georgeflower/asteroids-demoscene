@@ -2667,7 +2667,7 @@ const Game = () => {
         )}
 
         {/* Duel quit button */}
-        {gameMode === "duel" && !isPaused && (
+        {(gameMode === "duel" || gameMode === "online") && !isPaused && (
           <div className="absolute top-2 right-2">
             <Button
               onClick={quitToMenu}
