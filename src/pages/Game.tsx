@@ -84,6 +84,31 @@ const Game = () => {
   const [displayLives, setDisplayLives] = useState(3);
   const [displayWave, setDisplayWave] = useState(1);
   const [showGameOver, setShowGameOver] = useState(false);
+  const [showLeaderboard, setShowLeaderboard] = useState(false);
+  const [enteringInitials, setEnteringInitials] = useState(false);
+  const [initials, setInitials] = useState("");
+  const [leaderboard, setLeaderboard] = useState<{initials: string; score: number; date: string}[]>([]);
+
+  const loadLeaderboard = useCallback(() => {
+    try {
+      const stored = localStorage.getItem("asteroids-leaderboard");
+      return stored ? JSON.parse(stored) : [];
+    } catch { return []; }
+  }, []);
+
+  const saveToLeaderboard = useCallback((playerInitials: string, score: number) => {
+    const board = loadLeaderboard();
+    board.push({ initials: playerInitials.toUpperCase(), score, date: new Date().toLocaleDateString() });
+    board.sort((a: any, b: any) => b.score - a.score);
+    const top10 = board.slice(0, 10);
+    localStorage.setItem("asteroids-leaderboard", JSON.stringify(top10));
+    setLeaderboard(top10);
+  }, [loadLeaderboard]);
+
+  const isHighScore = useCallback((score: number) => {
+    const board = loadLeaderboard();
+    return board.length < 10 || score > (board[board.length - 1]?.score ?? 0);
+  }, [loadLeaderboard]);
 
   const createShip = (): Ship => ({
     pos: { x: CANVAS_WIDTH / 2, y: CANVAS_HEIGHT / 2 },
