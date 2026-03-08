@@ -1992,27 +1992,49 @@ const Game = () => {
     ctx.fillText(`${theme.name.toUpperCase()} ZONE`, CANVAS_WIDTH - 10, 18);
     ctx.restore();
 
-    // Now playing info on canvas
+    // Now playing marquee at bottom of canvas
     const np = nowPlayingRef.current;
     if (np) {
       ctx.save();
-      ctx.globalAlpha = 0.5;
       ctx.font = "10px monospace";
+      const npText = `♪ ${np.artist} — ${np.title}   `;
+      const npTextWidth = ctx.measureText(npText).width;
+      // Advance marquee position
+      nowPlayingMarqueeXRef.current -= 0.8;
+      if (nowPlayingMarqueeXRef.current < -(npTextWidth)) {
+        nowPlayingMarqueeXRef.current = CANVAS_WIDTH;
+      }
+      // Clip to bottom strip
+      ctx.beginPath();
+      ctx.rect(0, CANVAS_HEIGHT - 20, CANVAS_WIDTH, 20);
+      ctx.clip();
+      ctx.globalAlpha = 0.55;
       ctx.fillStyle = "#FFFFFF";
       ctx.textAlign = "left";
-      ctx.fillText(`♪ ${np.artist} — ${np.title}`, 10, CANVAS_HEIGHT - 10);
+      ctx.fillText(npText, nowPlayingMarqueeXRef.current, CANVAS_HEIGHT - 7);
       ctx.restore();
     }
 
-    // Oneliner chat message at top of canvas
+    // Oneliner marquee near top of canvas
     const ol = onelinerRef.current;
     if (ol) {
       ctx.save();
-      ctx.globalAlpha = 0.6;
       ctx.font = "10px monospace";
+      const olText = `<${ol.author}> ${ol.message}   `;
+      const olTextWidth = ctx.measureText(olText).width;
+      // Advance marquee position
+      onelinerMarqueeXRef.current -= 0.8;
+      if (onelinerMarqueeXRef.current < -(olTextWidth)) {
+        onelinerMarqueeXRef.current = CANVAS_WIDTH;
+      }
+      // Clip to top strip
+      ctx.beginPath();
+      ctx.rect(0, 20, CANVAS_WIDTH, 16);
+      ctx.clip();
+      ctx.globalAlpha = 0.65;
       ctx.fillStyle = "#FFD700";
-      ctx.textAlign = "center";
-      ctx.fillText(`<${ol.author}> ${ol.message}`, CANVAS_WIDTH / 2, 30);
+      ctx.textAlign = "left";
+      ctx.fillText(olText, onelinerMarqueeXRef.current, 32);
       ctx.restore();
     }
   }, []);
