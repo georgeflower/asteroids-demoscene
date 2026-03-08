@@ -2232,7 +2232,7 @@ const Game = () => {
       if (enteringInitialsRef.current) return;
 
       // Pause toggle on Escape
-      if (e.key === "Escape" && (gameModeRef.current === "solo" || gameModeRef.current === "duel")) {
+      if (e.key === "Escape" && (gameModeRef.current === "solo" || gameModeRef.current === "duel" || gameModeRef.current === "online")) {
         if (!showLifeLostRef.current && !showGameOver) {
           e.preventDefault();
           togglePause();
