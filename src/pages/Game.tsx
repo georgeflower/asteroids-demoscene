@@ -2138,12 +2138,70 @@ const Game = () => {
     return () => clearInterval(interval);
   }, []);
 
+  // ===== ONLINE EFFECTS =====
+  const applyNetStateRef = useRef<(net: DuelNetState) => void>(() => {});
+  const sendStateRef = useRef<(state: DuelNetState) => void>(() => {});
+  useEffect(() => { applyNetStateRef.current = applyNetState; }, [applyNetState]);
+  useEffect(() => { sendStateRef.current = multiplayer.sendState; }, [multiplayer.sendState]);
+  useEffect(() => { isHostRef.current = multiplayer.isHost; }, [multiplayer.isHost]);
+  useEffect(() => { isConnectedRef.current = multiplayer.isConnected; }, [multiplayer.isConnected]);
+
+  // Guest: poll for state updates
+  useEffect(() => {
+    if (gameModeRef.current !== "online" || multiplayer.isHost) return;
+    const remoteRef = multiplayer.remoteStateRef;
+    const interval = setInterval(() => {
+      const state = remoteRef.current;
+      if (state) { applyNetStateRef.current(state); remoteRef.current = null; }
+    }, 16);
+    return () => clearInterval(interval);
+  }, [gameMode, multiplayer.isHost]);
+
+  // Guest: listen for game_start
+  useEffect(() => {
+    multiplayer.onGameStartRef.current = () => { initOnline(false); };
+  }, [initOnline]);
+
+  // Host: worker message handler
+  useEffect(() => {
+    if (gameModeRef.current !== "online" || !multiplayer.isHost) return;
+    const worker = workerRef.current;
+    if (!worker) return;
+    worker.onmessage = (e: MessageEvent) => {
+      if (e.data.type === 'state') {
+        const net: DuelNetState = e.data.data;
+        applyNetStateRef.current(net);
+        broadcastTickRef.current++;
+        if (broadcastTickRef.current % 3 === 0) { sendStateRef.current(net); }
+      }
+    };
+  }, [gameMode, multiplayer.isHost]);
+
+  // Cleanup worker on unmount
+  useEffect(() => {
+    return () => {
+      if (workerRef.current) {
+        workerRef.current.postMessage({ type: 'stop' });
+        workerRef.current.terminate();
+        workerRef.current = null;
+      }
+    };
+  }, []);
+
   const continueAfterLifeLost = useCallback(() => {
     showLifeLostRef.current = false;
     setShowLifeLost(false);
   }, []);
 
   const quitToMenu = useCallback(() => {
+    if (workerRef.current) {
+      workerRef.current.postMessage({ type: 'stop' });
+      workerRef.current.terminate();
+      workerRef.current = null;
+    }
+    if (gameModeRef.current === "online" || gameModeRef.current === "online_lobby") {
+      multiplayer.disconnect();
+    }
     gameStateRef.current = null;
     duelStateRef.current = null;
     setGameMode("menu");
@@ -2153,7 +2211,7 @@ const Game = () => {
     isPausedRef.current = false;
     setIsPaused(false);
     soundEffects.stopThrust();
-  }, []);
+  }, [multiplayer]);
 
   const togglePause = useCallback(() => {
     isPausedRef.current = !isPausedRef.current;
