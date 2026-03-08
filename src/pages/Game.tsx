@@ -211,6 +211,9 @@ const Game = () => {
     setDisplayLives(3);
     setDisplayWave(1);
     setShowGameOver(false);
+    setEnteringInitials(false);
+    setInitials("");
+    setShowLeaderboard(false);
     toast.success("Game Started! Use Arrow Keys to move, Space to shoot");
   }, []);
 
