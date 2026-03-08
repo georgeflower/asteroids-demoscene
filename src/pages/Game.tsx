@@ -89,6 +89,9 @@ const Game = () => {
   const [enteringInitials, setEnteringInitials] = useState(false);
   const [initials, setInitials] = useState("");
   const [leaderboard, setLeaderboard] = useState<{initials: string; score: number; date: string}[]>([]);
+  const [showLifeLost, setShowLifeLost] = useState(false);
+  const showLifeLostRef = useRef(false);
+  const [isTouchDevice, setIsTouchDevice] = useState(false);
 
   const loadLeaderboard = useCallback(() => {
     try {
@@ -215,6 +218,8 @@ const Game = () => {
     setEnteringInitials(false);
     setInitials("");
     setShowLeaderboard(false);
+    setShowLifeLost(false);
+    showLifeLostRef.current = false;
     toast.success("Game Started! Use Arrow Keys to move, Space to shoot");
   }, []);
 
@@ -305,6 +310,10 @@ const Game = () => {
           setEnteringInitials(true);
         }
         setLeaderboard(loadLeaderboard());
+      } else {
+        gameStateRef.current.ship = createShip();
+        showLifeLostRef.current = true;
+        setShowLifeLost(true);
       }
       toast.error("Hyperspace malfunction!");
     } else {
@@ -313,7 +322,7 @@ const Game = () => {
   }, []);
 
   const update = useCallback(() => {
-    if (!gameStateRef.current || gameStateRef.current.gameOver || gameStateRef.current.paused) return;
+    if (!gameStateRef.current || gameStateRef.current.gameOver || gameStateRef.current.paused || showLifeLostRef.current) return;
 
     const state = gameStateRef.current;
 
@@ -554,6 +563,9 @@ const Game = () => {
             if (isHighScore(state.score)) setEnteringInitials(true);
             setLeaderboard(loadLeaderboard());
             toast.error(`Game Over! Final Score: ${state.score}`);
+          } else {
+            showLifeLostRef.current = true;
+            setShowLifeLost(true);
           }
         }
       });
@@ -577,6 +589,9 @@ const Game = () => {
             if (isHighScore(state.score)) setEnteringInitials(true);
             setLeaderboard(loadLeaderboard());
             toast.error(`Game Over! Final Score: ${state.score}`);
+          } else {
+            showLifeLostRef.current = true;
+            setShowLifeLost(true);
           }
         }
       });
@@ -742,10 +757,27 @@ const Game = () => {
   }, [enteringInitials]);
 
   useEffect(() => {
+    setIsTouchDevice('ontouchstart' in window || navigator.maxTouchPoints > 0);
+  }, []);
+
+  const continueAfterLifeLost = useCallback(() => {
+    showLifeLostRef.current = false;
+    setShowLifeLost(false);
+  }, []);
+
+  useEffect(() => {
     initGame();
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (enteringInitialsRef.current) return;
+      if (showLifeLostRef.current) {
+        if (e.key === " " || e.key === "Enter") {
+          e.preventDefault();
+          showLifeLostRef.current = false;
+          setShowLifeLost(false);
+        }
+        return;
+      }
       keysRef.current[e.key] = true;
       if (e.key === " ") {
         e.preventDefault();
@@ -788,8 +820,27 @@ const Game = () => {
           ref={canvasRef}
           width={CANVAS_WIDTH}
           height={CANVAS_HEIGHT}
-          className="border-2 border-[hsl(var(--game-foreground))] shadow-[0_0_30px_hsl(var(--game-foreground))]"
+          className="border-2 border-[hsl(var(--game-foreground))] shadow-[0_0_30px_hsl(var(--game-foreground))] max-w-full"
+          style={{ touchAction: 'none' }}
         />
+
+        {showLifeLost && !showGameOver && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/70">
+            <div className="text-4xl font-mono text-[hsl(var(--game-danger))] mb-6 animate-pulse">
+              LIFE LOST!
+            </div>
+            <Button
+              onClick={continueAfterLifeLost}
+              onTouchEnd={(e) => { e.preventDefault(); continueAfterLifeLost(); }}
+              className="bg-[hsl(var(--game-foreground))] text-[hsl(var(--game-background))] hover:bg-[hsl(var(--game-glow))] text-xl px-8 py-4 font-mono"
+            >
+              PRESS TO CONTINUE
+            </Button>
+            <div className="text-lg font-mono text-[hsl(var(--game-foreground))] mt-4 opacity-70">
+              LIVES REMAINING: {displayLives}
+            </div>
+          </div>
+        )}
 
         {showGameOver && (
           <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/80 overflow-auto py-4">
@@ -872,15 +923,75 @@ const Game = () => {
         )}
       </div>
 
-      <div className="mt-6 text-[hsl(var(--game-foreground))] font-mono text-sm space-y-2">
-        <div className="text-center">CONTROLS:</div>
-        <div className="grid grid-cols-2 gap-x-8 gap-y-1">
-          <div>← → : ROTATE</div>
-          <div>↑ : THRUST</div>
-          <div>SPACE : FIRE</div>
-          <div>H : HYPERSPACE</div>
+      {/* Mobile Touch Controls */}
+      {isTouchDevice && (
+        <div
+          className="mt-4 w-full max-w-[800px] select-none"
+          style={{ touchAction: 'none', userSelect: 'none', WebkitUserSelect: 'none' }}
+        >
+          <div className="flex justify-between items-end px-2">
+            {/* Left side: Rotation controls */}
+            <div className="flex gap-3">
+              <button
+                className="w-16 h-16 rounded-full border-2 border-[hsl(var(--game-foreground))] text-[hsl(var(--game-foreground))] font-mono text-2xl active:bg-[hsl(var(--game-foreground))]/30 flex items-center justify-center"
+                onTouchStart={(e) => { e.preventDefault(); keysRef.current["ArrowLeft"] = true; }}
+                onTouchEnd={(e) => { e.preventDefault(); keysRef.current["ArrowLeft"] = false; }}
+                onTouchCancel={() => { keysRef.current["ArrowLeft"] = false; }}
+              >
+                ◄
+              </button>
+              <button
+                className="w-16 h-16 rounded-full border-2 border-[hsl(var(--game-foreground))] text-[hsl(var(--game-foreground))] font-mono text-2xl active:bg-[hsl(var(--game-foreground))]/30 flex items-center justify-center"
+                onTouchStart={(e) => { e.preventDefault(); keysRef.current["ArrowRight"] = true; }}
+                onTouchEnd={(e) => { e.preventDefault(); keysRef.current["ArrowRight"] = false; }}
+                onTouchCancel={() => { keysRef.current["ArrowRight"] = false; }}
+              >
+                ►
+              </button>
+            </div>
+
+            {/* Right side: Action buttons */}
+            <div className="flex flex-col items-end gap-2">
+              <div className="flex gap-3">
+                <button
+                  className="w-16 h-16 rounded-full border-2 border-[hsl(var(--game-glow))] text-[hsl(var(--game-glow))] font-mono text-xs font-bold active:bg-[hsl(var(--game-glow))]/30 flex items-center justify-center shadow-[0_0_10px_hsl(var(--game-glow)/0.3)]"
+                  onTouchStart={(e) => { e.preventDefault(); keysRef.current["ArrowUp"] = true; }}
+                  onTouchEnd={(e) => { e.preventDefault(); keysRef.current["ArrowUp"] = false; }}
+                  onTouchCancel={() => { keysRef.current["ArrowUp"] = false; }}
+                >
+                  THRUST
+                </button>
+                <button
+                  className="w-16 h-16 rounded-full border-2 border-[hsl(var(--game-danger))] text-[hsl(var(--game-danger))] font-mono text-xs font-bold active:bg-[hsl(var(--game-danger))]/30 flex items-center justify-center shadow-[0_0_10px_hsl(var(--game-danger)/0.3)]"
+                  onTouchStart={(e) => { e.preventDefault(); shootBullet(); keysRef.current[" "] = true; }}
+                  onTouchEnd={(e) => { e.preventDefault(); keysRef.current[" "] = false; }}
+                  onTouchCancel={() => { keysRef.current[" "] = false; }}
+                >
+                  FIRE
+                </button>
+              </div>
+              <button
+                className="w-[140px] h-10 rounded-full border-2 border-[hsl(var(--game-powerup))] text-[hsl(var(--game-powerup))] font-mono text-xs font-bold active:bg-[hsl(var(--game-powerup))]/30 flex items-center justify-center shadow-[0_0_10px_hsl(var(--game-powerup)/0.3)]"
+                onTouchStart={(e) => { e.preventDefault(); hyperspace(); }}
+              >
+                HYPERSPACE
+              </button>
+            </div>
+          </div>
         </div>
-      </div>
+      )}
+
+      {!isTouchDevice && (
+        <div className="mt-6 text-[hsl(var(--game-foreground))] font-mono text-sm space-y-2">
+          <div className="text-center">CONTROLS:</div>
+          <div className="grid grid-cols-2 gap-x-8 gap-y-1">
+            <div>← → : ROTATE</div>
+            <div>↑ : THRUST</div>
+            <div>SPACE : FIRE</div>
+            <div>H : HYPERSPACE</div>
+          </div>
+        </div>
+      )}
 
       <div className="mt-6 flex flex-col gap-2 max-w-md">
         <div className="text-[hsl(var(--game-foreground))] font-mono text-sm text-center">
