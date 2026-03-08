@@ -1880,6 +1880,18 @@ const Game = () => {
       ctx.fillText(`♪ ${np.artist} — ${np.title}`, 10, CANVAS_HEIGHT - 10);
       ctx.restore();
     }
+
+    // Oneliner chat message at top of canvas
+    const ol = onelinerRef.current;
+    if (ol) {
+      ctx.save();
+      ctx.globalAlpha = 0.6;
+      ctx.font = "10px monospace";
+      ctx.fillStyle = "#FFD700";
+      ctx.textAlign = "center";
+      ctx.fillText(`<${ol.author}> ${ol.message}`, CANVAS_WIDTH / 2, 30);
+      ctx.restore();
+    }
   }, []);
 
   const gameLoop = useCallback(() => {
