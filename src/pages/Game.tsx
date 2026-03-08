@@ -422,6 +422,8 @@ const Game = () => {
       // Fire = button 0 (A/X), Hyperspace = button 1 (B/Circle)
       if (gp.buttons[0]?.pressed) result.fire = true;
       if (gp.buttons[1]?.pressed) result.hyperspace = true;
+      // X button (button 2) = also thrust
+      if (gp.buttons[2]?.pressed) result.up = true;
     } catch { /* no gamepad API */ }
     return result;
   };
@@ -1922,7 +1924,8 @@ const Game = () => {
     soundEffects.stopThrust();
   }, []);
 
-    const togglePause = useCallback(() => {
+  const togglePause = useCallback(() => {
+    isPausedRef.current = !isPausedRef.current;
     setIsPaused(isPausedRef.current);
     setPauseSelection(0);
     if (isPausedRef.current) {
@@ -2413,21 +2416,36 @@ const Game = () => {
         <div className="mt-6 text-[hsl(var(--game-foreground))] font-mono text-sm space-y-2">
           <div className="text-center">CONTROLS:</div>
           {gameMode === "solo" && (
-            <div className="grid grid-cols-2 gap-x-8 gap-y-1">
+            <div className="grid grid-cols-2 gap-x-8 gap-y-1 text-xs">
+              <div className="font-bold opacity-70 col-span-2 mt-1">KEYBOARD</div>
               <div>← → : ROTATE</div>
               <div>↑ : THRUST</div>
               <div>SPACE : FIRE</div>
               <div>H : HYPERSPACE</div>
+              <div>ESC : PAUSE</div>
+              <div className="font-bold opacity-70 col-span-2 mt-2">GAMEPAD</div>
+              <div>D-PAD/STICK : MOVE</div>
+              <div>X / ↑ : THRUST</div>
+              <div>A : FIRE</div>
+              <div>B : HYPERSPACE</div>
+              <div>START : PAUSE</div>
             </div>
           )}
           {gameMode === "duel" && (
             <div className="grid grid-cols-2 gap-x-12 gap-y-1 text-xs">
+              <div className="font-bold opacity-70 col-span-2 mt-1">KEYBOARD</div>
               <div style={{ color: P1_COLOR }}>P1: ← → ROTATE</div>
               <div style={{ color: P2_COLOR }}>P2: A D ROTATE</div>
               <div style={{ color: P1_COLOR }}>P1: ↑ THRUST</div>
               <div style={{ color: P2_COLOR }}>P2: W THRUST</div>
               <div style={{ color: P1_COLOR }}>P1: SPACE FIRE</div>
               <div style={{ color: P2_COLOR }}>P2: E FIRE</div>
+              <div className="col-span-2">ESC : PAUSE</div>
+              <div className="font-bold opacity-70 col-span-2 mt-2">GAMEPAD</div>
+              <div style={{ color: P1_COLOR }}>P1: Gamepad 1</div>
+              <div style={{ color: P2_COLOR }}>P2: Gamepad 2</div>
+              <div className="col-span-2">A: FIRE | B: HYPER | X/↑: THRUST</div>
+              <div className="col-span-2">START: PAUSE</div>
             </div>
           )}
         </div>
