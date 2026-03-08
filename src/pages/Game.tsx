@@ -2088,15 +2088,6 @@ const Game = () => {
     return () => cancelAnimationFrame(rafId);
   }, [initGame, initDuel, showGameOver, togglePause, resumeGame, quitToMenu]);
 
-  const quitToMenu = useCallback(() => {
-    gameStateRef.current = null;
-    duelStateRef.current = null;
-    setGameMode("menu");
-    setShowGameOver(false);
-    setShowLifeLost(false);
-    showLifeLostRef.current = false;
-    soundEffects.stopThrust();
-  }, []);
 
   // ===== MENU SCREEN =====
   if (gameMode === "menu") {
