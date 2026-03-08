@@ -4,6 +4,9 @@ import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { soundEffects } from "@/utils/soundEffects";
 import { haptics } from "@/utils/haptics";
+import { useMultiplayer } from "@/hooks/useMultiplayer";
+import OnlineLobby from "@/components/OnlineLobby";
+import type { DuelNetState } from "@/types/multiplayer";
 
 interface Vector {
   x: number;
