@@ -2335,13 +2335,13 @@ const Game = () => {
               });
             }
           } else if (gameModeRef.current === "menu") {
-            if (justUp || justDown) {
-              setMenuSelection(s => s === 0 ? 1 : 0);
-            }
+            if (justUp) { setMenuSelection(s => (s - 1 + 3) % 3); }
+            if (justDown) { setMenuSelection(s => (s + 1) % 3); }
             if (justA) {
               setMenuSelection(s => {
                 if (s === 0) initGame();
-                else initDuel();
+                else if (s === 1) initDuel();
+                else setGameMode("online_lobby");
                 return s;
               });
             }
