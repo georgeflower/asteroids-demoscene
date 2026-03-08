@@ -32,6 +32,8 @@ interface Asteroid extends GameObject {
 interface Bullet extends GameObject {
   lifetime: number;
   isUFO?: boolean;
+  isAlien?: boolean;
+  color?: string;
 }
 
 interface UFO extends GameObject {
@@ -73,6 +75,42 @@ interface Star {
   size: number;
 }
 
+interface Alien extends GameObject {
+  type: "brown" | "greenMan";
+  hp: number;
+  moveTimer: number;
+  shootTimer: number;
+  zigzagPhase: number;
+}
+
+interface Boss extends GameObject {
+  hp: number;
+  maxHp: number;
+  tentacles: number;
+  shootTimer: number;
+  hitFlash: number;
+  phase: number;
+  entered: boolean;
+  targetY: number;
+}
+
+interface ColorTheme {
+  name: string;
+  ship: string;
+  asteroids: string[];
+  bg: string;
+  accent: string;
+  enemy: string;
+}
+
+const COLOR_THEMES: ColorTheme[] = [
+  { name: "Classic", ship: "#00FFFF", asteroids: ["#FFFFFF", "#88DDFF", "#44AAFF"], bg: "#050510", accent: "#00FF88", enemy: "#FFFF44" },
+  { name: "Inferno", ship: "#FF8800", asteroids: ["#FF4444", "#FF8844", "#FFAA22"], bg: "#0A0505", accent: "#FF2200", enemy: "#FFCC00" },
+  { name: "Void", ship: "#AA44FF", asteroids: ["#CC88FF", "#8844CC", "#6622AA"], bg: "#080518", accent: "#FF44FF", enemy: "#AA88FF" },
+  { name: "Solar", ship: "#FFDD00", asteroids: ["#FFD700", "#FFAA00", "#FF8800"], bg: "#0A0800", accent: "#FFFF44", enemy: "#FFEE66" },
+  { name: "Toxic", ship: "#44FF44", asteroids: ["#88FF88", "#44CC44", "#22AA22"], bg: "#030A03", accent: "#00FF00", enemy: "#AAFF44" },
+];
+
 interface GameState {
   ship: Ship;
   asteroids: Asteroid[];
@@ -93,6 +131,10 @@ interface GameState {
   particles: Particle[];
   stars: Star[];
   ufoSpawnTimer: number;
+  aliens: Alien[];
+  boss: Boss | null;
+  alienSpawnTimer: number;
+  bossDefeated: boolean;
 }
 
 const CANVAS_WIDTH = 800;
@@ -101,17 +143,15 @@ const SHIP_SIZE = 10;
 const BULLET_SPEED = 7;
 const BULLET_LIFETIME = 60;
 const ASTEROID_SPEEDS = { large: 0.5, medium: 0.8, small: 1.2 };
-const ASTEROID_POINTS = {
-  large: 20,
-  medium: 50,
-  small: 100,
-};
+const ASTEROID_POINTS = { large: 20, medium: 50, small: 100 };
 const UFO_POINTS = { large: 200, small: 1000 };
-const ASTEROID_COLORS: Record<string, string> = {
-  large: "#FFFFFF",
-  medium: "#88DDFF",
-  small: "#44AAFF",
+
+const getTheme = (wave: number): ColorTheme => {
+  const idx = Math.floor((wave - 1) / 5) % COLOR_THEMES.length;
+  return COLOR_THEMES[idx];
 };
+
+const getSpeedScale = (wave: number): number => 1 + wave * 0.05;
 
 const Game = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -228,7 +268,7 @@ const Game = () => {
     invulnerableTime: 120,
   });
 
-  const createAsteroid = (x: number, y: number, size: "large" | "medium" | "small"): Asteroid => {
+  const createAsteroid = (x: number, y: number, size: "large" | "medium" | "small", wave = 1): Asteroid => {
     const points: Vector[] = [];
     const numPoints = 8 + Math.floor(Math.random() * 4);
     const baseRadius = size === "large" ? 40 : size === "medium" ? 25 : 12;
@@ -236,21 +276,17 @@ const Game = () => {
     for (let i = 0; i < numPoints; i++) {
       const angle = (i / numPoints) * Math.PI * 2;
       const radius = baseRadius + (Math.random() - 0.5) * baseRadius * 0.4;
-      points.push({
-        x: Math.cos(angle) * radius,
-        y: Math.sin(angle) * radius,
-      });
+      points.push({ x: Math.cos(angle) * radius, y: Math.sin(angle) * radius });
     }
 
     const angle = Math.random() * Math.PI * 2;
-    const speed = ASTEROID_SPEEDS[size] * (0.8 + Math.random() * 0.4);
+    // Wider speed variance for large asteroids
+    const variance = size === "large" ? (0.3 + Math.random() * 1.2) : (0.8 + Math.random() * 0.4);
+    const speed = ASTEROID_SPEEDS[size] * variance * getSpeedScale(wave);
 
     return {
       pos: { x, y },
-      vel: {
-        x: Math.cos(angle) * speed,
-        y: Math.sin(angle) * speed,
-      },
+      vel: { x: Math.cos(angle) * speed, y: Math.sin(angle) * speed },
       rotation: Math.random() * Math.PI * 2,
       size,
       points,
@@ -271,17 +307,45 @@ const Game = () => {
     };
   };
 
+  const createAlien = (type: "brown" | "greenMan", wave: number): Alien => {
+    const side = Math.random() < 0.5 ? -20 : CANVAS_WIDTH + 20;
+    const speed = type === "brown" ? (2 + Math.random() * 1.5) * getSpeedScale(wave) : (0.8 + Math.random() * 0.4) * getSpeedScale(wave);
+    const dir = side < 0 ? 1 : -1;
+    return {
+      pos: { x: side, y: 30 + Math.random() * (CANVAS_HEIGHT - 60) },
+      vel: { x: dir * speed, y: (Math.random() - 0.5) * speed * 0.5 },
+      rotation: 0,
+      type,
+      hp: type === "brown" ? 1 : 2,
+      moveTimer: 0,
+      shootTimer: type === "greenMan" ? 90 + Math.random() * 60 : 9999,
+      zigzagPhase: Math.random() * Math.PI * 2,
+    };
+  };
+
+  const createBoss = (wave: number): Boss => {
+    return {
+      pos: { x: CANVAS_WIDTH / 2, y: -80 },
+      vel: { x: 0, y: 1 },
+      rotation: 0,
+      hp: 3 + wave,
+      maxHp: 3 + wave,
+      tentacles: Math.min(4 + Math.floor(wave / 5), 8),
+      shootTimer: 120,
+      hitFlash: 0,
+      phase: 0,
+      entered: false,
+      targetY: 100 + Math.random() * 60,
+    };
+  };
+
   const createPowerUp = (x: number, y: number): PowerUp | null => {
     if (Math.random() > 0.15) return null;
     const types: PowerUp["type"][] = ["shield", "rapidFire", "extraLife", "multiplier"];
     const type = types[Math.floor(Math.random() * types.length)];
-
     return {
       pos: { x, y },
-      vel: {
-        x: (Math.random() - 0.5) * 0.5,
-        y: (Math.random() - 0.5) * 0.5,
-      },
+      vel: { x: (Math.random() - 0.5) * 0.5, y: (Math.random() - 0.5) * 0.5 },
       rotation: 0,
       type,
       lifetime: 300,
@@ -295,7 +359,7 @@ const Game = () => {
       const y = Math.random() * CANVAS_HEIGHT;
       const dist = Math.hypot(x - CANVAS_WIDTH / 2, y - CANVAS_HEIGHT / 2);
       if (dist > 100) {
-        asteroids.push(createAsteroid(x, y, "large"));
+        asteroids.push(createAsteroid(x, y, "large", 1));
       } else {
         i--;
       }
@@ -317,6 +381,10 @@ const Game = () => {
       particles: [],
       stars: createStars(),
       ufoSpawnTimer: 900 + Math.random() * 600,
+      aliens: [],
+      boss: null,
+      alienSpawnTimer: 600,
+      bossDefeated: false,
     };
 
     setDisplayScore(0);
@@ -333,9 +401,38 @@ const Game = () => {
 
   const nextWave = useCallback(() => {
     if (!gameStateRef.current) return;
+    const state = gameStateRef.current;
 
-    gameStateRef.current.wave++;
-    const numAsteroids = 4 + gameStateRef.current.wave * 2;
+    state.wave++;
+    const isBossWave = state.wave % 5 === 0;
+
+    if (isBossWave && !state.bossDefeated) {
+      // Boss wave — spawn boss, no asteroids yet
+      state.boss = createBoss(state.wave);
+      state.asteroids = [];
+      state.aliens = [];
+      state.ship = createShip();
+      setDisplayWave(state.wave);
+
+      const theme = getTheme(state.wave);
+      spawnFloatingText(
+        { x: CANVAS_WIDTH / 2, y: CANVAS_HEIGHT / 2 - 40 },
+        `WAVE ${state.wave}`,
+        theme.ship,
+        28
+      );
+      spawnFloatingText(
+        { x: CANVAS_WIDTH / 2, y: CANVAS_HEIGHT / 2 + 10 },
+        "⚠ BOSS INCOMING ⚠",
+        "#FF4444",
+        22
+      );
+      toast.success(`Wave ${state.wave} — BOSS FIGHT!`);
+      return;
+    }
+
+    state.bossDefeated = false;
+    const numAsteroids = Math.min(4 + state.wave * 2, 20);
     const asteroids: Asteroid[] = [];
 
     for (let i = 0; i < numAsteroids; i++) {
@@ -343,24 +440,36 @@ const Game = () => {
       const y = Math.random() * CANVAS_HEIGHT;
       const dist = Math.hypot(x - CANVAS_WIDTH / 2, y - CANVAS_HEIGHT / 2);
       if (dist > 150) {
-        asteroids.push(createAsteroid(x, y, "large"));
+        asteroids.push(createAsteroid(x, y, "large", state.wave));
       } else {
         i--;
       }
     }
 
-    gameStateRef.current.asteroids = asteroids;
-    gameStateRef.current.ship = createShip();
-    setDisplayWave(gameStateRef.current.wave);
+    state.asteroids = asteroids;
+    state.ship = createShip();
+    state.alienSpawnTimer = Math.max(300, 600 - state.wave * 20);
+    setDisplayWave(state.wave);
 
+    const theme = getTheme(state.wave);
     spawnFloatingText(
       { x: CANVAS_WIDTH / 2, y: CANVAS_HEIGHT / 2 },
-      `WAVE ${gameStateRef.current.wave}`,
-      "#FFFFFF",
+      `WAVE ${state.wave}`,
+      theme.ship,
       28
     );
 
-    toast.success(`Wave ${gameStateRef.current.wave}!`);
+    // Announce theme change
+    if ((state.wave - 1) % 5 === 0 && state.wave > 1) {
+      spawnFloatingText(
+        { x: CANVAS_WIDTH / 2, y: CANVAS_HEIGHT / 2 + 35 },
+        `${theme.name.toUpperCase()} ZONE`,
+        theme.accent,
+        18
+      );
+    }
+
+    toast.success(`Wave ${state.wave}!`);
   }, []);
 
   const wrapPosition = (pos: Vector): Vector => {
@@ -370,19 +479,66 @@ const Game = () => {
     };
   };
 
+  // Edge-wrap with homing nudge for asteroids
+  const wrapAsteroidPosition = (asteroid: Asteroid, shipPos: Vector): void => {
+    const oldX = asteroid.pos.x;
+    const oldY = asteroid.pos.y;
+    asteroid.pos = wrapPosition(asteroid.pos);
+
+    // Detect if wrapping occurred
+    const wrapped = Math.abs(asteroid.pos.x - oldX) > CANVAS_WIDTH * 0.5 ||
+                    Math.abs(asteroid.pos.y - oldY) > CANVAS_HEIGHT * 0.5;
+
+    if (wrapped) {
+      // Nudge velocity toward ship (~8 degrees)
+      const toShipAngle = Math.atan2(shipPos.y - asteroid.pos.y, shipPos.x - asteroid.pos.x);
+      const currentAngle = Math.atan2(asteroid.vel.y, asteroid.vel.x);
+      const speed = Math.hypot(asteroid.vel.x, asteroid.vel.y);
+
+      let angleDiff = toShipAngle - currentAngle;
+      while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
+      while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
+
+      const nudge = Math.sign(angleDiff) * Math.min(Math.abs(angleDiff), 0.14); // ~8 degrees
+      const newAngle = currentAngle + nudge;
+      asteroid.vel.x = Math.cos(newAngle) * speed;
+      asteroid.vel.y = Math.sin(newAngle) * speed;
+    }
+  };
+
   const checkCollision = (pos1: Vector, radius1: number, pos2: Vector, radius2: number): boolean => {
     const dx = pos1.x - pos2.x;
     const dy = pos1.y - pos2.y;
-    const distance = Math.sqrt(dx * dx + dy * dy);
-    return distance < radius1 + radius2;
+    return Math.sqrt(dx * dx + dy * dy) < radius1 + radius2;
   };
+
+  const loseLife = useCallback((state: GameState) => {
+    spawnExplosion(state.ship.pos, "#FFFFFF", 20);
+    state.lives--;
+    setDisplayLives(state.lives);
+    state.ship = createShip();
+    soundEffects.explode();
+    soundEffects.stopThrust();
+    haptics.heavy();
+
+    if (state.lives <= 0) {
+      state.gameOver = true;
+      setShowGameOver(true);
+      if (isHighScore(state.score)) setEnteringInitials(true);
+      setLeaderboard(loadLeaderboard());
+      toast.error(`Game Over! Final Score: ${state.score}`);
+      haptics.gameOver();
+    } else {
+      showLifeLostRef.current = true;
+      setShowLifeLost(true);
+    }
+  }, [isHighScore, loadLeaderboard]);
 
   const shootBullet = useCallback(() => {
     if (!gameStateRef.current || gameStateRef.current.gameOver) return;
 
     const now = Date.now();
     const fireRate = gameStateRef.current.powerUpActive.rapidFire > 0 ? 100 : 250;
-
     if (now - lastShotRef.current < fireRate) return;
     lastShotRef.current = now;
 
@@ -412,59 +568,33 @@ const Game = () => {
     gameStateRef.current.ship.vel = { x: 0, y: 0 };
 
     if (Math.random() < 0.1) {
-      gameStateRef.current.lives--;
-      setDisplayLives(gameStateRef.current.lives);
-      haptics.heavy();
-      if (gameStateRef.current.lives <= 0) {
-        gameStateRef.current.gameOver = true;
-        setShowGameOver(true);
-        if (isHighScore(gameStateRef.current.score)) {
-          setEnteringInitials(true);
-        }
-        setLeaderboard(loadLeaderboard());
-        haptics.gameOver();
-      } else {
-        gameStateRef.current.ship = createShip();
-        showLifeLostRef.current = true;
-        setShowLifeLost(true);
-      }
+      loseLife(gameStateRef.current);
       toast.error("Hyperspace malfunction!");
     } else {
       toast.info("Hyperspace jump!");
     }
-  }, []);
+  }, [loseLife]);
 
   const update = useCallback(() => {
     if (!gameStateRef.current || gameStateRef.current.gameOver || gameStateRef.current.paused || showLifeLostRef.current) return;
 
     const state = gameStateRef.current;
+    const theme = getTheme(state.wave);
 
     // Update ship
-    if (keysRef.current["ArrowLeft"]) {
-      state.ship.rotation -= state.ship.rotationSpeed;
-    }
-    if (keysRef.current["ArrowRight"]) {
-      state.ship.rotation += state.ship.rotationSpeed;
-    }
+    if (keysRef.current["ArrowLeft"]) state.ship.rotation -= state.ship.rotationSpeed;
+    if (keysRef.current["ArrowRight"]) state.ship.rotation += state.ship.rotationSpeed;
     if (keysRef.current["ArrowUp"]) {
-      if (!state.ship.isThrusting) {
-        soundEffects.startThrust();
-      }
+      if (!state.ship.isThrusting) soundEffects.startThrust();
       state.ship.isThrusting = true;
       state.ship.vel.x += Math.cos(state.ship.rotation) * state.ship.thrust;
       state.ship.vel.y += Math.sin(state.ship.rotation) * state.ship.thrust;
-      // Spawn exhaust particles
-      if (Math.random() > 0.3) {
-        spawnThrustParticle(state.ship);
-      }
+      if (Math.random() > 0.3) spawnThrustParticle(state.ship);
     } else {
-      if (state.ship.isThrusting) {
-        soundEffects.stopThrust();
-      }
+      if (state.ship.isThrusting) soundEffects.stopThrust();
       state.ship.isThrusting = false;
     }
 
-    // Limit ship velocity
     const maxSpeed = 8;
     const speed = Math.hypot(state.ship.vel.x, state.ship.vel.y);
     if (speed > maxSpeed) {
@@ -472,26 +602,22 @@ const Game = () => {
       state.ship.vel.y = (state.ship.vel.y / speed) * maxSpeed;
     }
 
-    // Apply friction
     state.ship.vel.x *= 0.99;
     state.ship.vel.y *= 0.99;
-
     state.ship.pos.x += state.ship.vel.x;
     state.ship.pos.y += state.ship.vel.y;
     state.ship.pos = wrapPosition(state.ship.pos);
 
     if (state.ship.invulnerableTime > 0) {
       state.ship.invulnerableTime--;
-      if (state.ship.invulnerableTime === 0) {
-        state.ship.invulnerable = false;
-      }
+      if (state.ship.invulnerableTime === 0) state.ship.invulnerable = false;
     }
 
-    // Update asteroids
+    // Update asteroids with edge-homing
     state.asteroids.forEach((asteroid) => {
       asteroid.pos.x += asteroid.vel.x;
       asteroid.pos.y += asteroid.vel.y;
-      asteroid.pos = wrapPosition(asteroid.pos);
+      wrapAsteroidPosition(asteroid, state.ship.pos);
       asteroid.rotation += asteroid.rotationSpeed;
     });
 
@@ -504,27 +630,23 @@ const Game = () => {
       return bullet.lifetime > 0;
     });
 
-    // UFO spawn timer
+    // UFO spawn timer — faster at higher waves
     state.ufoSpawnTimer--;
-    if (state.ufoSpawnTimer <= 0 && state.ufos.length === 0) {
+    if (state.ufoSpawnTimer <= 0 && state.ufos.length === 0 && !state.boss) {
       const size = state.wave > 6 ? (Math.random() < 0.5 ? "small" : "large") : "large";
       state.ufos.push(createUFO(size));
-      state.ufoSpawnTimer = 900 + Math.random() * 600; // 15-25s
+      state.ufoSpawnTimer = Math.max(400, 900 - state.wave * 30) + Math.random() * 400;
     }
 
-    // Update UFOs — sine wave movement, despawn off-screen
+    // Update UFOs
     state.ufos = state.ufos.filter((ufo) => {
       ufo.pos.x += ufo.vel.x;
       ufo.waveOffset += 0.03;
       ufo.vel.y = Math.sin(ufo.waveOffset) * 1.2;
       ufo.pos.y += ufo.vel.y;
 
-      // Despawn if off-screen
-      if (ufo.pos.x < -30 || ufo.pos.x > CANVAS_WIDTH + 30) {
-        return false;
-      }
+      if (ufo.pos.x < -30 || ufo.pos.x > CANVAS_WIDTH + 30) return false;
 
-      // UFO beep
       if (Math.floor(Date.now() / 1000) % 2 === 0 && Math.floor(Date.now() / 100) % 10 === 0) {
         soundEffects.ufoBeep();
       }
@@ -536,21 +658,129 @@ const Game = () => {
           ? Math.atan2(state.ship.pos.y - ufo.pos.y, state.ship.pos.x - ufo.pos.x)
           : Math.random() * Math.PI * 2;
 
-        const bullet: Bullet = {
+        state.bullets.push({
           pos: { ...ufo.pos },
-          vel: {
-            x: Math.cos(angle) * 5,
-            y: Math.sin(angle) * 5,
-          },
+          vel: { x: Math.cos(angle) * 5, y: Math.sin(angle) * 5 },
           rotation: angle,
           lifetime: BULLET_LIFETIME,
           isUFO: true,
-        };
-        state.bullets.push(bullet);
+          color: "#FF4444",
+        });
       }
+      return true;
+    });
+
+    // Alien spawn timer
+    if (!state.boss) {
+      state.alienSpawnTimer--;
+      if (state.alienSpawnTimer <= 0) {
+        if (state.wave >= 3 && state.aliens.filter(a => a.type === "brown").length < 3) {
+          state.aliens.push(createAlien("brown", state.wave));
+        }
+        if (state.wave >= 6 && state.aliens.filter(a => a.type === "greenMan").length < 2) {
+          state.aliens.push(createAlien("greenMan", state.wave));
+        }
+        state.alienSpawnTimer = Math.max(180, 500 - state.wave * 20) + Math.random() * 200;
+      }
+    }
+
+    // Update aliens
+    state.aliens = state.aliens.filter((alien) => {
+      alien.moveTimer++;
+      alien.zigzagPhase += 0.05;
+
+      if (alien.type === "brown") {
+        // Kamikaze — erratic zigzag toward ship
+        const toShip = Math.atan2(state.ship.pos.y - alien.pos.y, state.ship.pos.x - alien.pos.x);
+        const zigzag = Math.sin(alien.zigzagPhase * 3) * 0.8;
+        const spd = Math.hypot(alien.vel.x, alien.vel.y);
+        alien.vel.x += Math.cos(toShip + zigzag) * 0.08;
+        alien.vel.y += Math.sin(toShip + zigzag) * 0.08;
+        const curSpd = Math.hypot(alien.vel.x, alien.vel.y);
+        const maxSpd = 3 * getSpeedScale(state.wave);
+        if (curSpd > maxSpd) {
+          alien.vel.x = (alien.vel.x / curSpd) * maxSpd;
+          alien.vel.y = (alien.vel.y / curSpd) * maxSpd;
+        }
+      } else {
+        // Green man — slow drift, shoots
+        alien.vel.x *= 0.99;
+        alien.vel.y += Math.sin(alien.zigzagPhase) * 0.02;
+
+        alien.shootTimer--;
+        if (alien.shootTimer <= 0) {
+          alien.shootTimer = Math.max(40, 80 - state.wave * 2) + Math.random() * 40;
+          const angle = Math.atan2(state.ship.pos.y - alien.pos.y, state.ship.pos.x - alien.pos.x);
+          state.bullets.push({
+            pos: { ...alien.pos },
+            vel: { x: Math.cos(angle) * 6, y: Math.sin(angle) * 6 },
+            rotation: angle,
+            lifetime: BULLET_LIFETIME,
+            isAlien: true,
+            color: "#44FF44",
+          });
+        }
+      }
+
+      alien.pos.x += alien.vel.x;
+      alien.pos.y += alien.vel.y;
+
+      // Remove if way off-screen
+      if (alien.pos.x < -60 || alien.pos.x > CANVAS_WIDTH + 60 ||
+          alien.pos.y < -60 || alien.pos.y > CANVAS_HEIGHT + 60) {
+        if (alien.moveTimer > 120) return false; // Only if they've been alive a bit
+      }
+
+      // Wrap Y
+      if (alien.pos.y < 0) alien.pos.y = CANVAS_HEIGHT;
+      if (alien.pos.y > CANVAS_HEIGHT) alien.pos.y = 0;
 
       return true;
     });
+
+    // Update boss
+    if (state.boss) {
+      const boss = state.boss;
+      boss.phase += 0.02;
+      if (boss.hitFlash > 0) boss.hitFlash--;
+
+      if (!boss.entered) {
+        // Move into screen
+        boss.pos.y += 0.8;
+        if (boss.pos.y >= boss.targetY) {
+          boss.entered = true;
+          boss.vel.x = 0.5;
+        }
+      } else {
+        // Drift side to side
+        boss.pos.x += boss.vel.x;
+        if (boss.pos.x < 100 || boss.pos.x > CANVAS_WIDTH - 100) {
+          boss.vel.x *= -1;
+        }
+        // Bob
+        boss.pos.y = boss.targetY + Math.sin(boss.phase) * 30;
+
+        // Shoot spread
+        boss.shootTimer--;
+        if (boss.shootTimer <= 0) {
+          boss.shootTimer = Math.max(40, 90 - state.wave * 3);
+          const baseAngle = Math.atan2(state.ship.pos.y - boss.pos.y, state.ship.pos.x - boss.pos.x);
+          for (let i = -1; i <= 1; i++) {
+            state.bullets.push({
+              pos: { ...boss.pos },
+              vel: {
+                x: Math.cos(baseAngle + i * 0.3) * 4,
+                y: Math.sin(baseAngle + i * 0.3) * 4,
+              },
+              rotation: baseAngle + i * 0.3,
+              lifetime: BULLET_LIFETIME * 1.5,
+              isUFO: true,
+              color: "#FF66FF",
+            });
+          }
+        }
+      }
+    }
 
     // Update power-ups
     state.powerUps = state.powerUps.filter((powerUp) => {
@@ -560,7 +790,6 @@ const Game = () => {
       powerUp.rotation += 0.05;
       powerUp.lifetime--;
 
-      // Check collision with ship
       if (checkCollision(powerUp.pos, 15, state.ship.pos, SHIP_SIZE)) {
         const powerUpLabels: Record<string, { text: string; color: string }> = {
           shield: { text: "SHIELD!", color: "#7FFF7F" },
@@ -572,25 +801,14 @@ const Game = () => {
         spawnFloatingText(powerUp.pos, label.text, label.color, 20);
 
         switch (powerUp.type) {
-          case "shield":
-            state.powerUpActive.shield = 300;
-            state.ship.invulnerable = true;
-            break;
-          case "rapidFire":
-            state.powerUpActive.rapidFire = 600;
-            break;
-          case "extraLife":
-            state.lives++;
-            setDisplayLives(state.lives);
-            break;
-          case "multiplier":
-            state.powerUpActive.multiplier = 900;
-            break;
+          case "shield": state.powerUpActive.shield = 300; state.ship.invulnerable = true; break;
+          case "rapidFire": state.powerUpActive.rapidFire = 600; break;
+          case "extraLife": state.lives++; setDisplayLives(state.lives); break;
+          case "multiplier": state.powerUpActive.multiplier = 900; break;
         }
         haptics.medium();
         return false;
       }
-
       return powerUp.lifetime > 0;
     });
 
@@ -599,10 +817,8 @@ const Game = () => {
       const k = key as keyof typeof state.powerUpActive;
       if (state.powerUpActive[k] > 0) {
         state.powerUpActive[k]--;
-        if (state.powerUpActive[k] === 0) {
-          if (k === "shield") {
-            state.ship.invulnerable = false;
-          }
+        if (state.powerUpActive[k] === 0 && k === "shield") {
+          state.ship.invulnerable = false;
         }
       }
     });
@@ -625,10 +841,10 @@ const Game = () => {
       return p.lifetime > 0;
     });
 
-    // Collision detection: Bullets vs Asteroids
+    // Collision: Bullets vs Asteroids
     const newAsteroids: Asteroid[] = [];
     state.bullets = state.bullets.filter((bullet) => {
-      if (bullet.isUFO) return true; // UFO bullets don't hit asteroids
+      if (bullet.isUFO || bullet.isAlien) return true;
       let bulletAlive = true;
       state.asteroids = state.asteroids.filter((asteroid) => {
         const radius = asteroid.size === "large" ? 40 : asteroid.size === "medium" ? 25 : 12;
@@ -639,35 +855,30 @@ const Game = () => {
           state.score += pts;
           setDisplayScore(state.score);
 
-          // Floating score text
-          spawnFloatingText(asteroid.pos, `+${pts}`, ASTEROID_COLORS[asteroid.size], 14);
-          // Explosion particles
-          spawnExplosion(asteroid.pos, ASTEROID_COLORS[asteroid.size], asteroid.size === "large" ? 15 : asteroid.size === "medium" ? 10 : 6);
+          const aColor = theme.asteroids[asteroid.size === "large" ? 0 : asteroid.size === "medium" ? 1 : 2];
+          spawnFloatingText(asteroid.pos, `+${pts}`, aColor, 14);
+          spawnExplosion(asteroid.pos, aColor, asteroid.size === "large" ? 15 : asteroid.size === "medium" ? 10 : 6);
 
-          // Check for extra life
           if (Math.floor((state.score - pts) / 10000) < Math.floor(state.score / 10000)) {
             state.lives++;
             setDisplayLives(state.lives);
             spawnFloatingText(state.ship.pos, "EXTRA LIFE!", "#CC66FF", 22);
           }
 
-          // Split asteroid
           if (asteroid.size === "large") {
-            newAsteroids.push(createAsteroid(asteroid.pos.x, asteroid.pos.y, "medium"));
-            newAsteroids.push(createAsteroid(asteroid.pos.x, asteroid.pos.y, "medium"));
+            newAsteroids.push(createAsteroid(asteroid.pos.x, asteroid.pos.y, "medium", state.wave));
+            newAsteroids.push(createAsteroid(asteroid.pos.x, asteroid.pos.y, "medium", state.wave));
             soundEffects.explode();
           } else if (asteroid.size === "medium") {
-            newAsteroids.push(createAsteroid(asteroid.pos.x, asteroid.pos.y, "small"));
-            newAsteroids.push(createAsteroid(asteroid.pos.x, asteroid.pos.y, "small"));
+            newAsteroids.push(createAsteroid(asteroid.pos.x, asteroid.pos.y, "small", state.wave));
+            newAsteroids.push(createAsteroid(asteroid.pos.x, asteroid.pos.y, "small", state.wave));
             soundEffects.explode();
           } else {
             soundEffects.smallExplode();
           }
 
-          // Chance to spawn power-up
           const powerUp = createPowerUp(asteroid.pos.x, asteroid.pos.y);
           if (powerUp) state.powerUps.push(powerUp);
-
           return false;
         }
         return true;
@@ -676,9 +887,9 @@ const Game = () => {
     });
     state.asteroids.push(...newAsteroids);
 
-    // Collision detection: Bullets vs UFOs
+    // Collision: Bullets vs UFOs
     state.bullets = state.bullets.filter((bullet) => {
-      if (bullet.isUFO) return true; // UFO bullets don't destroy UFOs
+      if (bullet.isUFO || bullet.isAlien) return true;
       let bulletAlive = true;
       state.ufos = state.ufos.filter((ufo) => {
         const radius = ufo.size === "large" ? 20 : 10;
@@ -689,13 +900,10 @@ const Game = () => {
           state.score += pts;
           setDisplayScore(state.score);
           soundEffects.explode();
-
           spawnFloatingText(ufo.pos, `+${pts}`, "#FFFF66", 18);
           spawnExplosion(ufo.pos, "#FFFF66", 15);
-
           const powerUp = createPowerUp(ufo.pos.x, ufo.pos.y);
           if (powerUp) state.powerUps.push(powerUp);
-
           return false;
         }
         return true;
@@ -703,84 +911,68 @@ const Game = () => {
       return bulletAlive;
     });
 
-    // Collision detection: Ship vs Asteroids
-    if (!state.ship.invulnerable && state.powerUpActive.shield === 0) {
-      state.asteroids.forEach((asteroid) => {
-        const radius = asteroid.size === "large" ? 40 : asteroid.size === "medium" ? 25 : 12;
-        if (checkCollision(state.ship.pos, SHIP_SIZE, asteroid.pos, radius)) {
-          spawnExplosion(state.ship.pos, "#FFFFFF", 20);
-          state.lives--;
-          setDisplayLives(state.lives);
-          state.ship = createShip();
-          soundEffects.explode();
-          soundEffects.stopThrust();
-          haptics.heavy();
-
-          if (state.lives <= 0) {
-            state.gameOver = true;
-            setShowGameOver(true);
-            if (isHighScore(state.score)) setEnteringInitials(true);
-            setLeaderboard(loadLeaderboard());
-            toast.error(`Game Over! Final Score: ${state.score}`);
-            haptics.gameOver();
+    // Collision: Bullets vs Aliens
+    state.bullets = state.bullets.filter((bullet) => {
+      if (bullet.isUFO || bullet.isAlien) return true;
+      let bulletAlive = true;
+      state.aliens = state.aliens.filter((alien) => {
+        const radius = alien.type === "brown" ? 12 : 14;
+        if (checkCollision(bullet.pos, 2, alien.pos, radius)) {
+          bulletAlive = false;
+          alien.hp--;
+          if (alien.hp <= 0) {
+            const pts = (alien.type === "brown" ? 300 : 500) * (state.powerUpActive.multiplier > 0 ? 2 : 1);
+            state.score += pts;
+            setDisplayScore(state.score);
+            soundEffects.explode();
+            const color = alien.type === "brown" ? "#AA6633" : "#44FF44";
+            spawnFloatingText(alien.pos, `+${pts}`, color, 16);
+            spawnExplosion(alien.pos, color, 12);
+            const powerUp = createPowerUp(alien.pos.x, alien.pos.y);
+            if (powerUp) state.powerUps.push(powerUp);
+            return false;
           } else {
-            showLifeLostRef.current = true;
-            setShowLifeLost(true);
+            spawnFloatingText(alien.pos, "HIT!", "#FFFFFF", 12);
           }
         }
+        return true;
       });
-    }
+      return bulletAlive;
+    });
 
-    // Collision detection: Ship vs UFOs
-    if (!state.ship.invulnerable && state.powerUpActive.shield === 0) {
-      state.ufos.forEach((ufo) => {
-        const radius = ufo.size === "large" ? 20 : 10;
-        if (checkCollision(state.ship.pos, SHIP_SIZE, ufo.pos, radius)) {
-          spawnExplosion(state.ship.pos, "#FFFFFF", 20);
-          state.lives--;
-          setDisplayLives(state.lives);
-          state.ship = createShip();
-          soundEffects.explode();
-          soundEffects.stopThrust();
-          haptics.heavy();
-
-          if (state.lives <= 0) {
-            state.gameOver = true;
-            setShowGameOver(true);
-            if (isHighScore(state.score)) setEnteringInitials(true);
-            setLeaderboard(loadLeaderboard());
-            toast.error(`Game Over! Final Score: ${state.score}`);
-            haptics.gameOver();
-          } else {
-            showLifeLostRef.current = true;
-            setShowLifeLost(true);
-          }
-        }
-      });
-    }
-
-    // Collision detection: UFO bullets vs Ship
-    if (!state.ship.invulnerable && state.powerUpActive.shield === 0) {
+    // Collision: Bullets vs Boss
+    if (state.boss && state.boss.entered) {
       state.bullets = state.bullets.filter((bullet) => {
-        if (!bullet.isUFO) return true;
-        if (checkCollision(bullet.pos, 2, state.ship.pos, SHIP_SIZE)) {
-          spawnExplosion(state.ship.pos, "#FFFFFF", 20);
-          state.lives--;
-          setDisplayLives(state.lives);
-          state.ship = createShip();
-          soundEffects.explode();
-          soundEffects.stopThrust();
-          haptics.heavy();
+        if (bullet.isUFO || bullet.isAlien) return true;
+        if (checkCollision(bullet.pos, 2, state.boss!.pos, 60)) {
+          state.boss!.hp--;
+          state.boss!.hitFlash = 10;
+          spawnExplosion(bullet.pos, "#FF88FF", 5);
+          spawnFloatingText(bullet.pos, "HIT!", "#FF88FF", 14);
 
-          if (state.lives <= 0) {
-            state.gameOver = true;
-            setShowGameOver(true);
-            if (isHighScore(state.score)) setEnteringInitials(true);
-            setLeaderboard(loadLeaderboard());
-            haptics.gameOver();
-          } else {
-            showLifeLostRef.current = true;
-            setShowLifeLost(true);
+          if (state.boss!.hp <= 0) {
+            // Boss defeated
+            const pts = (2000 + state.wave * 200) * (state.powerUpActive.multiplier > 0 ? 2 : 1);
+            state.score += pts;
+            setDisplayScore(state.score);
+            spawnFloatingText(state.boss!.pos, `+${pts}`, "#FFFF00", 24);
+            spawnExplosion(state.boss!.pos, "#FF44FF", 30);
+            spawnExplosion(state.boss!.pos, "#FFFF44", 20);
+            soundEffects.explode();
+
+            // Guaranteed power-up
+            const types: PowerUp["type"][] = ["shield", "rapidFire", "extraLife", "multiplier"];
+            state.powerUps.push({
+              pos: { ...state.boss!.pos },
+              vel: { x: (Math.random() - 0.5), y: (Math.random() - 0.5) },
+              rotation: 0,
+              type: types[Math.floor(Math.random() * types.length)],
+              lifetime: 600,
+            });
+
+            state.boss = null;
+            state.bossDefeated = true;
+            toast.success("BOSS DEFEATED!");
           }
           return false;
         }
@@ -788,41 +980,90 @@ const Game = () => {
       });
     }
 
-    // Check for wave completion
-    if (state.asteroids.length === 0 && state.ufos.length === 0) {
+    // Collision: Ship vs Asteroids
+    if (!state.ship.invulnerable && state.powerUpActive.shield === 0) {
+      for (const asteroid of state.asteroids) {
+        const radius = asteroid.size === "large" ? 40 : asteroid.size === "medium" ? 25 : 12;
+        if (checkCollision(state.ship.pos, SHIP_SIZE, asteroid.pos, radius)) {
+          loseLife(state);
+          break;
+        }
+      }
+    }
+
+    // Collision: Ship vs UFOs
+    if (!state.ship.invulnerable && state.powerUpActive.shield === 0) {
+      for (const ufo of state.ufos) {
+        const radius = ufo.size === "large" ? 20 : 10;
+        if (checkCollision(state.ship.pos, SHIP_SIZE, ufo.pos, radius)) {
+          loseLife(state);
+          break;
+        }
+      }
+    }
+
+    // Collision: Ship vs Aliens
+    if (!state.ship.invulnerable && state.powerUpActive.shield === 0) {
+      for (const alien of state.aliens) {
+        if (checkCollision(state.ship.pos, SHIP_SIZE, alien.pos, 12)) {
+          loseLife(state);
+          break;
+        }
+      }
+    }
+
+    // Collision: Ship vs Boss tentacles
+    if (state.boss && state.boss.entered && !state.ship.invulnerable && state.powerUpActive.shield === 0) {
+      if (checkCollision(state.ship.pos, SHIP_SIZE, state.boss.pos, 65)) {
+        loseLife(state);
+      }
+    }
+
+    // Collision: Enemy bullets vs Ship
+    if (!state.ship.invulnerable && state.powerUpActive.shield === 0) {
+      state.bullets = state.bullets.filter((bullet) => {
+        if (!bullet.isUFO && !bullet.isAlien) return true;
+        if (checkCollision(bullet.pos, 2, state.ship.pos, SHIP_SIZE)) {
+          loseLife(state);
+          return false;
+        }
+        return true;
+      });
+    }
+
+    // Check wave completion
+    const noEnemies = state.asteroids.length === 0 && state.ufos.length === 0 && state.aliens.length === 0 && !state.boss;
+    if (noEnemies) {
       nextWave();
     }
-  }, [nextWave]);
+  }, [nextWave, loseLife]);
 
   const draw = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas || !gameStateRef.current) return;
-
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
-
     const state = gameStateRef.current;
+    const theme = getTheme(state.wave);
 
-    // Clear canvas
-    ctx.fillStyle = "#050510";
+    // Clear
+    ctx.fillStyle = theme.bg;
     ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
-    // Draw parallax starfield
+    // Parallax starfield
     const time = Date.now() * 0.001;
     state.stars.forEach((star) => {
       const parallaxSpeed = [0.1, 0.3, 0.6][star.layer];
       const offsetX = (time * parallaxSpeed * 10) % CANVAS_WIDTH;
       const drawX = ((star.x - offsetX) % CANVAS_WIDTH + CANVAS_WIDTH) % CANVAS_WIDTH;
       const twinkle = 0.7 + Math.sin(time * 2 + star.x * 0.1) * 0.3;
-      const alpha = star.brightness * twinkle;
-
-      ctx.fillStyle = `rgba(200, 220, 255, ${alpha})`;
+      ctx.fillStyle = `rgba(200, 220, 255, ${star.brightness * twinkle})`;
       ctx.beginPath();
       ctx.arc(drawX, star.y, star.size, 0, Math.PI * 2);
       ctx.fill();
     });
 
-    // Draw particles
+    // Particles
     state.particles.forEach((p) => {
       const alpha = p.lifetime / p.maxLifetime;
       ctx.save();
@@ -836,19 +1077,16 @@ const Game = () => {
       ctx.restore();
     });
 
-    // Draw ship
+    // Ship
     ctx.save();
     ctx.translate(state.ship.pos.x, state.ship.pos.y);
     ctx.rotate(state.ship.rotation);
-
-    // Flicker if invulnerable
     if (!state.ship.invulnerable || Math.floor(Date.now() / 100) % 2 === 0) {
-      const shipColor = state.powerUpActive.shield > 0 ? "#7FFF7F" : "#00FFFF";
+      const shipColor = state.powerUpActive.shield > 0 ? "#7FFF7F" : theme.ship;
       ctx.strokeStyle = shipColor;
       ctx.lineWidth = 2;
       ctx.shadowBlur = 15;
       ctx.shadowColor = shipColor;
-
       ctx.beginPath();
       ctx.moveTo(SHIP_SIZE, 0);
       ctx.lineTo(-SHIP_SIZE, -SHIP_SIZE / 2);
@@ -856,92 +1094,73 @@ const Game = () => {
       ctx.lineTo(-SHIP_SIZE, SHIP_SIZE / 2);
       ctx.closePath();
       ctx.stroke();
-
-      // Second glow pass for bloom
       ctx.shadowBlur = 25;
       ctx.globalAlpha = 0.3;
       ctx.stroke();
       ctx.globalAlpha = 1;
     }
-
     ctx.restore();
 
-    // Draw asteroids with color tinting
+    // Asteroids
     state.asteroids.forEach((asteroid) => {
       ctx.save();
       ctx.translate(asteroid.pos.x, asteroid.pos.y);
       ctx.rotate(asteroid.rotation);
-
-      const color = ASTEROID_COLORS[asteroid.size];
+      const colorIdx = asteroid.size === "large" ? 0 : asteroid.size === "medium" ? 1 : 2;
+      const color = theme.asteroids[colorIdx];
       ctx.strokeStyle = color;
       ctx.lineWidth = 1.5;
       ctx.shadowBlur = 10;
       ctx.shadowColor = color;
-
       ctx.beginPath();
       asteroid.points.forEach((point, i) => {
-        if (i === 0) {
-          ctx.moveTo(point.x, point.y);
-        } else {
-          ctx.lineTo(point.x, point.y);
-        }
+        if (i === 0) ctx.moveTo(point.x, point.y);
+        else ctx.lineTo(point.x, point.y);
       });
       ctx.closePath();
       ctx.stroke();
-
-      // Inner glow
       ctx.shadowBlur = 20;
       ctx.globalAlpha = 0.15;
       ctx.stroke();
       ctx.globalAlpha = 1;
-
       ctx.restore();
     });
 
-    // Draw bullets
+    // Bullets
     state.bullets.forEach((bullet) => {
       ctx.save();
-      const bColor = bullet.isUFO ? "#FF4444" : "#00FFFF";
+      const bColor = bullet.color || (bullet.isUFO ? "#FF4444" : theme.ship);
       ctx.fillStyle = bColor;
       ctx.shadowBlur = 12;
       ctx.shadowColor = bColor;
       ctx.beginPath();
-      ctx.arc(bullet.pos.x, bullet.pos.y, bullet.isUFO ? 3 : 2, 0, Math.PI * 2);
+      ctx.arc(bullet.pos.x, bullet.pos.y, (bullet.isUFO || bullet.isAlien) ? 3 : 2, 0, Math.PI * 2);
       ctx.fill();
-      // Extra glow
       ctx.shadowBlur = 20;
       ctx.globalAlpha = 0.4;
       ctx.beginPath();
-      ctx.arc(bullet.pos.x, bullet.pos.y, bullet.isUFO ? 5 : 4, 0, Math.PI * 2);
+      ctx.arc(bullet.pos.x, bullet.pos.y, (bullet.isUFO || bullet.isAlien) ? 5 : 4, 0, Math.PI * 2);
       ctx.fill();
       ctx.globalAlpha = 1;
       ctx.restore();
     });
 
-    // Draw UFOs with enhanced style
+    // UFOs
     state.ufos.forEach((ufo) => {
       ctx.save();
       ctx.translate(ufo.pos.x, ufo.pos.y);
-
-      const ufoColor = ufo.size === "large" ? "#FFFF44" : "#FF44FF";
+      const ufoColor = ufo.size === "large" ? theme.enemy : "#FF44FF";
       ctx.strokeStyle = ufoColor;
       ctx.lineWidth = 2;
       ctx.shadowBlur = 18;
       ctx.shadowColor = ufoColor;
-
       const radius = ufo.size === "large" ? 20 : 10;
-
-      // Draw UFO body
       ctx.beginPath();
       ctx.ellipse(0, 0, radius, radius / 2, 0, 0, Math.PI * 2);
       ctx.stroke();
-
-      // Draw UFO dome
       ctx.beginPath();
       ctx.ellipse(0, -radius / 4, radius / 2, radius / 3, 0, 0, Math.PI, true);
       ctx.stroke();
-
-      // Pulsing glow
       const pulse = 0.3 + Math.sin(Date.now() * 0.005) * 0.2;
       ctx.globalAlpha = pulse;
       ctx.fillStyle = ufoColor;
@@ -949,26 +1168,180 @@ const Game = () => {
       ctx.ellipse(0, 0, radius, radius / 2, 0, 0, Math.PI * 2);
       ctx.fill();
       ctx.globalAlpha = 1;
-
       ctx.restore();
     });
 
-    // Draw power-ups
+    // Brown aliens
+    state.aliens.filter(a => a.type === "brown").forEach((alien) => {
+      ctx.save();
+      ctx.translate(alien.pos.x, alien.pos.y);
+      ctx.rotate(Math.atan2(alien.vel.y, alien.vel.x));
+      ctx.strokeStyle = "#AA6633";
+      ctx.fillStyle = "#553311";
+      ctx.lineWidth = 2;
+      ctx.shadowBlur = 10;
+      ctx.shadowColor = "#AA6633";
+      // Angular insect-like shape
+      ctx.beginPath();
+      ctx.moveTo(12, 0);
+      ctx.lineTo(-6, -8);
+      ctx.lineTo(-10, -4);
+      ctx.lineTo(-8, 0);
+      ctx.lineTo(-10, 4);
+      ctx.lineTo(-6, 8);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      // Antennae
+      ctx.beginPath();
+      ctx.moveTo(-6, -8);
+      ctx.lineTo(-2, -14);
+      ctx.moveTo(-6, 8);
+      ctx.lineTo(-2, 14);
+      ctx.stroke();
+      ctx.restore();
+    });
+
+    // Green men
+    state.aliens.filter(a => a.type === "greenMan").forEach((alien) => {
+      ctx.save();
+      ctx.translate(alien.pos.x, alien.pos.y);
+      ctx.strokeStyle = "#44FF44";
+      ctx.fillStyle = "#115511";
+      ctx.lineWidth = 2;
+      ctx.shadowBlur = 12;
+      ctx.shadowColor = "#44FF44";
+      // Head
+      ctx.beginPath();
+      ctx.arc(0, -8, 6, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      // Eyes
+      ctx.fillStyle = "#FFFFFF";
+      ctx.beginPath();
+      ctx.arc(-3, -9, 2, 0, Math.PI * 2);
+      ctx.arc(3, -9, 2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#000000";
+      ctx.beginPath();
+      ctx.arc(-3, -9, 1, 0, Math.PI * 2);
+      ctx.arc(3, -9, 1, 0, Math.PI * 2);
+      ctx.fill();
+      // Body
+      ctx.strokeStyle = "#44FF44";
+      ctx.beginPath();
+      ctx.moveTo(0, -2);
+      ctx.lineTo(0, 8);
+      ctx.stroke();
+      // Arms
+      ctx.beginPath();
+      ctx.moveTo(0, 2);
+      ctx.lineTo(-8, -1);
+      ctx.moveTo(0, 2);
+      ctx.lineTo(8, 5);
+      ctx.stroke();
+      // Gun
+      ctx.strokeStyle = "#FFFF00";
+      ctx.beginPath();
+      ctx.moveTo(8, 5);
+      ctx.lineTo(14, 3);
+      ctx.stroke();
+      // Legs
+      ctx.strokeStyle = "#44FF44";
+      ctx.beginPath();
+      ctx.moveTo(0, 8);
+      ctx.lineTo(-5, 16);
+      ctx.moveTo(0, 8);
+      ctx.lineTo(5, 16);
+      ctx.stroke();
+      ctx.restore();
+    });
+
+    // Boss
+    if (state.boss) {
+      const boss = state.boss;
+      ctx.save();
+      ctx.translate(boss.pos.x, boss.pos.y);
+
+      const bossColor = boss.hitFlash > 0 ? "#FFFFFF" : "#FF44CC";
+      ctx.shadowBlur = 30;
+      ctx.shadowColor = bossColor;
+
+      // Tentacles
+      const tentCount = boss.tentacles;
+      for (let i = 0; i < tentCount; i++) {
+        const baseAngle = (i / tentCount) * Math.PI * 2;
+        ctx.strokeStyle = boss.hitFlash > 0 ? "#FFFFFF" : "#CC44AA";
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        const segments = 5;
+        for (let s = 1; s <= segments; s++) {
+          const dist = s * 18;
+          const wave = Math.sin(boss.phase * 2 + i + s * 0.8) * 15;
+          const tx = Math.cos(baseAngle) * dist + Math.cos(baseAngle + Math.PI / 2) * wave;
+          const ty = Math.sin(baseAngle) * dist + Math.sin(baseAngle + Math.PI / 2) * wave;
+          ctx.lineTo(tx, ty);
+        }
+        ctx.stroke();
+      }
+
+      // Body
+      const pulse = 1 + Math.sin(boss.phase * 3) * 0.05;
+      const bodyR = 45 * pulse;
+      ctx.fillStyle = boss.hitFlash > 0 ? "#FFFFFF" : "#331133";
+      ctx.strokeStyle = bossColor;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(0, 0, bodyR, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      // Eye
+      ctx.fillStyle = bossColor;
+      ctx.beginPath();
+      ctx.arc(0, -5, 12, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#000000";
+      ctx.beginPath();
+      ctx.arc(0, -5, 6, 0, Math.PI * 2);
+      ctx.fill();
+
+      // HP bar
+      ctx.restore();
+      ctx.save();
+      const barW = 200;
+      const barH = 8;
+      const barX = (CANVAS_WIDTH - barW) / 2;
+      const barY = CANVAS_HEIGHT - 30;
+      const hpFrac = boss.hp / boss.maxHp;
+      ctx.globalAlpha = 0.7;
+      ctx.strokeStyle = "#FF44CC";
+      ctx.lineWidth = 1;
+      ctx.strokeRect(barX, barY, barW, barH);
+      ctx.fillStyle = hpFrac > 0.3 ? "#FF44CC" : "#FF0000";
+      ctx.fillRect(barX, barY, barW * hpFrac, barH);
+      ctx.globalAlpha = 0.9;
+      ctx.font = "bold 10px monospace";
+      ctx.fillStyle = "#FFFFFF";
+      ctx.textAlign = "center";
+      ctx.fillText("BOSS", CANVAS_WIDTH / 2, barY - 4);
+      ctx.restore();
+    }
+
+    // Power-ups
     state.powerUps.forEach((powerUp) => {
       ctx.save();
       ctx.translate(powerUp.pos.x, powerUp.pos.y);
       ctx.rotate(powerUp.rotation);
-
       const color = powerUp.type === "shield" ? "#7FFF7F"
         : powerUp.type === "rapidFire" ? "#FF6666"
         : powerUp.type === "multiplier" ? "#FFFF66"
         : "#CC66FF";
-
       ctx.strokeStyle = color;
       ctx.lineWidth = 2;
       ctx.shadowBlur = 20;
       ctx.shadowColor = color;
-
       ctx.beginPath();
       for (let i = 0; i < 5; i++) {
         const angle = (i / 5) * Math.PI * 2 - Math.PI / 2;
@@ -979,11 +1352,10 @@ const Game = () => {
       }
       ctx.closePath();
       ctx.stroke();
-
       ctx.restore();
     });
 
-    // Draw floating texts
+    // Floating texts
     state.floatingTexts.forEach((ft) => {
       ctx.save();
       ctx.globalAlpha = ft.opacity;
@@ -996,7 +1368,7 @@ const Game = () => {
       ctx.restore();
     });
 
-    // Draw active power-up HUD bars
+    // Power-up HUD bars
     const activePowerUps: { label: string; color: string; remaining: number; max: number }[] = [];
     if (state.powerUpActive.shield > 0) activePowerUps.push({ label: "SHIELD", color: "#7FFF7F", remaining: state.powerUpActive.shield, max: 300 });
     if (state.powerUpActive.rapidFire > 0) activePowerUps.push({ label: "RAPID", color: "#FF6666", remaining: state.powerUpActive.rapidFire, max: 600 });
@@ -1008,7 +1380,6 @@ const Game = () => {
       const barW = 120;
       const barH = 12;
       const fill = pu.remaining / pu.max;
-
       ctx.save();
       ctx.globalAlpha = 0.6;
       ctx.strokeStyle = pu.color;
@@ -1026,6 +1397,15 @@ const Game = () => {
       ctx.restore();
     });
 
+    // Wave/theme indicator
+    ctx.save();
+    ctx.globalAlpha = 0.4;
+    ctx.font = "bold 10px monospace";
+    ctx.fillStyle = theme.accent;
+    ctx.textAlign = "right";
+    ctx.fillText(`${theme.name.toUpperCase()} ZONE`, CANVAS_WIDTH - 10, 18);
+    ctx.restore();
+
     // CRT scanline overlay
     ctx.save();
     ctx.globalAlpha = 0.04;
@@ -1033,7 +1413,6 @@ const Game = () => {
     for (let y = 0; y < CANVAS_HEIGHT; y += 3) {
       ctx.fillRect(0, y, CANVAS_WIDTH, 1);
     }
-    // Vignette
     const gradient = ctx.createRadialGradient(CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2, CANVAS_HEIGHT * 0.4, CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2, CANVAS_HEIGHT * 0.8);
     gradient.addColorStop(0, "rgba(0,0,0,0)");
     gradient.addColorStop(1, "rgba(0,0,0,0.3)");
@@ -1076,31 +1455,20 @@ const Game = () => {
         return;
       }
       keysRef.current[e.key] = true;
-      if (e.key === " ") {
-        e.preventDefault();
-        shootBullet();
-      }
-      if (e.key === "h" || e.key === "H") {
-        e.preventDefault();
-        hyperspace();
-      }
+      if (e.key === " ") { e.preventDefault(); shootBullet(); }
+      if (e.key === "h" || e.key === "H") { e.preventDefault(); hyperspace(); }
     };
 
-    const handleKeyUp = (e: KeyboardEvent) => {
-      keysRef.current[e.key] = false;
-    };
+    const handleKeyUp = (e: KeyboardEvent) => { keysRef.current[e.key] = false; };
 
     window.addEventListener("keydown", handleKeyDown);
     window.addEventListener("keyup", handleKeyUp);
-
     animationFrameRef.current = requestAnimationFrame(gameLoop);
 
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
       window.removeEventListener("keyup", handleKeyUp);
-      if (animationFrameRef.current) {
-        cancelAnimationFrame(animationFrameRef.current);
-      }
+      if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
     };
   }, [initGame, shootBullet, hyperspace, gameLoop]);
 
@@ -1220,14 +1588,12 @@ const Game = () => {
         )}
       </div>
 
-      {/* Mobile Touch Controls */}
       {isTouchDevice && (
         <div
           className="mt-4 w-full max-w-[800px] select-none"
           style={{ touchAction: 'none', userSelect: 'none', WebkitUserSelect: 'none' }}
         >
           <div className="flex justify-between items-end px-2">
-            {/* Left side: Rotation controls */}
             <div className="flex gap-3">
               <button
                 className="w-16 h-16 rounded-full border-2 border-[hsl(var(--game-foreground))] text-[hsl(var(--game-foreground))] font-mono text-2xl active:bg-[hsl(var(--game-foreground))]/30 flex items-center justify-center"
@@ -1247,7 +1613,6 @@ const Game = () => {
               </button>
             </div>
 
-            {/* Right side: Action buttons */}
             <div className="flex flex-col items-end gap-2">
               <div className="flex gap-3">
                 <button
