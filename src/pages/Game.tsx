@@ -211,6 +211,8 @@ const Game = () => {
   const prevGamepadButtonRef = useRef<boolean[]>([false, false, false, false, false, false, false]);
   const audioRef = useRef<HTMLAudioElement>(null);
   const radioStartedRef = useRef(false);
+  const onelinerRef = useRef<{ author: string; message: string } | null>(null);
+  const lastOnelinerTimeRef = useRef<string>("");
 
   // Keep ref in sync
   useEffect(() => { gameModeRef.current = gameMode; }, [gameMode]);
@@ -1878,6 +1880,18 @@ const Game = () => {
       ctx.fillText(`♪ ${np.artist} — ${np.title}`, 10, CANVAS_HEIGHT - 10);
       ctx.restore();
     }
+
+    // Oneliner chat message at top of canvas
+    const ol = onelinerRef.current;
+    if (ol) {
+      ctx.save();
+      ctx.globalAlpha = 0.6;
+      ctx.font = "10px monospace";
+      ctx.fillStyle = "#FFD700";
+      ctx.textAlign = "center";
+      ctx.fillText(`<${ol.author}> ${ol.message}`, CANVAS_WIDTH / 2, 30);
+      ctx.restore();
+    }
   }, []);
 
   const gameLoop = useCallback(() => {
@@ -1967,6 +1981,52 @@ const Game = () => {
     };
     fetchNowPlaying();
     const interval = setInterval(fetchNowPlaying, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Poll Nectarine oneliner chat
+  useEffect(() => {
+    const fetchOneliner = async () => {
+      try {
+        const apiUrl = "https://scenestream.net/demovibes/xml/oneliner/";
+        const proxies = [
+          `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(apiUrl)}`,
+          `https://corsproxy.io/?${encodeURIComponent(apiUrl)}`,
+        ];
+        
+        let text = "";
+        for (const proxyUrl of proxies) {
+          try {
+            const res = await fetch(proxyUrl);
+            if (res.ok) {
+              text = await res.text();
+              break;
+            }
+          } catch {
+            continue;
+          }
+        }
+        
+        if (!text) return;
+        
+        const parser = new DOMParser();
+        const xml = parser.parseFromString(text, "text/xml");
+        const firstEntry = xml.querySelector("entry");
+        if (firstEntry) {
+          const time = firstEntry.getAttribute("time") || "";
+          if (time !== lastOnelinerTimeRef.current) {
+            lastOnelinerTimeRef.current = time;
+            const author = firstEntry.querySelector("author")?.textContent || "???";
+            const message = firstEntry.querySelector("message")?.textContent || "";
+            onelinerRef.current = { author, message };
+          }
+        }
+      } catch (e) {
+        console.log("Could not fetch oneliner:", e);
+      }
+    };
+    fetchOneliner();
+    const interval = setInterval(fetchOneliner, 15000);
     return () => clearInterval(interval);
   }, []);
 
@@ -2231,7 +2291,7 @@ const Game = () => {
             <source src="https://nectarine.inversi0n.org/necta192.mp3" type="audio/mpeg" />
           </audio>
           <div className="text-[hsl(var(--game-foreground))] font-mono text-xs text-center opacity-60 mt-1">
-            Thanks to <a href="https://www.scenestream.net/demovibes/streams/" target="_blank" rel="noopener noreferrer" className="underline hover:opacity-80">Nectarine Demoscene Radio</a> for the music!
+            Thanks to <a href="https://scenestream.net/demovibes/" target="_blank" rel="noopener noreferrer" className="underline hover:opacity-80">Nectarine Demoscene Radio</a> for the music!
           </div>
           <div className="text-[hsl(var(--game-foreground))] font-mono text-[10px] text-center opacity-40 mt-0.5">
             Streaming demoscene & chiptune tracks 24/7
@@ -2547,7 +2607,7 @@ const Game = () => {
           <source src="https://nectarine.inversi0n.org/necta192.mp3" type="audio/mpeg" />
         </audio>
         <div className="text-[hsl(var(--game-foreground))] font-mono text-xs text-center opacity-60 mt-1">
-          Thanks to <a href="https://www.scenestream.net/demovibes/streams/" target="_blank" rel="noopener noreferrer" className="underline hover:opacity-80">Nectarine Demoscene Radio</a> for the music!
+          Thanks to <a href="https://scenestream.net/demovibes/" target="_blank" rel="noopener noreferrer" className="underline hover:opacity-80">Nectarine Demoscene Radio</a> for the music!
         </div>
         <div className="text-[hsl(var(--game-foreground))] font-mono text-[10px] text-center opacity-40 mt-0.5">
           Streaming demoscene & chiptune tracks 24/7
