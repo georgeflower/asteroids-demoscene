@@ -2020,10 +2020,31 @@ const Game = () => {
       updateDuel();
     } else if (gameModeRef.current === "solo") {
       update();
+    } else if (gameModeRef.current === "online") {
+      // Host: send inputs to worker
+      if (isHostRef.current && workerRef.current) {
+        const keys = keysRef.current;
+        const gp0 = readGamepad(0);
+        workerRef.current.postMessage({
+          type: 'inputs',
+          p1: { left: keys["ArrowLeft"] || gp0.left, right: keys["ArrowRight"] || gp0.right, up: keys["ArrowUp"] || gp0.up, fire: keys[" "] || gp0.fire },
+          p2: multiplayer.remoteInputRef.current,
+        });
+      }
+      // Guest: send inputs to host
+      if (!isHostRef.current && isConnectedRef.current) {
+        const keys = keysRef.current;
+        const gp0 = readGamepad(0);
+        multiplayer.sendInputs({
+          left: keys["ArrowLeft"] || gp0.left, right: keys["ArrowRight"] || gp0.right,
+          up: keys["ArrowUp"] || gp0.up, fire: keys[" "] || gp0.fire,
+        });
+      }
+      updateOnlineVisuals();
     }
     draw();
     animationFrameRef.current = requestAnimationFrame(gameLoop);
-  }, [update, updateDuel, draw]);
+  }, [update, updateDuel, draw, updateOnlineVisuals, multiplayer.sendInputs]);
 
   useEffect(() => {
     enteringInitialsRef.current = enteringInitials;
