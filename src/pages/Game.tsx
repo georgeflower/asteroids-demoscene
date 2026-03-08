@@ -456,6 +456,7 @@ const Game = () => {
             toast.success("2x Score multiplier!");
             break;
         }
+        haptics.medium();
         return false;
       }
 
