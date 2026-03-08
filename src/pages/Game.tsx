@@ -4,6 +4,9 @@ import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { soundEffects } from "@/utils/soundEffects";
 import { haptics } from "@/utils/haptics";
+import { useMultiplayer } from "@/hooks/useMultiplayer";
+import OnlineLobby from "@/components/OnlineLobby";
+import type { DuelNetState } from "@/types/multiplayer";
 
 interface Vector {
   x: number;
@@ -156,7 +159,7 @@ interface DuelState {
   asteroidSpawnTimer: number;
 }
 
-type GameMode = "menu" | "solo" | "duel";
+type GameMode = "menu" | "solo" | "duel" | "online_lobby" | "online";
 
 const CANVAS_WIDTH = 800;
 const CANVAS_HEIGHT = 600;
@@ -204,7 +207,7 @@ const Game = () => {
   const gameModeRef = useRef<GameMode>("menu");
   const [duelKills, setDuelKills] = useState<[number, number]>([0, 0]);
   const [duelDeaths, setDuelDeaths] = useState<[number, number]>([0, 0]);
-  const [menuSelection, setMenuSelection] = useState(0); // 0=solo, 1=duel
+  const [menuSelection, setMenuSelection] = useState(0); // 0=solo, 1=duel, 2=online
   const [gameOverSelection, setGameOverSelection] = useState(0); // 0=play again, 1=menu
   const [isPaused, setIsPaused] = useState(false);
   const isPausedRef = useRef(false);
@@ -214,6 +217,13 @@ const Game = () => {
   const radioStartedRef = useRef(false);
   const onelinerRef = useRef<{ author: string; message: string } | null>(null);
   const lastOnelinerTimeRef = useRef<string>("");
+
+  // Online multiplayer state
+  const multiplayer = useMultiplayer();
+  const workerRef = useRef<Worker | null>(null);
+  const broadcastTickRef = useRef(0);
+  const isHostRef = useRef(false);
+  const isConnectedRef = useRef(false);
 
   // Keep ref in sync
   useEffect(() => { gameModeRef.current = gameMode; }, [gameMode]);
@@ -525,6 +535,116 @@ const Game = () => {
     setDuelDeaths([0, 0]);
     setGameMode("duel");
     toast.success("DUEL MODE! P1: Arrows+Space | P2: WASD+E");
+  }, []);
+
+  // ===== ONLINE HELPERS =====
+  const applyNetState = useCallback((net: DuelNetState) => {
+    const ds = duelStateRef.current;
+    if (!ds) return;
+
+    ds.ship1.pos = { x: net.ship1.x, y: net.ship1.y };
+    ds.ship1.vel = { x: net.ship1.vx, y: net.ship1.vy };
+    ds.ship1.rotation = net.ship1.rot;
+    ds.ship1.isThrusting = net.ship1.thrust;
+    ds.ship1.invulnerable = net.ship1.invuln;
+    ds.ship1.invulnerableTime = net.ship1.invulnTime;
+
+    ds.ship2.pos = { x: net.ship2.x, y: net.ship2.y };
+    ds.ship2.vel = { x: net.ship2.vx, y: net.ship2.vy };
+    ds.ship2.rotation = net.ship2.rot;
+    ds.ship2.isThrusting = net.ship2.thrust;
+    ds.ship2.invulnerable = net.ship2.invuln;
+    ds.ship2.invulnerableTime = net.ship2.invulnTime;
+
+    ds.bullets1 = net.bullets1.map(b => ({
+      pos: { x: b.x, y: b.y }, vel: { x: b.vx, y: b.vy },
+      rotation: b.rot, lifetime: b.lifetime, owner: b.owner,
+    }));
+    ds.bullets2 = net.bullets2.map(b => ({
+      pos: { x: b.x, y: b.y }, vel: { x: b.vx, y: b.vy },
+      rotation: b.rot, lifetime: b.lifetime, owner: b.owner,
+    }));
+
+    ds.asteroids = net.asteroids.map(a => {
+      const pts: Vector[] = [];
+      for (let j = 0; j < a.points.length; j += 2) {
+        pts.push({ x: a.points[j], y: a.points[j + 1] });
+      }
+      return {
+        pos: { x: a.x, y: a.y }, vel: { x: a.vx, y: a.vy },
+        rotation: a.rot, size: a.size as "large" | "medium" | "small",
+        rotationSpeed: a.rotSpeed, points: pts,
+      };
+    });
+
+    ds.aliens = net.aliens.map(a => ({
+      pos: { x: a.x, y: a.y }, vel: { x: a.vx, y: a.vy },
+      rotation: 0, type: a.type as "brown" | "greenMan",
+      hp: 1, moveTimer: 0, shootTimer: 999, zigzagPhase: 0,
+    }));
+
+    const prevK0 = ds.kills[0], prevK1 = ds.kills[1];
+    ds.kills = net.kills;
+    ds.deaths = net.deaths;
+    ds.respawnTimer = net.respawnTimer;
+
+    for (const event of net.events) {
+      if (event.type === "explosion" || event.type === "kill" || event.type === "die_env") {
+        spawnExplosionTo(ds.particles, { x: event.x, y: event.y }, event.color, event.count);
+        soundEffects.explode();
+      }
+      if (event.type === "kill" && event.killer !== undefined) {
+        const color = event.killer === 0 ? P1_COLOR : P2_COLOR;
+        spawnFloatingTextTo(ds.floatingTexts, { x: event.x, y: event.y }, `P${event.killer + 1} KILL!`, color, 20);
+      }
+    }
+
+    if (net.kills[0] !== prevK0 || net.kills[1] !== prevK1) {
+      setDuelKills([...net.kills]);
+      setDuelDeaths([...net.deaths]);
+    }
+  }, []);
+
+  const updateOnlineVisuals = useCallback(() => {
+    const ds = duelStateRef.current;
+    if (!ds) return;
+    ds.floatingTexts = ds.floatingTexts.filter((ft) => {
+      ft.pos.y -= 0.5; ft.lifetime--;
+      ft.opacity = ft.lifetime / ft.maxLifetime;
+      return ft.lifetime > 0;
+    });
+    ds.particles = ds.particles.filter((p) => {
+      p.pos.x += p.vel.x; p.pos.y += p.vel.y;
+      p.vel.x *= 0.97; p.vel.y *= 0.97;
+      p.lifetime--;
+      return p.lifetime > 0;
+    });
+  }, []);
+
+  const initOnline = useCallback((isHost: boolean) => {
+    duelStateRef.current = {
+      ship1: createShip(CANVAS_WIDTH * 0.25, CANVAS_HEIGHT / 2),
+      ship2: createShip(CANVAS_WIDTH * 0.75, CANVAS_HEIGHT / 2),
+      bullets1: [], bullets2: [], asteroids: [], aliens: [],
+      kills: [0, 0], deaths: [0, 0], respawnTimer: [0, 0],
+      floatingTexts: [], particles: [], stars: createStars(),
+      alienSpawnTimer: 800, asteroidSpawnTimer: 600,
+    };
+    duelStateRef.current.ship1.rotation = 0;
+    duelStateRef.current.ship2.rotation = Math.PI;
+    gameStateRef.current = null;
+    setShowGameOver(false); setShowLifeLost(false);
+    showLifeLostRef.current = false;
+    setDuelKills([0, 0]); setDuelDeaths([0, 0]);
+    setGameMode("online");
+    broadcastTickRef.current = 0;
+
+    if (isHost) {
+      const worker = new Worker(new URL('../workers/gameWorker.ts', import.meta.url), { type: 'module' });
+      workerRef.current = worker;
+      worker.postMessage({ type: 'init' });
+    }
+    toast.success(isHost ? "Game started! You are HOST (P1)" : "Game started! You are GUEST (P2)");
   }, []);
 
   const nextWave = useCallback(() => {
@@ -1684,7 +1804,7 @@ const Game = () => {
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    if (gameModeRef.current === "duel" && duelStateRef.current) {
+    if ((gameModeRef.current === "duel" || gameModeRef.current === "online") && duelStateRef.current) {
       const ds = duelStateRef.current;
       drawCommon(ctx, ds.stars, ds.particles, ds.floatingTexts, ds.asteroids, ds.aliens, "#050510", ["#FFFFFF", "#88DDFF", "#44AAFF"]);
 
@@ -1900,10 +2020,31 @@ const Game = () => {
       updateDuel();
     } else if (gameModeRef.current === "solo") {
       update();
+    } else if (gameModeRef.current === "online") {
+      // Host: send inputs to worker
+      if (isHostRef.current && workerRef.current) {
+        const keys = keysRef.current;
+        const gp0 = readGamepad(0);
+        workerRef.current.postMessage({
+          type: 'inputs',
+          p1: { left: keys["ArrowLeft"] || gp0.left, right: keys["ArrowRight"] || gp0.right, up: keys["ArrowUp"] || gp0.up, fire: keys[" "] || gp0.fire },
+          p2: multiplayer.remoteInputRef.current,
+        });
+      }
+      // Guest: send inputs to host
+      if (!isHostRef.current && isConnectedRef.current) {
+        const keys = keysRef.current;
+        const gp0 = readGamepad(0);
+        multiplayer.sendInputs({
+          left: keys["ArrowLeft"] || gp0.left, right: keys["ArrowRight"] || gp0.right,
+          up: keys["ArrowUp"] || gp0.up, fire: keys[" "] || gp0.fire,
+        });
+      }
+      updateOnlineVisuals();
     }
     draw();
     animationFrameRef.current = requestAnimationFrame(gameLoop);
-  }, [update, updateDuel, draw]);
+  }, [update, updateDuel, draw, updateOnlineVisuals, multiplayer.sendInputs]);
 
   useEffect(() => {
     enteringInitialsRef.current = enteringInitials;
@@ -1997,12 +2138,70 @@ const Game = () => {
     return () => clearInterval(interval);
   }, []);
 
+  // ===== ONLINE EFFECTS =====
+  const applyNetStateRef = useRef<(net: DuelNetState) => void>(() => {});
+  const sendStateRef = useRef<(state: DuelNetState) => void>(() => {});
+  useEffect(() => { applyNetStateRef.current = applyNetState; }, [applyNetState]);
+  useEffect(() => { sendStateRef.current = multiplayer.sendState; }, [multiplayer.sendState]);
+  useEffect(() => { isHostRef.current = multiplayer.isHost; }, [multiplayer.isHost]);
+  useEffect(() => { isConnectedRef.current = multiplayer.isConnected; }, [multiplayer.isConnected]);
+
+  // Guest: poll for state updates
+  useEffect(() => {
+    if (gameModeRef.current !== "online" || multiplayer.isHost) return;
+    const remoteRef = multiplayer.remoteStateRef;
+    const interval = setInterval(() => {
+      const state = remoteRef.current;
+      if (state) { applyNetStateRef.current(state); remoteRef.current = null; }
+    }, 16);
+    return () => clearInterval(interval);
+  }, [gameMode, multiplayer.isHost]);
+
+  // Guest: listen for game_start
+  useEffect(() => {
+    multiplayer.onGameStartRef.current = () => { initOnline(false); };
+  }, [initOnline]);
+
+  // Host: worker message handler
+  useEffect(() => {
+    if (gameModeRef.current !== "online" || !multiplayer.isHost) return;
+    const worker = workerRef.current;
+    if (!worker) return;
+    worker.onmessage = (e: MessageEvent) => {
+      if (e.data.type === 'state') {
+        const net: DuelNetState = e.data.data;
+        applyNetStateRef.current(net);
+        broadcastTickRef.current++;
+        if (broadcastTickRef.current % 3 === 0) { sendStateRef.current(net); }
+      }
+    };
+  }, [gameMode, multiplayer.isHost]);
+
+  // Cleanup worker on unmount
+  useEffect(() => {
+    return () => {
+      if (workerRef.current) {
+        workerRef.current.postMessage({ type: 'stop' });
+        workerRef.current.terminate();
+        workerRef.current = null;
+      }
+    };
+  }, []);
+
   const continueAfterLifeLost = useCallback(() => {
     showLifeLostRef.current = false;
     setShowLifeLost(false);
   }, []);
 
   const quitToMenu = useCallback(() => {
+    if (workerRef.current) {
+      workerRef.current.postMessage({ type: 'stop' });
+      workerRef.current.terminate();
+      workerRef.current = null;
+    }
+    if (gameModeRef.current === "online" || gameModeRef.current === "online_lobby") {
+      multiplayer.disconnect();
+    }
     gameStateRef.current = null;
     duelStateRef.current = null;
     setGameMode("menu");
@@ -2012,7 +2211,7 @@ const Game = () => {
     isPausedRef.current = false;
     setIsPaused(false);
     soundEffects.stopThrust();
-  }, []);
+  }, [multiplayer]);
 
   const togglePause = useCallback(() => {
     isPausedRef.current = !isPausedRef.current;
@@ -2033,7 +2232,7 @@ const Game = () => {
       if (enteringInitialsRef.current) return;
 
       // Pause toggle on Escape
-      if (e.key === "Escape" && (gameModeRef.current === "solo" || gameModeRef.current === "duel")) {
+      if (e.key === "Escape" && (gameModeRef.current === "solo" || gameModeRef.current === "duel" || gameModeRef.current === "online")) {
         if (!showLifeLostRef.current && !showGameOver) {
           e.preventDefault();
           togglePause();
@@ -2070,7 +2269,7 @@ const Game = () => {
       if (gameModeRef.current === "solo") {
         if (e.key === " ") { e.preventDefault(); shootBullet(); }
         if (e.key === "h" || e.key === "H") { e.preventDefault(); hyperspace(); }
-      } else if (gameModeRef.current === "duel") {
+      } else if (gameModeRef.current === "duel" || gameModeRef.current === "online") {
         if (e.key === " ") { e.preventDefault(); }
         if (e.key === "e" || e.key === "E") { e.preventDefault(); }
       }
@@ -2119,7 +2318,7 @@ const Game = () => {
           prev[6] = btnStart;
 
           // Start button toggles pause during gameplay
-          if (justStart && (gameModeRef.current === "solo" || gameModeRef.current === "duel") && !showLifeLostRef.current && !showGameOver) {
+          if (justStart && (gameModeRef.current === "solo" || gameModeRef.current === "duel" || gameModeRef.current === "online") && !showLifeLostRef.current && !showGameOver) {
             togglePause();
           }
 
@@ -2136,13 +2335,13 @@ const Game = () => {
               });
             }
           } else if (gameModeRef.current === "menu") {
-            if (justUp || justDown) {
-              setMenuSelection(s => s === 0 ? 1 : 0);
-            }
+            if (justUp) { setMenuSelection(s => (s - 1 + 3) % 3); }
+            if (justDown) { setMenuSelection(s => (s + 1) % 3); }
             if (justA) {
               setMenuSelection(s => {
                 if (s === 0) initGame();
-                else initDuel();
+                else if (s === 1) initDuel();
+                else setGameMode("online_lobby");
                 return s;
               });
             }
@@ -2172,16 +2371,9 @@ const Game = () => {
                 });
               }
             }
-          } else if (gameModeRef.current === "duel") {
-            // B button to quit duel
+          } else if (gameModeRef.current === "duel" || gameModeRef.current === "online") {
             if (justB) {
-              gameStateRef.current = null;
-              duelStateRef.current = null;
-              setGameMode("menu");
-              setShowGameOver(false);
-              setShowLifeLost(false);
-              showLifeLostRef.current = false;
-              soundEffects.stopThrust();
+              quitToMenu();
             }
           }
         }
@@ -2192,6 +2384,24 @@ const Game = () => {
     return () => cancelAnimationFrame(rafId);
   }, [initGame, initDuel, showGameOver, togglePause, resumeGame, quitToMenu]);
 
+
+  // ===== ONLINE LOBBY SCREEN =====
+  if (gameMode === "online_lobby") {
+    return (
+      <div className="min-h-screen bg-[hsl(var(--game-background))] flex flex-col items-center justify-center p-4">
+        <OnlineLobby
+          onCreateRoom={() => multiplayer.createRoom()}
+          onJoinRoom={(code) => multiplayer.joinRoom(code)}
+          onBack={() => { multiplayer.disconnect(); setGameMode("menu"); }}
+          onStartGame={() => { multiplayer.startGame(); initOnline(true); }}
+          roomCode={multiplayer.roomCode}
+          isHost={multiplayer.isHost}
+          isConnected={multiplayer.isConnected}
+          opponentConnected={multiplayer.opponentConnected}
+        />
+      </div>
+    );
+  }
 
   // ===== MENU SCREEN =====
   if (gameMode === "menu") {
@@ -2226,11 +2436,22 @@ const Game = () => {
           >
             {menuSelection === 1 ? "▸ " : "  "}DUEL
           </Button>
+          <Button
+            onClick={() => setGameMode("online_lobby")}
+            className={`text-2xl px-12 py-6 font-mono tracking-wider border-2 transition-all ${
+              menuSelection === 2
+                ? "shadow-[0_0_20px_rgba(68,255,68,0.5)] border-[#44FF44] text-[#44FF44] bg-[rgba(68,255,68,0.15)]"
+                : "opacity-60 border-[#44FF44]/60 text-[#44FF44]/60"
+            }`}
+          >
+            {menuSelection === 2 ? "▸ " : "  "}ONLINE
+          </Button>
         </div>
 
         <div className="text-[hsl(var(--game-foreground))] font-mono text-xs space-y-1 opacity-60 text-center">
           <div>SOLO: Arrow Keys + Space | Gamepad supported</div>
           <div>DUEL: P1 Arrows+Space | P2 WASD+E | Gamepads 1 & 2</div>
+          <div>ONLINE: Create or join a room to duel remotely</div>
         </div>
 
         <div className="mt-8 flex flex-col gap-2 max-w-md">
@@ -2278,15 +2499,20 @@ const Game = () => {
           <div>WAVE: {displayWave}</div>
         </div>
       )}
-      {gameMode === "duel" && (
+      {(gameMode === "duel" || gameMode === "online") && (
         <div className="mb-4 flex gap-6 font-mono text-lg">
           <div style={{ color: P1_COLOR }}>
-            P1 KILLS: {duelKills[0]} DEATHS: {duelDeaths[0]}
+            P1{gameMode === "online" && multiplayer.isHost ? " (YOU)" : ""} KILLS: {duelKills[0]} DEATHS: {duelDeaths[0]}
           </div>
           <div className="text-[hsl(var(--game-foreground))] opacity-30">|</div>
           <div style={{ color: P2_COLOR }}>
-            P2 KILLS: {duelKills[1]} DEATHS: {duelDeaths[1]}
+            P2{gameMode === "online" && !multiplayer.isHost ? " (YOU)" : ""} KILLS: {duelKills[1]} DEATHS: {duelDeaths[1]}
           </div>
+          {gameMode === "online" && multiplayer.roomCode && (
+            <div className="text-[hsl(var(--game-foreground))] opacity-40 text-sm self-center">
+              ROOM: {multiplayer.roomCode}
+            </div>
+          )}
         </div>
       )}
 
@@ -2441,7 +2667,7 @@ const Game = () => {
         )}
 
         {/* Duel quit button */}
-        {gameMode === "duel" && !isPaused && (
+        {(gameMode === "duel" || gameMode === "online") && !isPaused && (
           <div className="absolute top-2 right-2">
             <Button
               onClick={quitToMenu}
