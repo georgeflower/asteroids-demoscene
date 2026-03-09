@@ -6,6 +6,7 @@ import { soundEffects } from "@/utils/soundEffects";
 import { haptics } from "@/utils/haptics";
 import { useMultiplayer } from "@/hooks/useMultiplayer";
 import OnlineLobby from "@/components/OnlineLobby";
+import CRTBootOverlay from "@/components/CRTBootOverlay";
 import type { DuelNetState } from "@/types/multiplayer";
 
 interface Vector {
@@ -206,6 +207,7 @@ const Game = () => {
   const nowPlayingRef = useRef<{ artist: string; title: string } | null>(null);
   const [gameMode, setGameMode] = useState<GameMode>("menu");
   const gameModeRef = useRef<GameMode>("menu");
+  const [showBootAnimation, setShowBootAnimation] = useState(true);
   const [duelKills, setDuelKills] = useState<[number, number]>([0, 0]);
   const [duelDeaths, setDuelDeaths] = useState<[number, number]>([0, 0]);
   const [menuSelection, setMenuSelection] = useState(0); // 0=solo, 1=duel, 2=online
@@ -2483,6 +2485,11 @@ const Game = () => {
     return () => cancelAnimationFrame(rafId);
   }, [initGame, initDuel, showGameOver, togglePause, resumeGame, quitToMenu]);
 
+
+  // ===== CRT BOOT ANIMATION =====
+  if (showBootAnimation) {
+    return <CRTBootOverlay onComplete={() => setShowBootAnimation(false)} />;
+  }
 
   // ===== ONLINE LOBBY SCREEN =====
   if (gameMode === "online_lobby") {
