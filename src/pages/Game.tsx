@@ -2486,6 +2486,11 @@ const Game = () => {
   }, [initGame, initDuel, showGameOver, togglePause, resumeGame, quitToMenu]);
 
 
+  // ===== CRT BOOT ANIMATION =====
+  if (showBootAnimation) {
+    return <CRTBootOverlay onComplete={() => setShowBootAnimation(false)} />;
+  }
+
   // ===== ONLINE LOBBY SCREEN =====
   if (gameMode === "online_lobby") {
     return (
