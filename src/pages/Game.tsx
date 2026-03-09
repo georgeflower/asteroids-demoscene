@@ -2205,8 +2205,21 @@ const Game = () => {
     setIsTouchDevice('ontouchstart' in window || navigator.maxTouchPoints > 0);
   }, []);
 
+  // Persist autoPlayMusic setting
+  useEffect(() => {
+    localStorage.setItem("autoPlayMusic", String(autoPlayMusic));
+    if (audioRef.current) {
+      if (autoPlayMusic) {
+        audioRef.current.play().catch(() => {});
+      } else {
+        audioRef.current.pause();
+      }
+    }
+  }, [autoPlayMusic]);
+
   // Try to autoplay radio on first user interaction (browsers block autoplay without gesture)
   useEffect(() => {
+    if (!autoPlayMusic) return;
     const tryPlay = () => {
       if (radioStartedRef.current) return;
       if (audioRef.current) {
@@ -2225,7 +2238,7 @@ const Game = () => {
       window.removeEventListener("keydown", tryPlay);
       window.removeEventListener("touchstart", tryPlay);
     };
-  }, []);
+  }, [autoPlayMusic]);
 
   // Poll Nectarine now-playing info via edge function
   useEffect(() => {
