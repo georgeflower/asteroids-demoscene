@@ -12,6 +12,9 @@ export default {
         "2xl": "1400px",
       },
     },
+    fontFamily: {
+        mono: ["'Press Start 2P'", "monospace"],
+      },
     extend: {
       colors: {
         border: "hsl(var(--border))",
