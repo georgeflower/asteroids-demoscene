@@ -564,6 +564,7 @@ const Game = () => {
     setDuelDeaths([0, 0]);
     setGameMode("duel");
     toast.success("DUEL MODE! P1: Arrows+Space | P2: WASD+E");
+    setTimeout(() => { canvasRef.current?.focus(); }, 50);
   }, []);
 
   // ===== ONLINE HELPERS =====
