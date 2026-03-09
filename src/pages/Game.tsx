@@ -2599,16 +2599,16 @@ const Game = () => {
         </div>
       )}
       {(gameMode === "duel" || gameMode === "online") && (
-        <div className="mb-4 flex gap-6 font-mono text-lg">
-          <div style={{ color: P1_COLOR }}>
-            P1{gameMode === "online" && multiplayer.isHost ? " (YOU)" : ""} KILLS: {duelKills[0]} DEATHS: {duelDeaths[0]}
+        <div className="mb-4 flex gap-6 text-xs tracking-wide" style={{ fontFamily: "'Press Start 2P', monospace" }}>
+          <div style={{ color: P1_COLOR, textShadow: `0 0 10px ${P1_COLOR}` }}>
+            P1{gameMode === "online" && multiplayer.isHost ? " (YOU)" : ""} K:{duelKills[0]} D:{duelDeaths[0]}
           </div>
           <div className="text-[hsl(var(--game-foreground))] opacity-30">|</div>
-          <div style={{ color: P2_COLOR }}>
-            P2{gameMode === "online" && !multiplayer.isHost ? " (YOU)" : ""} KILLS: {duelKills[1]} DEATHS: {duelDeaths[1]}
+          <div style={{ color: P2_COLOR, textShadow: `0 0 10px ${P2_COLOR}` }}>
+            P2{gameMode === "online" && !multiplayer.isHost ? " (YOU)" : ""} K:{duelKills[1]} D:{duelDeaths[1]}
           </div>
           {gameMode === "online" && multiplayer.roomCode && (
-            <div className="text-[hsl(var(--game-foreground))] opacity-40 text-sm self-center">
+            <div className="text-[hsl(var(--game-foreground))] opacity-40 text-xs self-center">
               ROOM: {multiplayer.roomCode}
             </div>
           )}
