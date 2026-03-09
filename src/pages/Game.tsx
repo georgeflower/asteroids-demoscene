@@ -2619,6 +2619,56 @@ const Game = () => {
           </Button>
         </div>
 
+        {/* Top 3 High Scores */}
+        {leaderboard.length > 0 && (
+          <div className="mb-8 w-72">
+            <div className="text-sm font-mono text-[hsl(var(--game-glow))] text-center mb-2 tracking-wider" style={{ textShadow: "0 0 10px hsl(var(--game-glow))" }}>
+              ★ TOP SCORES ★
+            </div>
+            <div className="border border-[hsl(var(--game-foreground))]/30 p-2">
+              {leaderboard.slice(0, 3).map((entry, i) => (
+                <div key={i} className="flex justify-between font-mono text-sm py-0.5 text-[hsl(var(--game-foreground))]">
+                  <span className={i === 0 ? "text-[#FFD700]" : i === 1 ? "text-[#C0C0C0]" : "text-[#CD7F32]"}>
+                    {(i + 1)}. {entry.initials.padEnd(3, " ")}
+                  </span>
+                  <span className={i === 0 ? "text-[#FFD700]" : i === 1 ? "text-[#C0C0C0]" : "text-[#CD7F32]"}>
+                    {entry.score.toString().padStart(8, "0")}
+                  </span>
+                </div>
+              ))}
+            </div>
+            <button
+              onClick={() => setShowFullLeaderboard(true)}
+              className="w-full mt-1 font-mono text-[10px] text-[hsl(var(--game-foreground))] opacity-50 hover:opacity-100 transition-opacity uppercase tracking-widest text-center py-1"
+            >
+              VIEW ALL SCORES ▸
+            </button>
+          </div>
+        )}
+
+        {/* Full leaderboard overlay */}
+        {showFullLeaderboard && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85" onClick={() => setShowFullLeaderboard(false)}>
+            <div className="bg-[hsl(var(--game-background))] border-2 border-[hsl(var(--game-foreground))]/40 p-6 max-w-sm w-full max-h-[80vh] overflow-auto" onClick={(e) => e.stopPropagation()}>
+              <div className="text-lg font-mono text-[hsl(var(--game-glow))] text-center mb-4 tracking-wider" style={{ textShadow: "0 0 10px hsl(var(--game-glow))" }}>
+                ★ HIGH SCORES ★
+              </div>
+              {leaderboard.map((entry, i) => (
+                <div key={i} className="flex justify-between font-mono text-sm py-0.5 text-[hsl(var(--game-foreground))]">
+                  <span>{(i + 1).toString().padStart(2, " ")}. {entry.initials.padEnd(3, " ")}</span>
+                  <span>{entry.score.toString().padStart(8, "0")}</span>
+                </div>
+              ))}
+              <button
+                onClick={() => setShowFullLeaderboard(false)}
+                className="w-full mt-4 font-mono text-xs text-[hsl(var(--game-foreground))] opacity-60 hover:opacity-100 transition-opacity uppercase tracking-widest text-center py-2 border border-[hsl(var(--game-foreground))]/30"
+              >
+                CLOSE
+              </button>
+            </div>
+          </div>
+        )}
+
         <div className="text-[hsl(var(--game-foreground))] font-mono text-xs space-y-1 opacity-60 text-center">
           <div>SOLO: Arrow Keys + Space | Gamepad supported</div>
           <div>DUEL: P1 Arrows+Space | P2 WASD+E | Gamepads 1 & 2</div>
@@ -2639,7 +2689,7 @@ const Game = () => {
           <audio
             ref={audioRef}
             controls
-            autoPlay
+            autoPlay={autoPlayMusic}
             preload="auto"
             className="w-full"
             onError={(e) => {
@@ -2649,6 +2699,15 @@ const Game = () => {
           >
             <source src="https://nectarine.inversi0n.org/necta192.mp3" type="audio/mpeg" />
           </audio>
+          <label className="flex items-center gap-2 font-mono text-xs text-[hsl(var(--game-foreground))] opacity-70 hover:opacity-100 transition-opacity cursor-pointer justify-center mt-1">
+            <input
+              type="checkbox"
+              checked={autoPlayMusic}
+              onChange={(e) => setAutoPlayMusic(e.target.checked)}
+              className="accent-[hsl(var(--game-foreground))]"
+            />
+            AUTO-PLAY MUSIC
+          </label>
           <div className="text-[hsl(var(--game-foreground))] font-mono text-xs text-center opacity-60 mt-1">
             Thanks to <a href="https://scenestream.net/demovibes/" target="_blank" rel="noopener noreferrer" className="underline hover:opacity-80">Nectarine Demoscene Radio</a> for the music!
           </div>
