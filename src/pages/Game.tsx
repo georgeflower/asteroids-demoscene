@@ -1960,16 +1960,28 @@ const Game = () => {
       ctx.lineWidth = 2;
       ctx.shadowBlur = 20;
       ctx.shadowColor = color;
+      // Draw hexagon (6 sides, bigger = 14px radius)
       ctx.beginPath();
-      for (let i = 0; i < 5; i++) {
-        const angle = (i / 5) * Math.PI * 2 - Math.PI / 2;
-        const x = Math.cos(angle) * 10;
-        const y = Math.sin(angle) * 10;
+      for (let i = 0; i < 6; i++) {
+        const angle = (i / 6) * Math.PI * 2 - Math.PI / 2;
+        const x = Math.cos(angle) * 14;
+        const y = Math.sin(angle) * 14;
         if (i === 0) ctx.moveTo(x, y);
         else ctx.lineTo(x, y);
       }
       ctx.closePath();
       ctx.stroke();
+      // Draw icon label always upright
+      ctx.rotate(-powerUp.rotation);
+      ctx.fillStyle = color;
+      ctx.font = "bold 9px monospace";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      const icon = powerUp.type === "shield" ? "SH"
+        : powerUp.type === "rapidFire" ? "RF"
+        : powerUp.type === "extraLife" ? "+1"
+        : "2X";
+      ctx.fillText(icon, 0, 0);
       ctx.restore();
     });
 
