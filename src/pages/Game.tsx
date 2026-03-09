@@ -233,25 +233,40 @@ const Game = () => {
   // Keep ref in sync
   useEffect(() => { gameModeRef.current = gameMode; }, [gameMode]);
 
-  const loadLeaderboard = useCallback(() => {
-    try {
-      const stored = localStorage.getItem("asteroids-leaderboard");
-      return stored ? JSON.parse(stored) : [];
-    } catch { return []; }
+  const loadLeaderboard = useCallback(async () => {
+    const { data, error } = await supabase
+      .from('high_scores')
+      .select('initials, score, created_at')
+      .order('score', { ascending: false })
+      .limit(10);
+    if (!error && data) {
+      return data.map((row) => ({
+        initials: row.initials,
+        score: row.score,
+        date: new Date(row.created_at).toLocaleDateString(),
+      }));
+    }
+    return [];
   }, []);
 
-  const saveToLeaderboard = useCallback((playerInitials: string, score: number) => {
-    const board = loadLeaderboard();
-    board.push({ initials: playerInitials.toUpperCase(), score, date: new Date().toLocaleDateString() });
-    board.sort((a: any, b: any) => b.score - a.score);
-    const top10 = board.slice(0, 10);
-    localStorage.setItem("asteroids-leaderboard", JSON.stringify(top10));
-    setLeaderboard(top10);
+  const saveToLeaderboard = useCallback(async (playerInitials: string, score: number) => {
+    const { error } = await supabase
+      .from('high_scores')
+      .insert({ initials: playerInitials.toUpperCase(), score });
+    if (error) {
+      toast.error('Failed to save score online');
+      return;
+    }
+    const board = await loadLeaderboard();
+    setLeaderboard(board);
   }, [loadLeaderboard]);
 
   const isHighScore = useCallback((score: number) => {
-    const board = loadLeaderboard();
-    return board.length < 10 || score > (board[board.length - 1]?.score ?? 0);
+    return leaderboard.length < 10 || score > (leaderboard[leaderboard.length - 1]?.score ?? 0);
+  }, [leaderboard]);
+
+  useEffect(() => {
+    loadLeaderboard().then(setLeaderboard);
   }, [loadLeaderboard]);
 
   const createStars = (): Star[] => {
@@ -773,7 +788,7 @@ const Game = () => {
       state.gameOver = true;
       setShowGameOver(true);
       if (isHighScore(state.score)) setEnteringInitials(true);
-      setLeaderboard(loadLeaderboard());
+      loadLeaderboard().then(setLeaderboard);
       toast.error(`Game Over! Final Score: ${state.score}`);
       haptics.gameOver();
     } else {
@@ -1344,7 +1359,7 @@ const Game = () => {
           multiplier: { text: "2x SCORE!", color: "#FFFF66" },
         };
         const label = powerUpLabels[powerUp.type];
-        spawnFloatingText(powerUp.pos, label.text, label.color, 20);
+        spawnFloatingText(powerUp.pos, label.text, label.color, 28);
 
         switch (powerUp.type) {
           case "shield": state.powerUpActive.shield = 300; state.ship.invulnerable = true; break;
@@ -1352,6 +1367,7 @@ const Game = () => {
           case "extraLife": state.lives++; setDisplayLives(state.lives); break;
           case "multiplier": state.powerUpActive.multiplier = 900; break;
         }
+        soundEffects.powerUp();
         haptics.medium();
         return false;
       }
@@ -1944,16 +1960,28 @@ const Game = () => {
       ctx.lineWidth = 2;
       ctx.shadowBlur = 20;
       ctx.shadowColor = color;
+      // Draw hexagon (6 sides, bigger = 14px radius)
       ctx.beginPath();
-      for (let i = 0; i < 5; i++) {
-        const angle = (i / 5) * Math.PI * 2 - Math.PI / 2;
-        const x = Math.cos(angle) * 10;
-        const y = Math.sin(angle) * 10;
+      for (let i = 0; i < 6; i++) {
+        const angle = (i / 6) * Math.PI * 2 - Math.PI / 2;
+        const x = Math.cos(angle) * 14;
+        const y = Math.sin(angle) * 14;
         if (i === 0) ctx.moveTo(x, y);
         else ctx.lineTo(x, y);
       }
       ctx.closePath();
       ctx.stroke();
+      // Draw icon label always upright
+      ctx.rotate(-powerUp.rotation);
+      ctx.fillStyle = color;
+      ctx.font = "bold 9px monospace";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      const icon = powerUp.type === "shield" ? "SH"
+        : powerUp.type === "rapidFire" ? "RF"
+        : powerUp.type === "extraLife" ? "+1"
+        : "2X";
+      ctx.fillText(icon, 0, 0);
       ctx.restore();
     });
 
@@ -2843,39 +2871,38 @@ const Game = () => {
       )}
 
       {!isTouchDevice && (
-        <div className="mt-6 text-[hsl(var(--game-foreground))] font-mono text-sm space-y-2">
-          <div className="text-center">CONTROLS:</div>
+        <div className="mt-4 text-[hsl(var(--game-foreground))] font-mono text-[8px] space-y-1 opacity-60">
+          <div className="text-center text-[9px] mb-1">CONTROLS</div>
           {gameMode === "solo" && (
-            <div className="grid grid-cols-2 gap-x-8 gap-y-1 text-xs">
-              <div className="font-bold opacity-70 col-span-2 mt-1">KEYBOARD</div>
-              <div>← → : ROTATE</div>
-              <div>↑ : THRUST</div>
-              <div>SPACE : FIRE</div>
-              <div>H : HYPERSPACE</div>
-              <div>ESC : PAUSE</div>
-              <div className="font-bold opacity-70 col-span-2 mt-2">GAMEPAD</div>
-              <div>D-PAD/STICK : MOVE</div>
-              <div>X / ↑ : THRUST</div>
-              <div>A : FIRE</div>
-              <div>B : HYPERSPACE</div>
-              <div>START : PAUSE</div>
+            <div className="grid grid-cols-2 gap-x-6 gap-y-0.5 text-[8px]">
+              <div className="font-bold opacity-70 col-span-2">KEYBOARD</div>
+              <div>← → ROTATE</div>
+              <div>↑ THRUST</div>
+              <div>SPACE FIRE</div>
+              <div>H HYPERSPACE</div>
+              <div>ESC PAUSE</div>
+              <div className="font-bold opacity-70 col-span-2 mt-1">GAMEPAD</div>
+              <div>STICK/DPAD MOVE</div>
+              <div>X/↑ THRUST</div>
+              <div>A FIRE</div>
+              <div>B HYPER</div>
+              <div>START PAUSE</div>
             </div>
           )}
           {gameMode === "duel" && (
-            <div className="grid grid-cols-2 gap-x-12 gap-y-1 text-xs">
-              <div className="font-bold opacity-70 col-span-2 mt-1">KEYBOARD</div>
+            <div className="grid grid-cols-2 gap-x-6 gap-y-0.5 text-[8px]">
+              <div className="font-bold opacity-70 col-span-2">KEYBOARD</div>
               <div style={{ color: P1_COLOR }}>P1: ← → ROTATE</div>
               <div style={{ color: P2_COLOR }}>P2: A D ROTATE</div>
               <div style={{ color: P1_COLOR }}>P1: ↑ THRUST</div>
               <div style={{ color: P2_COLOR }}>P2: W THRUST</div>
               <div style={{ color: P1_COLOR }}>P1: SPACE FIRE</div>
               <div style={{ color: P2_COLOR }}>P2: E FIRE</div>
-              <div className="col-span-2">ESC : PAUSE</div>
-              <div className="font-bold opacity-70 col-span-2 mt-2">GAMEPAD</div>
-              <div style={{ color: P1_COLOR }}>P1: Gamepad 1</div>
-              <div style={{ color: P2_COLOR }}>P2: Gamepad 2</div>
-              <div className="col-span-2">A: FIRE | B: HYPER | X/↑: THRUST</div>
-              <div className="col-span-2">START: PAUSE</div>
+              <div className="col-span-2">ESC PAUSE</div>
+              <div className="font-bold opacity-70 col-span-2 mt-1">GAMEPAD</div>
+              <div style={{ color: P1_COLOR }}>P1: GP1</div>
+              <div style={{ color: P2_COLOR }}>P2: GP2</div>
+              <div className="col-span-2">A FIRE | B HYPER | X/↑ THRUST | START PAUSE</div>
             </div>
           )}
         </div>

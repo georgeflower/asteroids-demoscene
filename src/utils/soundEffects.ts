@@ -133,6 +133,25 @@ class SoundEffects {
     oscillator.start(this.audioContext.currentTime);
     oscillator.stop(this.audioContext.currentTime + 0.15);
   }
+
+  // Power-up collection - bright ascending arpeggio chime
+  powerUp() {
+    const notes = [523.25, 659.25, 783.99, 1046.50]; // C5, E5, G5, C6
+    notes.forEach((freq, i) => {
+      const oscillator = this.audioContext.createOscillator();
+      const gainNode = this.audioContext.createGain();
+      oscillator.type = 'sine';
+      oscillator.connect(gainNode);
+      gainNode.connect(this.audioContext.destination);
+      const t = this.audioContext.currentTime + i * 0.07;
+      oscillator.frequency.setValueAtTime(freq, t);
+      gainNode.gain.setValueAtTime(0.001, t);
+      gainNode.gain.linearRampToValueAtTime(0.3, t + 0.01);
+      gainNode.gain.exponentialRampToValueAtTime(0.001, t + 0.18);
+      oscillator.start(t);
+      oscillator.stop(t + 0.18);
+    });
+  }
 }
 
 // Singleton instance
