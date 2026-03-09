@@ -685,7 +685,8 @@ const Game = () => {
     state.wave++;
     const isBossWave = state.wave % 5 === 0;
 
-    if (isBossWave && !state.bossDefeated) {
+    if (isBossWave) {
+      state.bossDefeated = false;
       state.boss = createBoss(state.wave);
       state.asteroids = [];
       state.aliens = [];
