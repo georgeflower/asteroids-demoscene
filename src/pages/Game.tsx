@@ -2377,6 +2377,8 @@ const Game = () => {
     isPausedRef.current = false;
     setIsPaused(false);
     soundEffects.stopThrust();
+    // Release canvas focus
+    canvasRef.current?.blur();
   }, [multiplayer]);
 
   const togglePause = useCallback(() => {
