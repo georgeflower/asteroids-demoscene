@@ -219,6 +219,11 @@ const Game = () => {
   const [pauseSelection, setPauseSelection] = useState(0); // 0=resume, 1=quit
   const prevGamepadButtonRef = useRef<boolean[]>([false, false, false, false, false, false, false]);
   const audioRef = useRef<HTMLAudioElement>(null);
+  const [autoPlayMusic, setAutoPlayMusic] = useState(() => {
+    const stored = localStorage.getItem("autoPlayMusic");
+    return stored === null ? true : stored === "true";
+  });
+  const [showFullLeaderboard, setShowFullLeaderboard] = useState(false);
   const radioStartedRef = useRef(false);
   const onelinerRef = useRef<{ author: string; message: string } | null>(null);
   const lastOnelinerTimeRef = useRef<string>("");
@@ -513,6 +518,8 @@ const Game = () => {
     showLifeLostRef.current = false;
     setGameMode("solo");
     toast.success("Game Started! Use Arrow Keys to move, Space to shoot");
+    // Focus canvas for input capture
+    setTimeout(() => { canvasRef.current?.focus(); }, 50);
   }, []);
 
   const initDuel = useCallback(() => {
@@ -557,6 +564,7 @@ const Game = () => {
     setDuelDeaths([0, 0]);
     setGameMode("duel");
     toast.success("DUEL MODE! P1: Arrows+Space | P2: WASD+E");
+    setTimeout(() => { canvasRef.current?.focus(); }, 50);
   }, []);
 
   // ===== ONLINE HELPERS =====
@@ -667,6 +675,7 @@ const Game = () => {
       worker.postMessage({ type: 'init' });
     }
     toast.success(isHost ? "Game started! You are HOST (P1)" : "Game started! You are GUEST (P2)");
+    setTimeout(() => { canvasRef.current?.focus(); }, 50);
   }, []);
 
   const nextWave = useCallback(() => {
@@ -2025,6 +2034,19 @@ const Game = () => {
     ctx.fillText(`${theme.name.toUpperCase()} ZONE`, CANVAS_WIDTH - 10, 18);
     ctx.restore();
 
+    // Top score in top-right corner
+    if (leaderboard.length > 0) {
+      ctx.save();
+      ctx.globalAlpha = 0.5;
+      ctx.font = "8px 'Press Start 2P', monospace";
+      ctx.fillStyle = "#FFD700";
+      ctx.shadowBlur = 6;
+      ctx.shadowColor = "#FFD700";
+      ctx.textAlign = "right";
+      ctx.fillText(`TOP: ${leaderboard[0].score.toString().padStart(8, "0")}`, CANVAS_WIDTH - 10, 38);
+      ctx.restore();
+    }
+
     // Now playing marquee at bottom of canvas
     const np = nowPlayingRef.current;
     if (np) {
@@ -2183,8 +2205,21 @@ const Game = () => {
     setIsTouchDevice('ontouchstart' in window || navigator.maxTouchPoints > 0);
   }, []);
 
+  // Persist autoPlayMusic setting
+  useEffect(() => {
+    localStorage.setItem("autoPlayMusic", String(autoPlayMusic));
+    if (audioRef.current) {
+      if (autoPlayMusic) {
+        audioRef.current.play().catch(() => {});
+      } else {
+        audioRef.current.pause();
+      }
+    }
+  }, [autoPlayMusic]);
+
   // Try to autoplay radio on first user interaction (browsers block autoplay without gesture)
   useEffect(() => {
+    if (!autoPlayMusic) return;
     const tryPlay = () => {
       if (radioStartedRef.current) return;
       if (audioRef.current) {
@@ -2203,7 +2238,7 @@ const Game = () => {
       window.removeEventListener("keydown", tryPlay);
       window.removeEventListener("touchstart", tryPlay);
     };
-  }, []);
+  }, [autoPlayMusic]);
 
   // Poll Nectarine now-playing info via edge function
   useEffect(() => {
@@ -2342,6 +2377,8 @@ const Game = () => {
     isPausedRef.current = false;
     setIsPaused(false);
     soundEffects.stopThrust();
+    // Release canvas focus
+    canvasRef.current?.blur();
   }, [multiplayer]);
 
   const togglePause = useCallback(() => {
@@ -2358,66 +2395,64 @@ const Game = () => {
     setIsPaused(false);
   }, []);
 
+  const handleCanvasKeyDown = useCallback((e: React.KeyboardEvent<HTMLCanvasElement>) => {
+    if (enteringInitialsRef.current) return;
+
+    // Pause toggle on Escape
+    if (e.key === "Escape" && (gameModeRef.current === "solo" || gameModeRef.current === "duel" || gameModeRef.current === "online")) {
+      if (!showLifeLostRef.current && !showGameOver) {
+        e.preventDefault();
+        togglePause();
+        return;
+      }
+    }
+
+    // When paused, handle pause menu navigation
+    if (isPausedRef.current) {
+      if (e.key === "ArrowUp" || e.key === "ArrowDown" || e.key === "w" || e.key === "W" || e.key === "s" || e.key === "S") {
+        e.preventDefault();
+        setPauseSelection(s => s === 0 ? 1 : 0);
+      }
+      if (e.key === " " || e.key === "Enter") {
+        e.preventDefault();
+        setPauseSelection(s => {
+          if (s === 0) resumeGame();
+          else { resumeGame(); quitToMenu(); }
+          return s;
+        });
+      }
+      return;
+    }
+
+    if (showLifeLostRef.current) {
+      if (e.key === " " || e.key === "Enter") {
+        e.preventDefault();
+        showLifeLostRef.current = false;
+        setShowLifeLost(false);
+      }
+      return;
+    }
+    keysRef.current[e.key] = true;
+    if (gameModeRef.current === "solo") {
+      if (e.key === " ") { e.preventDefault(); shootBullet(); }
+      if (e.key === "h" || e.key === "H") { e.preventDefault(); hyperspace(); }
+    } else if (gameModeRef.current === "duel" || gameModeRef.current === "online") {
+      if (e.key === " ") { e.preventDefault(); }
+      if (e.key === "e" || e.key === "E") { e.preventDefault(); }
+    }
+  }, [shootBullet, hyperspace, togglePause, resumeGame, quitToMenu, showGameOver]);
+
+  const handleCanvasKeyUp = useCallback((e: React.KeyboardEvent<HTMLCanvasElement>) => {
+    keysRef.current[e.key] = false;
+  }, []);
+
+  // Start game loop
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (enteringInitialsRef.current) return;
-
-      // Pause toggle on Escape
-      if (e.key === "Escape" && (gameModeRef.current === "solo" || gameModeRef.current === "duel" || gameModeRef.current === "online")) {
-        if (!showLifeLostRef.current && !showGameOver) {
-          e.preventDefault();
-          togglePause();
-          return;
-        }
-      }
-
-      // When paused, handle pause menu navigation
-      if (isPausedRef.current) {
-        if (e.key === "ArrowUp" || e.key === "ArrowDown" || e.key === "w" || e.key === "W" || e.key === "s" || e.key === "S") {
-          e.preventDefault();
-          setPauseSelection(s => s === 0 ? 1 : 0);
-        }
-        if (e.key === " " || e.key === "Enter") {
-          e.preventDefault();
-          setPauseSelection(s => {
-            if (s === 0) resumeGame();
-            else { resumeGame(); quitToMenu(); }
-            return s;
-          });
-        }
-        return;
-      }
-
-      if (showLifeLostRef.current) {
-        if (e.key === " " || e.key === "Enter") {
-          e.preventDefault();
-          showLifeLostRef.current = false;
-          setShowLifeLost(false);
-        }
-        return;
-      }
-      keysRef.current[e.key] = true;
-      if (gameModeRef.current === "solo") {
-        if (e.key === " ") { e.preventDefault(); shootBullet(); }
-        if (e.key === "h" || e.key === "H") { e.preventDefault(); hyperspace(); }
-      } else if (gameModeRef.current === "duel" || gameModeRef.current === "online") {
-        if (e.key === " ") { e.preventDefault(); }
-        if (e.key === "e" || e.key === "E") { e.preventDefault(); }
-      }
-    };
-
-    const handleKeyUp = (e: KeyboardEvent) => { keysRef.current[e.key] = false; };
-
-    window.addEventListener("keydown", handleKeyDown);
-    window.addEventListener("keyup", handleKeyUp);
     animationFrameRef.current = requestAnimationFrame(gameLoop);
-
     return () => {
-      window.removeEventListener("keydown", handleKeyDown);
-      window.removeEventListener("keyup", handleKeyUp);
       if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
     };
-  }, [shootBullet, hyperspace, gameLoop, togglePause, resumeGame, quitToMenu, showGameOver]);
+  }, [gameLoop]);
 
   // Gamepad polling for menus and overlays
   useEffect(() => {
@@ -2584,6 +2619,56 @@ const Game = () => {
           </Button>
         </div>
 
+        {/* Top 3 High Scores */}
+        {leaderboard.length > 0 && (
+          <div className="mb-8 w-72">
+            <div className="text-sm font-mono text-[hsl(var(--game-glow))] text-center mb-2 tracking-wider" style={{ textShadow: "0 0 10px hsl(var(--game-glow))" }}>
+              ★ TOP SCORES ★
+            </div>
+            <div className="border border-[hsl(var(--game-foreground))]/30 p-2">
+              {leaderboard.slice(0, 3).map((entry, i) => (
+                <div key={i} className="flex justify-between font-mono text-sm py-0.5 text-[hsl(var(--game-foreground))]">
+                  <span className={i === 0 ? "text-[#FFD700]" : i === 1 ? "text-[#C0C0C0]" : "text-[#CD7F32]"}>
+                    {(i + 1)}. {entry.initials.padEnd(3, " ")}
+                  </span>
+                  <span className={i === 0 ? "text-[#FFD700]" : i === 1 ? "text-[#C0C0C0]" : "text-[#CD7F32]"}>
+                    {entry.score.toString().padStart(8, "0")}
+                  </span>
+                </div>
+              ))}
+            </div>
+            <button
+              onClick={() => setShowFullLeaderboard(true)}
+              className="w-full mt-1 font-mono text-[10px] text-[hsl(var(--game-foreground))] opacity-50 hover:opacity-100 transition-opacity uppercase tracking-widest text-center py-1"
+            >
+              VIEW ALL SCORES ▸
+            </button>
+          </div>
+        )}
+
+        {/* Full leaderboard overlay */}
+        {showFullLeaderboard && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85" onClick={() => setShowFullLeaderboard(false)}>
+            <div className="bg-[hsl(var(--game-background))] border-2 border-[hsl(var(--game-foreground))]/40 p-6 max-w-sm w-full max-h-[80vh] overflow-auto" onClick={(e) => e.stopPropagation()}>
+              <div className="text-lg font-mono text-[hsl(var(--game-glow))] text-center mb-4 tracking-wider" style={{ textShadow: "0 0 10px hsl(var(--game-glow))" }}>
+                ★ HIGH SCORES ★
+              </div>
+              {leaderboard.map((entry, i) => (
+                <div key={i} className="flex justify-between font-mono text-sm py-0.5 text-[hsl(var(--game-foreground))]">
+                  <span>{(i + 1).toString().padStart(2, " ")}. {entry.initials.padEnd(3, " ")}</span>
+                  <span>{entry.score.toString().padStart(8, "0")}</span>
+                </div>
+              ))}
+              <button
+                onClick={() => setShowFullLeaderboard(false)}
+                className="w-full mt-4 font-mono text-xs text-[hsl(var(--game-foreground))] opacity-60 hover:opacity-100 transition-opacity uppercase tracking-widest text-center py-2 border border-[hsl(var(--game-foreground))]/30"
+              >
+                CLOSE
+              </button>
+            </div>
+          </div>
+        )}
+
         <div className="text-[hsl(var(--game-foreground))] font-mono text-xs space-y-1 opacity-60 text-center">
           <div>SOLO: Arrow Keys + Space | Gamepad supported</div>
           <div>DUEL: P1 Arrows+Space | P2 WASD+E | Gamepads 1 & 2</div>
@@ -2604,7 +2689,7 @@ const Game = () => {
           <audio
             ref={audioRef}
             controls
-            autoPlay
+            autoPlay={autoPlayMusic}
             preload="auto"
             className="w-full"
             onError={(e) => {
@@ -2614,6 +2699,15 @@ const Game = () => {
           >
             <source src="https://nectarine.inversi0n.org/necta192.mp3" type="audio/mpeg" />
           </audio>
+          <label className="flex items-center gap-2 font-mono text-xs text-[hsl(var(--game-foreground))] opacity-70 hover:opacity-100 transition-opacity cursor-pointer justify-center mt-1">
+            <input
+              type="checkbox"
+              checked={autoPlayMusic}
+              onChange={(e) => setAutoPlayMusic(e.target.checked)}
+              className="accent-[hsl(var(--game-foreground))]"
+            />
+            AUTO-PLAY MUSIC
+          </label>
           <div className="text-[hsl(var(--game-foreground))] font-mono text-xs text-center opacity-60 mt-1">
             Thanks to <a href="https://scenestream.net/demovibes/" target="_blank" rel="noopener noreferrer" className="underline hover:opacity-80">Nectarine Demoscene Radio</a> for the music!
           </div>
@@ -2657,7 +2751,10 @@ const Game = () => {
           ref={canvasRef}
           width={CANVAS_WIDTH}
           height={CANVAS_HEIGHT}
-          className="border-2 border-[hsl(var(--game-foreground))] shadow-[0_0_30px_hsl(var(--game-foreground))] max-w-full"
+          tabIndex={0}
+          onKeyDown={handleCanvasKeyDown}
+          onKeyUp={handleCanvasKeyUp}
+          className="border-2 border-[hsl(var(--game-foreground))] shadow-[0_0_30px_hsl(var(--game-foreground))] max-w-full outline-none"
           style={{ touchAction: 'none' }}
         />
 
@@ -2934,7 +3031,7 @@ const Game = () => {
         <audio
           ref={audioRef}
           controls
-          autoPlay
+          autoPlay={autoPlayMusic}
           preload="auto"
           className="w-full"
           onError={(e) => {
@@ -2944,6 +3041,15 @@ const Game = () => {
         >
           <source src="https://nectarine.inversi0n.org/necta192.mp3" type="audio/mpeg" />
         </audio>
+        <label className="flex items-center gap-2 font-mono text-xs text-[hsl(var(--game-foreground))] opacity-70 hover:opacity-100 transition-opacity cursor-pointer justify-center mt-1">
+          <input
+            type="checkbox"
+            checked={autoPlayMusic}
+            onChange={(e) => setAutoPlayMusic(e.target.checked)}
+            className="accent-[hsl(var(--game-foreground))]"
+          />
+          AUTO-PLAY MUSIC
+        </label>
         <div className="text-[hsl(var(--game-foreground))] font-mono text-xs text-center opacity-60 mt-1">
           Thanks to <a href="https://scenestream.net/demovibes/" target="_blank" rel="noopener noreferrer" className="underline hover:opacity-80">Nectarine Demoscene Radio</a> for the music!
         </div>
