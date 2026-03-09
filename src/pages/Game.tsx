@@ -219,6 +219,11 @@ const Game = () => {
   const [pauseSelection, setPauseSelection] = useState(0); // 0=resume, 1=quit
   const prevGamepadButtonRef = useRef<boolean[]>([false, false, false, false, false, false, false]);
   const audioRef = useRef<HTMLAudioElement>(null);
+  const [autoPlayMusic, setAutoPlayMusic] = useState(() => {
+    const stored = localStorage.getItem("autoPlayMusic");
+    return stored === null ? true : stored === "true";
+  });
+  const [showFullLeaderboard, setShowFullLeaderboard] = useState(false);
   const radioStartedRef = useRef(false);
   const onelinerRef = useRef<{ author: string; message: string } | null>(null);
   const lastOnelinerTimeRef = useRef<string>("");
