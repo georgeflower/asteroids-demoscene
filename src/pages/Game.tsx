@@ -2592,7 +2592,7 @@ const Game = () => {
     <div className="min-h-screen bg-[hsl(var(--game-background))] flex flex-col items-center justify-center p-4">
       {/* HUD */}
       {gameMode === "solo" && (
-        <div className="mb-4 flex gap-8 text-[hsl(var(--game-foreground))] text-xl font-mono">
+        <div className="mb-4 flex gap-8 text-[hsl(var(--game-foreground))] text-xs tracking-wide" style={{ fontFamily: "'Press Start 2P', monospace", textShadow: "0 0 10px hsl(var(--game-foreground))" }}>
           <div>SCORE: {displayScore.toString().padStart(8, "0")}</div>
           <div>LIVES: {displayLives}</div>
           <div>WAVE: {displayWave}</div>
