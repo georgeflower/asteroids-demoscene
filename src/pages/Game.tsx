@@ -185,6 +185,7 @@ const getTheme = (wave: number): ColorTheme => {
 const getSpeedScale = (wave: number): number => 1 + wave * 0.05;
 
 const Game = () => {
+  const navigate = useNavigate();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const gameStateRef = useRef<GameState | null>(null);
   const duelStateRef = useRef<DuelState | null>(null);
