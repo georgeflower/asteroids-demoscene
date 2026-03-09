@@ -1997,8 +1997,8 @@ const Game = () => {
     const np = nowPlayingRef.current;
     if (np) {
       ctx.save();
-      ctx.font = "10px monospace";
-      const npText = `♪ ${np.artist} — ${np.title}   `;
+      ctx.font = "13px 'Press Start 2P', monospace";
+      const npText = `* ${np.artist} -- ${np.title}   `;
       const npTextWidth = ctx.measureText(npText).width;
       // Advance marquee position
       nowPlayingMarqueeXRef.current -= MARQUEE_SPEED;
@@ -2007,28 +2007,28 @@ const Game = () => {
       }
       // Clip to bottom strip
       ctx.beginPath();
-      ctx.rect(0, CANVAS_HEIGHT - 20, CANVAS_WIDTH, 20);
+      ctx.rect(0, CANVAS_HEIGHT - 30, CANVAS_WIDTH, 30);
       ctx.clip();
       // Demoscene glow backdrop
-      const glowGrad = ctx.createLinearGradient(0, CANVAS_HEIGHT - 20, 0, CANVAS_HEIGHT);
+      const glowGrad = ctx.createLinearGradient(0, CANVAS_HEIGHT - 30, 0, CANVAS_HEIGHT);
       glowGrad.addColorStop(0, "rgba(0, 150, 255, 0)");
-      glowGrad.addColorStop(0.5, "rgba(0, 150, 255, 0.12)");
-      glowGrad.addColorStop(1, "rgba(0, 150, 255, 0)");
+      glowGrad.addColorStop(0.5, "rgba(0, 150, 255, 0.15)");
+      glowGrad.addColorStop(1, "rgba(0, 150, 255, 0.05)");
       ctx.fillStyle = glowGrad;
-      ctx.fillRect(0, CANVAS_HEIGHT - 20, CANVAS_WIDTH, 20);
+      ctx.fillRect(0, CANVAS_HEIGHT - 30, CANVAS_WIDTH, 30);
       // Scanlines overlay
-      ctx.globalAlpha = 0.08;
+      ctx.globalAlpha = 0.07;
       ctx.fillStyle = "#000000";
-      for (let i = 0; i < 10; i++) {
-        ctx.fillRect(0, CANVAS_HEIGHT - 20 + i * 2, CANVAS_WIDTH, 1);
+      for (let i = 0; i < 15; i++) {
+        ctx.fillRect(0, CANVAS_HEIGHT - 30 + i * 2, CANVAS_WIDTH, 1);
       }
       // Glow text effect
-      ctx.globalAlpha = 0.65;
+      ctx.globalAlpha = 0.85;
       ctx.shadowColor = "#00CCFF";
-      ctx.shadowBlur = 8;
-      ctx.fillStyle = "#FFFFFF";
+      ctx.shadowBlur = 12;
+      ctx.fillStyle = "#AAEEFF";
       ctx.textAlign = "left";
-      ctx.fillText(npText, nowPlayingMarqueeXRef.current, CANVAS_HEIGHT - 7);
+      ctx.fillText(npText, nowPlayingMarqueeXRef.current, CANVAS_HEIGHT - 9);
       ctx.restore();
     }
 
@@ -2036,8 +2036,8 @@ const Game = () => {
     const ol = onelinerRef.current;
     if (ol) {
       ctx.save();
-      ctx.font = "10px monospace";
-      const olText = `<${ol.author}> ${ol.message}   `;
+      ctx.font = "11px 'Press Start 2P', monospace";
+      const olText = `[${ol.author}] ${ol.message}   `;
       const olTextWidth = ctx.measureText(olText).width;
       // Advance marquee position
       onelinerMarqueeXRef.current -= MARQUEE_SPEED;
@@ -2046,28 +2046,28 @@ const Game = () => {
       }
       // Clip to top strip
       ctx.beginPath();
-      ctx.rect(0, 20, CANVAS_WIDTH, 16);
+      ctx.rect(0, 18, CANVAS_WIDTH, 22);
       ctx.clip();
       // Demoscene glow backdrop (gold)
-      const olGlowGrad = ctx.createLinearGradient(0, 20, 0, 36);
+      const olGlowGrad = ctx.createLinearGradient(0, 18, 0, 40);
       olGlowGrad.addColorStop(0, "rgba(255, 180, 0, 0)");
-      olGlowGrad.addColorStop(0.5, "rgba(255, 180, 0, 0.1)");
+      olGlowGrad.addColorStop(0.5, "rgba(255, 180, 0, 0.12)");
       olGlowGrad.addColorStop(1, "rgba(255, 180, 0, 0)");
       ctx.fillStyle = olGlowGrad;
-      ctx.fillRect(0, 20, CANVAS_WIDTH, 16);
+      ctx.fillRect(0, 18, CANVAS_WIDTH, 22);
       // Scanlines overlay
-      ctx.globalAlpha = 0.08;
+      ctx.globalAlpha = 0.07;
       ctx.fillStyle = "#000000";
-      for (let i = 0; i < 8; i++) {
-        ctx.fillRect(0, 20 + i * 2, CANVAS_WIDTH, 1);
+      for (let i = 0; i < 11; i++) {
+        ctx.fillRect(0, 18 + i * 2, CANVAS_WIDTH, 1);
       }
       // Glow text effect
-      ctx.globalAlpha = 0.75;
+      ctx.globalAlpha = 0.85;
       ctx.shadowColor = "#FFAA00";
-      ctx.shadowBlur = 6;
-      ctx.fillStyle = "#FFD700";
+      ctx.shadowBlur = 10;
+      ctx.fillStyle = "#FFE066";
       ctx.textAlign = "left";
-      ctx.fillText(olText, onelinerMarqueeXRef.current, 32);
+      ctx.fillText(olText, onelinerMarqueeXRef.current, 35);
       ctx.restore();
     }
   }, []);
