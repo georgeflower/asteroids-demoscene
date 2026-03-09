@@ -2395,66 +2395,64 @@ const Game = () => {
     setIsPaused(false);
   }, []);
 
+  const handleCanvasKeyDown = useCallback((e: React.KeyboardEvent<HTMLCanvasElement>) => {
+    if (enteringInitialsRef.current) return;
+
+    // Pause toggle on Escape
+    if (e.key === "Escape" && (gameModeRef.current === "solo" || gameModeRef.current === "duel" || gameModeRef.current === "online")) {
+      if (!showLifeLostRef.current && !showGameOver) {
+        e.preventDefault();
+        togglePause();
+        return;
+      }
+    }
+
+    // When paused, handle pause menu navigation
+    if (isPausedRef.current) {
+      if (e.key === "ArrowUp" || e.key === "ArrowDown" || e.key === "w" || e.key === "W" || e.key === "s" || e.key === "S") {
+        e.preventDefault();
+        setPauseSelection(s => s === 0 ? 1 : 0);
+      }
+      if (e.key === " " || e.key === "Enter") {
+        e.preventDefault();
+        setPauseSelection(s => {
+          if (s === 0) resumeGame();
+          else { resumeGame(); quitToMenu(); }
+          return s;
+        });
+      }
+      return;
+    }
+
+    if (showLifeLostRef.current) {
+      if (e.key === " " || e.key === "Enter") {
+        e.preventDefault();
+        showLifeLostRef.current = false;
+        setShowLifeLost(false);
+      }
+      return;
+    }
+    keysRef.current[e.key] = true;
+    if (gameModeRef.current === "solo") {
+      if (e.key === " ") { e.preventDefault(); shootBullet(); }
+      if (e.key === "h" || e.key === "H") { e.preventDefault(); hyperspace(); }
+    } else if (gameModeRef.current === "duel" || gameModeRef.current === "online") {
+      if (e.key === " ") { e.preventDefault(); }
+      if (e.key === "e" || e.key === "E") { e.preventDefault(); }
+    }
+  }, [shootBullet, hyperspace, togglePause, resumeGame, quitToMenu, showGameOver]);
+
+  const handleCanvasKeyUp = useCallback((e: React.KeyboardEvent<HTMLCanvasElement>) => {
+    keysRef.current[e.key] = false;
+  }, []);
+
+  // Start game loop
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (enteringInitialsRef.current) return;
-
-      // Pause toggle on Escape
-      if (e.key === "Escape" && (gameModeRef.current === "solo" || gameModeRef.current === "duel" || gameModeRef.current === "online")) {
-        if (!showLifeLostRef.current && !showGameOver) {
-          e.preventDefault();
-          togglePause();
-          return;
-        }
-      }
-
-      // When paused, handle pause menu navigation
-      if (isPausedRef.current) {
-        if (e.key === "ArrowUp" || e.key === "ArrowDown" || e.key === "w" || e.key === "W" || e.key === "s" || e.key === "S") {
-          e.preventDefault();
-          setPauseSelection(s => s === 0 ? 1 : 0);
-        }
-        if (e.key === " " || e.key === "Enter") {
-          e.preventDefault();
-          setPauseSelection(s => {
-            if (s === 0) resumeGame();
-            else { resumeGame(); quitToMenu(); }
-            return s;
-          });
-        }
-        return;
-      }
-
-      if (showLifeLostRef.current) {
-        if (e.key === " " || e.key === "Enter") {
-          e.preventDefault();
-          showLifeLostRef.current = false;
-          setShowLifeLost(false);
-        }
-        return;
-      }
-      keysRef.current[e.key] = true;
-      if (gameModeRef.current === "solo") {
-        if (e.key === " ") { e.preventDefault(); shootBullet(); }
-        if (e.key === "h" || e.key === "H") { e.preventDefault(); hyperspace(); }
-      } else if (gameModeRef.current === "duel" || gameModeRef.current === "online") {
-        if (e.key === " ") { e.preventDefault(); }
-        if (e.key === "e" || e.key === "E") { e.preventDefault(); }
-      }
-    };
-
-    const handleKeyUp = (e: KeyboardEvent) => { keysRef.current[e.key] = false; };
-
-    window.addEventListener("keydown", handleKeyDown);
-    window.addEventListener("keyup", handleKeyUp);
     animationFrameRef.current = requestAnimationFrame(gameLoop);
-
     return () => {
-      window.removeEventListener("keydown", handleKeyDown);
-      window.removeEventListener("keyup", handleKeyUp);
       if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
     };
-  }, [shootBullet, hyperspace, gameLoop, togglePause, resumeGame, quitToMenu, showGameOver]);
+  }, [gameLoop]);
 
   // Gamepad polling for menus and overlays
   useEffect(() => {
