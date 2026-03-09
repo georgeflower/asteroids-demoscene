@@ -207,6 +207,7 @@ const Game = () => {
   const nowPlayingRef = useRef<{ artist: string; title: string } | null>(null);
   const [gameMode, setGameMode] = useState<GameMode>("menu");
   const gameModeRef = useRef<GameMode>("menu");
+  const [showBootAnimation, setShowBootAnimation] = useState(true);
   const [duelKills, setDuelKills] = useState<[number, number]>([0, 0]);
   const [duelDeaths, setDuelDeaths] = useState<[number, number]>([0, 0]);
   const [menuSelection, setMenuSelection] = useState(0); // 0=solo, 1=duel, 2=online
