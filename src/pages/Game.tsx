@@ -170,6 +170,7 @@ const ASTEROID_SPEEDS = { large: 0.5, medium: 0.8, small: 1.2 };
 const ASTEROID_POINTS = { large: 20, medium: 50, small: 100 };
 const UFO_POINTS = { large: 200, small: 1000 };
 const GAMEPAD_DEADZONE = 0.2;
+const MARQUEE_SPEED = 0.8; // pixels per frame (~48px/sec at 60fps)
 
 const P1_COLOR = "#00FFFF";
 const P2_COLOR = "#FF8844";
@@ -2000,7 +2001,7 @@ const Game = () => {
       const npText = `♪ ${np.artist} — ${np.title}   `;
       const npTextWidth = ctx.measureText(npText).width;
       // Advance marquee position
-      nowPlayingMarqueeXRef.current -= 0.8;
+      nowPlayingMarqueeXRef.current -= MARQUEE_SPEED;
       if (nowPlayingMarqueeXRef.current < -(npTextWidth)) {
         nowPlayingMarqueeXRef.current = CANVAS_WIDTH;
       }
@@ -2008,7 +2009,23 @@ const Game = () => {
       ctx.beginPath();
       ctx.rect(0, CANVAS_HEIGHT - 20, CANVAS_WIDTH, 20);
       ctx.clip();
-      ctx.globalAlpha = 0.55;
+      // Demoscene glow backdrop
+      const glowGrad = ctx.createLinearGradient(0, CANVAS_HEIGHT - 20, 0, CANVAS_HEIGHT);
+      glowGrad.addColorStop(0, "rgba(0, 150, 255, 0)");
+      glowGrad.addColorStop(0.5, "rgba(0, 150, 255, 0.12)");
+      glowGrad.addColorStop(1, "rgba(0, 150, 255, 0)");
+      ctx.fillStyle = glowGrad;
+      ctx.fillRect(0, CANVAS_HEIGHT - 20, CANVAS_WIDTH, 20);
+      // Scanlines overlay
+      ctx.globalAlpha = 0.08;
+      ctx.fillStyle = "#000000";
+      for (let i = 0; i < 10; i++) {
+        ctx.fillRect(0, CANVAS_HEIGHT - 20 + i * 2, CANVAS_WIDTH, 1);
+      }
+      // Glow text effect
+      ctx.globalAlpha = 0.65;
+      ctx.shadowColor = "#00CCFF";
+      ctx.shadowBlur = 8;
       ctx.fillStyle = "#FFFFFF";
       ctx.textAlign = "left";
       ctx.fillText(npText, nowPlayingMarqueeXRef.current, CANVAS_HEIGHT - 7);
@@ -2023,7 +2040,7 @@ const Game = () => {
       const olText = `<${ol.author}> ${ol.message}   `;
       const olTextWidth = ctx.measureText(olText).width;
       // Advance marquee position
-      onelinerMarqueeXRef.current -= 0.8;
+      onelinerMarqueeXRef.current -= MARQUEE_SPEED;
       if (onelinerMarqueeXRef.current < -(olTextWidth)) {
         onelinerMarqueeXRef.current = CANVAS_WIDTH;
       }
@@ -2031,7 +2048,23 @@ const Game = () => {
       ctx.beginPath();
       ctx.rect(0, 20, CANVAS_WIDTH, 16);
       ctx.clip();
-      ctx.globalAlpha = 0.65;
+      // Demoscene glow backdrop (gold)
+      const olGlowGrad = ctx.createLinearGradient(0, 20, 0, 36);
+      olGlowGrad.addColorStop(0, "rgba(255, 180, 0, 0)");
+      olGlowGrad.addColorStop(0.5, "rgba(255, 180, 0, 0.1)");
+      olGlowGrad.addColorStop(1, "rgba(255, 180, 0, 0)");
+      ctx.fillStyle = olGlowGrad;
+      ctx.fillRect(0, 20, CANVAS_WIDTH, 16);
+      // Scanlines overlay
+      ctx.globalAlpha = 0.08;
+      ctx.fillStyle = "#000000";
+      for (let i = 0; i < 8; i++) {
+        ctx.fillRect(0, 20 + i * 2, CANVAS_WIDTH, 1);
+      }
+      // Glow text effect
+      ctx.globalAlpha = 0.75;
+      ctx.shadowColor = "#FFAA00";
+      ctx.shadowBlur = 6;
       ctx.fillStyle = "#FFD700";
       ctx.textAlign = "left";
       ctx.fillText(olText, onelinerMarqueeXRef.current, 32);
