@@ -1987,7 +1987,7 @@ const Game = () => {
     // Wave/theme indicator
     ctx.save();
     ctx.globalAlpha = 0.4;
-    ctx.font = "bold 10px monospace";
+    ctx.font = "8px 'Press Start 2P', monospace";
     ctx.fillStyle = theme.accent;
     ctx.textAlign = "right";
     ctx.fillText(`${theme.name.toUpperCase()} ZONE`, CANVAS_WIDTH - 10, 18);
