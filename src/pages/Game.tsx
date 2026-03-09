@@ -788,7 +788,7 @@ const Game = () => {
       state.gameOver = true;
       setShowGameOver(true);
       if (isHighScore(state.score)) setEnteringInitials(true);
-      setLeaderboard(loadLeaderboard());
+      loadLeaderboard().then(setLeaderboard);
       toast.error(`Game Over! Final Score: ${state.score}`);
       haptics.gameOver();
     } else {
