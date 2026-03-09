@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -184,6 +185,7 @@ const getTheme = (wave: number): ColorTheme => {
 const getSpeedScale = (wave: number): number => 1 + wave * 0.05;
 
 const Game = () => {
+  const navigate = useNavigate();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const gameStateRef = useRef<GameState | null>(null);
   const duelStateRef = useRef<DuelState | null>(null);
@@ -2949,6 +2951,13 @@ const Game = () => {
           Streaming demoscene & chiptune tracks 24/7
         </div>
       </div>
+
+      <button
+        onClick={() => navigate("/")}
+        className="mt-6 px-6 py-2 font-mono text-xs text-[hsl(var(--game-foreground))] opacity-50 hover:opacity-100 transition-opacity uppercase tracking-widest"
+      >
+        home page
+      </button>
     </div>
   );
 };
