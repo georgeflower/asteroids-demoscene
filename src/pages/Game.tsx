@@ -233,25 +233,40 @@ const Game = () => {
   // Keep ref in sync
   useEffect(() => { gameModeRef.current = gameMode; }, [gameMode]);
 
-  const loadLeaderboard = useCallback(() => {
-    try {
-      const stored = localStorage.getItem("asteroids-leaderboard");
-      return stored ? JSON.parse(stored) : [];
-    } catch { return []; }
+  const loadLeaderboard = useCallback(async () => {
+    const { data, error } = await supabase
+      .from('high_scores')
+      .select('initials, score, created_at')
+      .order('score', { ascending: false })
+      .limit(10);
+    if (!error && data) {
+      return data.map((row) => ({
+        initials: row.initials,
+        score: row.score,
+        date: new Date(row.created_at).toLocaleDateString(),
+      }));
+    }
+    return [];
   }, []);
 
-  const saveToLeaderboard = useCallback((playerInitials: string, score: number) => {
-    const board = loadLeaderboard();
-    board.push({ initials: playerInitials.toUpperCase(), score, date: new Date().toLocaleDateString() });
-    board.sort((a: any, b: any) => b.score - a.score);
-    const top10 = board.slice(0, 10);
-    localStorage.setItem("asteroids-leaderboard", JSON.stringify(top10));
-    setLeaderboard(top10);
+  const saveToLeaderboard = useCallback(async (playerInitials: string, score: number) => {
+    const { error } = await supabase
+      .from('high_scores')
+      .insert({ initials: playerInitials.toUpperCase(), score });
+    if (error) {
+      toast.error('Failed to save score online');
+      return;
+    }
+    const board = await loadLeaderboard();
+    setLeaderboard(board);
   }, [loadLeaderboard]);
 
   const isHighScore = useCallback((score: number) => {
-    const board = loadLeaderboard();
-    return board.length < 10 || score > (board[board.length - 1]?.score ?? 0);
+    return leaderboard.length < 10 || score > (leaderboard[leaderboard.length - 1]?.score ?? 0);
+  }, [leaderboard]);
+
+  useEffect(() => {
+    loadLeaderboard().then(setLeaderboard);
   }, [loadLeaderboard]);
 
   const createStars = (): Star[] => {
