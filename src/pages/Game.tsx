@@ -1755,7 +1755,7 @@ const Game = () => {
     floatingTexts.forEach((ft) => {
       ctx.save();
       ctx.globalAlpha = ft.opacity;
-      ctx.font = `bold ${ft.size}px monospace`;
+      ctx.font = `${ft.size}px 'Press Start 2P', monospace`;
       ctx.fillStyle = ft.color;
       ctx.shadowBlur = 10;
       ctx.shadowColor = ft.color;
