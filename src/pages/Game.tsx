@@ -1922,7 +1922,7 @@ const Game = () => {
       ctx.fillStyle = hpFrac > 0.3 ? "#FF44CC" : "#FF0000";
       ctx.fillRect(barX, barY, barW * hpFrac, barH);
       ctx.globalAlpha = 0.9;
-      ctx.font = "bold 10px monospace";
+      ctx.font = "8px 'Press Start 2P', monospace";
       ctx.fillStyle = "#FFFFFF";
       ctx.textAlign = "center";
       ctx.fillText("BOSS", CANVAS_WIDTH / 2, barY - 4);
