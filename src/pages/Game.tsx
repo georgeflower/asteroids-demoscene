@@ -1976,7 +1976,7 @@ const Game = () => {
       ctx.globalAlpha = 0.35;
       ctx.fillRect(barX, barY, barW * fill, barH);
       ctx.globalAlpha = 0.9;
-      ctx.font = "bold 9px monospace";
+      ctx.font = "7px 'Press Start 2P', monospace";
       ctx.fillStyle = pu.color;
       ctx.shadowBlur = 4;
       ctx.shadowColor = pu.color;
