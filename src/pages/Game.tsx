@@ -1606,7 +1606,7 @@ const Game = () => {
     // Draw label above ship
     if (label) {
       ctx.save();
-      ctx.font = "bold 8px monospace";
+      ctx.font = "7px 'Press Start 2P', monospace";
       ctx.fillStyle = color;
       ctx.textAlign = "center";
       ctx.globalAlpha = 0.7;
@@ -1755,7 +1755,7 @@ const Game = () => {
     floatingTexts.forEach((ft) => {
       ctx.save();
       ctx.globalAlpha = ft.opacity;
-      ctx.font = `bold ${ft.size}px monospace`;
+      ctx.font = `${ft.size}px 'Press Start 2P', monospace`;
       ctx.fillStyle = ft.color;
       ctx.shadowBlur = 10;
       ctx.shadowColor = ft.color;
@@ -1922,7 +1922,7 @@ const Game = () => {
       ctx.fillStyle = hpFrac > 0.3 ? "#FF44CC" : "#FF0000";
       ctx.fillRect(barX, barY, barW * hpFrac, barH);
       ctx.globalAlpha = 0.9;
-      ctx.font = "bold 10px monospace";
+      ctx.font = "8px 'Press Start 2P', monospace";
       ctx.fillStyle = "#FFFFFF";
       ctx.textAlign = "center";
       ctx.fillText("BOSS", CANVAS_WIDTH / 2, barY - 4);
@@ -1976,7 +1976,7 @@ const Game = () => {
       ctx.globalAlpha = 0.35;
       ctx.fillRect(barX, barY, barW * fill, barH);
       ctx.globalAlpha = 0.9;
-      ctx.font = "bold 9px monospace";
+      ctx.font = "7px 'Press Start 2P', monospace";
       ctx.fillStyle = pu.color;
       ctx.shadowBlur = 4;
       ctx.shadowColor = pu.color;
@@ -1987,7 +1987,7 @@ const Game = () => {
     // Wave/theme indicator
     ctx.save();
     ctx.globalAlpha = 0.4;
-    ctx.font = "bold 10px monospace";
+    ctx.font = "8px 'Press Start 2P', monospace";
     ctx.fillStyle = theme.accent;
     ctx.textAlign = "right";
     ctx.fillText(`${theme.name.toUpperCase()} ZONE`, CANVAS_WIDTH - 10, 18);
@@ -2592,23 +2592,23 @@ const Game = () => {
     <div className="min-h-screen bg-[hsl(var(--game-background))] flex flex-col items-center justify-center p-4">
       {/* HUD */}
       {gameMode === "solo" && (
-        <div className="mb-4 flex gap-8 text-[hsl(var(--game-foreground))] text-xl font-mono">
+        <div className="mb-4 flex gap-8 text-[hsl(var(--game-foreground))] text-xs tracking-wide" style={{ fontFamily: "'Press Start 2P', monospace", textShadow: "0 0 10px hsl(var(--game-foreground))" }}>
           <div>SCORE: {displayScore.toString().padStart(8, "0")}</div>
           <div>LIVES: {displayLives}</div>
           <div>WAVE: {displayWave}</div>
         </div>
       )}
       {(gameMode === "duel" || gameMode === "online") && (
-        <div className="mb-4 flex gap-6 font-mono text-lg">
-          <div style={{ color: P1_COLOR }}>
-            P1{gameMode === "online" && multiplayer.isHost ? " (YOU)" : ""} KILLS: {duelKills[0]} DEATHS: {duelDeaths[0]}
+        <div className="mb-4 flex gap-6 text-xs tracking-wide" style={{ fontFamily: "'Press Start 2P', monospace" }}>
+          <div style={{ color: P1_COLOR, textShadow: `0 0 10px ${P1_COLOR}` }}>
+            P1{gameMode === "online" && multiplayer.isHost ? " (YOU)" : ""} K:{duelKills[0]} D:{duelDeaths[0]}
           </div>
           <div className="text-[hsl(var(--game-foreground))] opacity-30">|</div>
-          <div style={{ color: P2_COLOR }}>
-            P2{gameMode === "online" && !multiplayer.isHost ? " (YOU)" : ""} KILLS: {duelKills[1]} DEATHS: {duelDeaths[1]}
+          <div style={{ color: P2_COLOR, textShadow: `0 0 10px ${P2_COLOR}` }}>
+            P2{gameMode === "online" && !multiplayer.isHost ? " (YOU)" : ""} K:{duelKills[1]} D:{duelDeaths[1]}
           </div>
           {gameMode === "online" && multiplayer.roomCode && (
-            <div className="text-[hsl(var(--game-foreground))] opacity-40 text-sm self-center">
+            <div className="text-[hsl(var(--game-foreground))] opacity-40 text-xs self-center">
               ROOM: {multiplayer.roomCode}
             </div>
           )}
