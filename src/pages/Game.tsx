@@ -518,6 +518,8 @@ const Game = () => {
     showLifeLostRef.current = false;
     setGameMode("solo");
     toast.success("Game Started! Use Arrow Keys to move, Space to shoot");
+    // Focus canvas for input capture
+    setTimeout(() => { canvasRef.current?.focus(); }, 50);
   }, []);
 
   const initDuel = useCallback(() => {
