@@ -2692,7 +2692,10 @@ const Game = () => {
           ref={canvasRef}
           width={CANVAS_WIDTH}
           height={CANVAS_HEIGHT}
-          className="border-2 border-[hsl(var(--game-foreground))] shadow-[0_0_30px_hsl(var(--game-foreground))] max-w-full"
+          tabIndex={0}
+          onKeyDown={handleCanvasKeyDown}
+          onKeyUp={handleCanvasKeyUp}
+          className="border-2 border-[hsl(var(--game-foreground))] shadow-[0_0_30px_hsl(var(--game-foreground))] max-w-full outline-none"
           style={{ touchAction: 'none' }}
         />
 
