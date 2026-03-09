@@ -1606,7 +1606,7 @@ const Game = () => {
     // Draw label above ship
     if (label) {
       ctx.save();
-      ctx.font = "bold 8px monospace";
+      ctx.font = "7px 'Press Start 2P', monospace";
       ctx.fillStyle = color;
       ctx.textAlign = "center";
       ctx.globalAlpha = 0.7;
