@@ -170,6 +170,7 @@ const ASTEROID_SPEEDS = { large: 0.5, medium: 0.8, small: 1.2 };
 const ASTEROID_POINTS = { large: 20, medium: 50, small: 100 };
 const UFO_POINTS = { large: 200, small: 1000 };
 const GAMEPAD_DEADZONE = 0.2;
+const MARQUEE_SPEED = 0.8; // pixels per frame (~48px/sec at 60fps)
 
 const P1_COLOR = "#00FFFF";
 const P2_COLOR = "#FF8844";
