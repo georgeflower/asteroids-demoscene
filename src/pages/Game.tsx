@@ -675,6 +675,7 @@ const Game = () => {
       worker.postMessage({ type: 'init' });
     }
     toast.success(isHost ? "Game started! You are HOST (P1)" : "Game started! You are GUEST (P2)");
+    setTimeout(() => { canvasRef.current?.focus(); }, 50);
   }, []);
 
   const nextWave = useCallback(() => {
