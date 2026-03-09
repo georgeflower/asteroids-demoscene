@@ -3031,7 +3031,7 @@ const Game = () => {
         <audio
           ref={audioRef}
           controls
-          autoPlay
+          autoPlay={autoPlayMusic}
           preload="auto"
           className="w-full"
           onError={(e) => {
@@ -3041,6 +3041,15 @@ const Game = () => {
         >
           <source src="https://nectarine.inversi0n.org/necta192.mp3" type="audio/mpeg" />
         </audio>
+        <label className="flex items-center gap-2 font-mono text-xs text-[hsl(var(--game-foreground))] opacity-70 hover:opacity-100 transition-opacity cursor-pointer justify-center mt-1">
+          <input
+            type="checkbox"
+            checked={autoPlayMusic}
+            onChange={(e) => setAutoPlayMusic(e.target.checked)}
+            className="accent-[hsl(var(--game-foreground))]"
+          />
+          AUTO-PLAY MUSIC
+        </label>
         <div className="text-[hsl(var(--game-foreground))] font-mono text-xs text-center opacity-60 mt-1">
           Thanks to <a href="https://scenestream.net/demovibes/" target="_blank" rel="noopener noreferrer" className="underline hover:opacity-80">Nectarine Demoscene Radio</a> for the music!
         </div>
