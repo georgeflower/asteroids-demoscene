@@ -1359,7 +1359,7 @@ const Game = () => {
           multiplier: { text: "2x SCORE!", color: "#FFFF66" },
         };
         const label = powerUpLabels[powerUp.type];
-        spawnFloatingText(powerUp.pos, label.text, label.color, 20);
+        spawnFloatingText(powerUp.pos, label.text, label.color, 28);
 
         switch (powerUp.type) {
           case "shield": state.powerUpActive.shield = 300; state.ship.invulnerable = true; break;
@@ -1367,6 +1367,7 @@ const Game = () => {
           case "extraLife": state.lives++; setDisplayLives(state.lives); break;
           case "multiplier": state.powerUpActive.multiplier = 900; break;
         }
+        soundEffects.powerUp();
         haptics.medium();
         return false;
       }
