@@ -3119,6 +3119,17 @@ const Game = () => {
           />
           AUTO-PLAY MUSIC
         </label>
+        {DEBUG_ENABLED && (
+          <label className="flex items-center gap-2 font-mono text-xs text-[#FF4444] opacity-70 hover:opacity-100 transition-opacity cursor-pointer justify-center mt-1">
+            <input
+              type="checkbox"
+              checked={trainerMode}
+              onChange={(e) => setTrainerMode(e.target.checked)}
+              className="accent-[#FF4444]"
+            />
+            TRAINER (NO SCORES)
+          </label>
+        )}
         <div className="text-[hsl(var(--game-foreground))] font-mono text-xs text-center opacity-60 mt-1">
           Thanks to <a href="https://scenestream.net/demovibes/" target="_blank" rel="noopener noreferrer" className="underline hover:opacity-80">Nectarine Demoscene Radio</a> for the music!
         </div>
