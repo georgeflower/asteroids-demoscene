@@ -2433,6 +2433,21 @@ const Game = () => {
   const handleCanvasKeyDown = useCallback((e: React.KeyboardEvent<HTMLCanvasElement>) => {
     if (enteringInitialsRef.current) return;
 
+    // Debug panel toggle with § key
+    if (DEBUG_ENABLED && (e.key === "§" || e.key === "Dead")) {
+      e.preventDefault();
+      setShowDebugPanel(prev => !prev);
+      return;
+    }
+
+    // Level skip with 0 key (solo only, debug only)
+    if (DEBUG_ENABLED && e.key === "0" && gameModeRef.current === "solo" && !isPausedRef.current && !showLifeLostRef.current) {
+      e.preventDefault();
+      addDebugLog('wave', 'Level skip triggered (cheat)');
+      nextWave();
+      return;
+    }
+
     // Pause toggle on Escape
     if (e.key === "Escape" && (gameModeRef.current === "solo" || gameModeRef.current === "duel" || gameModeRef.current === "online")) {
       if (!showLifeLostRef.current && !showGameOver) {
@@ -2475,7 +2490,7 @@ const Game = () => {
       if (e.key === " ") { e.preventDefault(); }
       if (e.key === "e" || e.key === "E") { e.preventDefault(); }
     }
-  }, [shootBullet, hyperspace, togglePause, resumeGame, quitToMenu, showGameOver]);
+  }, [shootBullet, hyperspace, togglePause, resumeGame, quitToMenu, showGameOver, addDebugLog, nextWave]);
 
   const handleCanvasKeyUp = useCallback((e: React.KeyboardEvent<HTMLCanvasElement>) => {
     keysRef.current[e.key] = false;
