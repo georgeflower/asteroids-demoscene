@@ -53,11 +53,17 @@ npm run build
 
 # Lint
 npm run lint
+
+# Run unit tests (vitest)
+npm test
+
+# Run unit tests with coverage
+npm test -- --coverage
 ```
 
 ## Testing
 
-There is no automated test suite. Verify changes manually in the browser by running `npm run dev`.
+Unit tests use **vitest**. Run `npm test` to execute them. Test files live alongside source files with a `.test.ts` / `.test.tsx` suffix. When adding new pure-logic utilities, add corresponding tests.
 
 ## Key Constants (in `src/pages/Game.tsx`)
 

@@ -2,6 +2,18 @@
 
 All notable changes to asteroids-demoscene are documented here.
 
+## [0.1.02] - 2026-03-10
+
+### Added
+- `.github/workflows/copilot-setup-steps.yml` – hardened CI workflow for the Copilot coding agent: checkout with LFS, Node 20, `npm ci`, lint, unit tests with coverage, security audit, and build.
+- `src/lib/utils.test.ts` – initial unit test suite for the `cn` utility (vitest).
+- `vitest` + `@vitest/coverage-v8` added as dev dependencies; `"test": "vitest run"` script added to `package.json`.
+- Vitest configuration block added to `vite.config.ts`.
+
+### Changed
+- `actions/checkout@v5` corrected to `actions/checkout@v4` (v5 does not exist) in the workflow file.
+- Version bumped from `0.1.01` → `0.1.02` per versioning convention (+0.0.01 per merge).
+
 ## [0.1.01] - 2026-03-10
 
 ### Added
