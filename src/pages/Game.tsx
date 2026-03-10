@@ -1092,6 +1092,8 @@ const Game = () => {
     state.ship.pos = safePos;
     state.ship.vel = { x: 0, y: 0 };
     state.ship.hyperspaceCooldown = 600; // 10 seconds at 60fps
+    state.ship.invulnerable = true;
+    state.ship.invulnerableTime = 120; // 2 seconds of invulnerability after hyperspace
     
     toast.success("Hyperspace jump!");
   }, []);
