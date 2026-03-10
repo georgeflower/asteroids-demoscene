@@ -1643,6 +1643,7 @@ const Game = () => {
       state.bullets = state.bullets.filter((bullet) => {
         if (!bullet.isUFO && !bullet.isAlien) return true;
         if (checkCollision(bullet.pos, 2, state.ship.pos, SHIP_SIZE)) {
+          addDebugLog('collision', `Ship hit by ${bullet.isUFO ? 'UFO' : 'alien'} bullet`);
           loseLife(state);
           return false;
         }
