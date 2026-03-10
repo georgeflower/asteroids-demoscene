@@ -28,6 +28,7 @@ interface Ship extends GameObject {
   isThrusting: boolean;
   invulnerable: boolean;
   invulnerableTime: number;
+  hyperspaceCooldown: number;
 }
 
 interface Asteroid extends GameObject {
@@ -202,7 +203,7 @@ type GameMode = "menu" | "solo" | "duel" | "online_lobby" | "online";
 
 const CANVAS_WIDTH = 800;
 const CANVAS_HEIGHT = 600;
-const GAME_VERSION = "0.1.0";
+const GAME_VERSION = "0.1.1";
 const SHIP_SIZE = 10;
 const BULLET_SPEED = 7;
 const BULLET_LIFETIME = 60;
@@ -436,6 +437,7 @@ const Game = () => {
     isThrusting: false,
     invulnerable: true,
     invulnerableTime: 120,
+    hyperspaceCooldown: 0,
   });
 
   const createAsteroid = (x: number, y: number, size: "large" | "medium" | "small", wave = 1): Asteroid => {
@@ -994,20 +996,107 @@ const Game = () => {
 
   const hyperspace = useCallback(() => {
     if (!gameStateRef.current || gameStateRef.current.gameOver) return;
-
-    gameStateRef.current.ship.pos = {
-      x: Math.random() * CANVAS_WIDTH,
-      y: Math.random() * CANVAS_HEIGHT,
-    };
-    gameStateRef.current.ship.vel = { x: 0, y: 0 };
-
-    if (Math.random() < 0.1) {
-      loseLife(gameStateRef.current);
-      toast.error("Hyperspace malfunction!");
-    } else {
-      toast.info("Hyperspace jump!");
+    
+    const state = gameStateRef.current;
+    
+    // Check cooldown
+    if (state.ship.hyperspaceCooldown > 0) {
+      const secondsLeft = Math.ceil(state.ship.hyperspaceCooldown / 60);
+      toast.error(`Hyperspace charging: ${secondsLeft}s`);
+      return;
     }
-  }, [loseLife]);
+
+    // Find a safe position away from all threats
+    let safePos: Vector | null = null;
+    let attempts = 0;
+    const maxAttempts = 100;
+    
+    while (!safePos && attempts < maxAttempts) {
+      const testPos = {
+        x: Math.random() * CANVAS_WIDTH,
+        y: Math.random() * CANVAS_HEIGHT,
+      };
+      
+      let isSafe = true;
+      
+      // Check distance from asteroids
+      for (const asteroid of state.asteroids) {
+        const radius = asteroid.size === "large" ? 40 : asteroid.size === "medium" ? 25 : 12;
+        const minSafeDist = radius + SHIP_SIZE + 50; // Extra safety margin
+        const dist = Math.hypot(testPos.x - asteroid.pos.x, testPos.y - asteroid.pos.y);
+        if (dist < minSafeDist) {
+          isSafe = false;
+          break;
+        }
+      }
+      
+      // Check distance from UFOs
+      if (isSafe) {
+        for (const ufo of state.ufos) {
+          const radius = ufo.size === "large" ? 20 : 10;
+          const minSafeDist = radius + SHIP_SIZE + 50;
+          const dist = Math.hypot(testPos.x - ufo.pos.x, testPos.y - ufo.pos.y);
+          if (dist < minSafeDist) {
+            isSafe = false;
+            break;
+          }
+        }
+      }
+      
+      // Check distance from aliens
+      if (isSafe) {
+        for (const alien of state.aliens) {
+          const minSafeDist = 12 + SHIP_SIZE + 50;
+          const dist = Math.hypot(testPos.x - alien.pos.x, testPos.y - alien.pos.y);
+          if (dist < minSafeDist) {
+            isSafe = false;
+            break;
+          }
+        }
+      }
+      
+      // Check distance from boss
+      if (isSafe && state.boss && state.boss.entered) {
+        const minSafeDist = 65 + SHIP_SIZE + 80;
+        const dist = Math.hypot(testPos.x - state.boss.pos.x, testPos.y - state.boss.pos.y);
+        if (dist < minSafeDist) {
+          isSafe = false;
+        }
+      }
+      
+      // Check distance from enemy bullets
+      if (isSafe) {
+        for (const bullet of state.bullets) {
+          if (bullet.isUFO || bullet.isAlien) {
+            const minSafeDist = 30;
+            const dist = Math.hypot(testPos.x - bullet.pos.x, testPos.y - bullet.pos.y);
+            if (dist < minSafeDist) {
+              isSafe = false;
+              break;
+            }
+          }
+        }
+      }
+      
+      if (isSafe) {
+        safePos = testPos;
+      }
+      attempts++;
+    }
+    
+    // If no safe position found after max attempts, use best effort (center of screen)
+    if (!safePos) {
+      safePos = { x: CANVAS_WIDTH / 2, y: CANVAS_HEIGHT / 2 };
+    }
+    
+    state.ship.pos = safePos;
+    state.ship.vel = { x: 0, y: 0 };
+    state.ship.hyperspaceCooldown = 600; // 10 seconds at 60fps
+    state.ship.invulnerable = true;
+    state.ship.invulnerableTime = 120; // 2 seconds of invulnerability after hyperspace
+    
+    toast.success("Hyperspace jump!");
+  }, []);
 
   // ===== Ship update helper =====
   const updateShipMovement = (ship: Ship, left: boolean, right: boolean, up: boolean, particles: Particle[]) => {
@@ -1038,6 +1127,10 @@ const Game = () => {
     if (ship.invulnerableTime > 0) {
       ship.invulnerableTime--;
       if (ship.invulnerableTime === 0) ship.invulnerable = false;
+    }
+    
+    if (ship.hyperspaceCooldown > 0) {
+      ship.hyperspaceCooldown--;
     }
   };
 
@@ -1358,6 +1451,10 @@ const Game = () => {
     if (state.ship.invulnerableTime > 0) {
       state.ship.invulnerableTime--;
       if (state.ship.invulnerableTime === 0) state.ship.invulnerable = false;
+    }
+    
+    if (state.ship.hyperspaceCooldown > 0) {
+      state.ship.hyperspaceCooldown--;
     }
 
     // Update asteroids with edge-homing
@@ -2761,7 +2858,7 @@ const Game = () => {
           e.preventDefault();
           shootBullet();
         }
-        if (e.key === "h" || e.key === "H") {
+        if (e.key === "h" || e.key === "H" || e.key === "Control") {
           e.preventDefault();
           hyperspace();
         }
@@ -3047,9 +3144,20 @@ const Game = () => {
         )}
 
         <div className="text-[hsl(var(--game-foreground))] font-mono text-xs space-y-1 opacity-60 text-center">
-          <div>SOLO: Arrow Keys + Space | Gamepad supported</div>
+          <div>SOLO: Arrow Keys + Space + Ctrl | Gamepad supported</div>
           <div>DUEL: P1 Arrows+Space | P2 WASD+E | Gamepads 1 & 2</div>
           <div>ONLINE: Create or join a room to duel remotely</div>
+        </div>
+
+        <div className="mt-4">
+          <a
+            href="https://github.com/georgeflower/asteroids-demoscene/blob/main/CHANGELOG.md"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-[hsl(var(--game-foreground))] font-mono text-[10px] opacity-50 hover:opacity-100 transition-opacity uppercase tracking-widest"
+          >
+            📋 CHANGELOG
+          </a>
         </div>
 
         <div className="mt-8 flex flex-col gap-2 max-w-md">
@@ -3499,7 +3607,7 @@ const Game = () => {
                   <div>← → ROTATE</div>
                   <div>↑ THRUST</div>
                   <div>SPACE FIRE</div>
-                  <div>H HYPERSPACE</div>
+                  <div>CTRL HYPERSPACE</div>
                   <div>ESC PAUSE</div>
                 </div>
                 <div className="text-left space-y-0.5">
