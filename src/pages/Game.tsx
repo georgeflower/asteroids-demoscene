@@ -2674,7 +2674,6 @@ const Game = () => {
     setPauseSelection(0);
     if (isPausedRef.current) {
       soundEffects.stopThrust();
-      setAutoPlayMusic(false);
     }
   }, []);
 
