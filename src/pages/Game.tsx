@@ -251,6 +251,17 @@ const Game = () => {
 
   // Keep ref in sync
   useEffect(() => { gameModeRef.current = gameMode; }, [gameMode]);
+  useEffect(() => { trainerModeRef.current = trainerMode; }, [trainerMode]);
+  useEffect(() => {
+    if (DEBUG_ENABLED) localStorage.setItem("trainerMode", String(trainerMode));
+  }, [trainerMode]);
+
+  const addDebugLog = useCallback((category: DebugCategory, message: string) => {
+    if (!DEBUG_ENABLED) return;
+    const entry: DebugLogEntry = { timestamp: Date.now(), category, message };
+    debugLogsRef.current = [...debugLogsRef.current.slice(-199), entry];
+    setDebugLogs(debugLogsRef.current);
+  }, []);
 
   const loadLeaderboard = useCallback(async () => {
     const { data, error } = await supabase
