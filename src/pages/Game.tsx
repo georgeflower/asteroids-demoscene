@@ -9,6 +9,7 @@ import { useMultiplayer } from "@/hooks/useMultiplayer";
 import OnlineLobby from "@/components/OnlineLobby";
 import CRTBootOverlay from "@/components/CRTBootOverlay";
 import type { DuelNetState } from "@/types/multiplayer";
+import { DEBUG_ENABLED, DEBUG_CATEGORIES, type DebugCategory, type DebugLogEntry } from "@/constants/debug";
 
 interface Vector {
   x: number;
@@ -230,6 +231,17 @@ const Game = () => {
   const nowPlayingMarqueeXRef = useRef<number>(CANVAS_WIDTH);
   const onelinerMarqueeXRef = useRef<number>(CANVAS_WIDTH);
 
+  // Debug system state (only active when DEBUG_ENABLED is true)
+  const [debugLogs, setDebugLogs] = useState<DebugLogEntry[]>([]);
+  const debugLogsRef = useRef<DebugLogEntry[]>([]);
+  const [showDebugPanel, setShowDebugPanel] = useState(false);
+  const [debugCategories, setDebugCategories] = useState<Set<DebugCategory>>(new Set(DEBUG_CATEGORIES));
+  const [trainerMode, setTrainerMode] = useState(() => {
+    if (!DEBUG_ENABLED) return false;
+    return localStorage.getItem("trainerMode") === "true";
+  });
+  const trainerModeRef = useRef(trainerMode);
+
   // Online multiplayer state
   const multiplayer = useMultiplayer();
   const workerRef = useRef<Worker | null>(null);
@@ -239,6 +251,17 @@ const Game = () => {
 
   // Keep ref in sync
   useEffect(() => { gameModeRef.current = gameMode; }, [gameMode]);
+  useEffect(() => { trainerModeRef.current = trainerMode; }, [trainerMode]);
+  useEffect(() => {
+    if (DEBUG_ENABLED) localStorage.setItem("trainerMode", String(trainerMode));
+  }, [trainerMode]);
+
+  const addDebugLog = useCallback((category: DebugCategory, message: string) => {
+    if (!DEBUG_ENABLED) return;
+    const entry: DebugLogEntry = { timestamp: Date.now(), category, message };
+    debugLogsRef.current = [...debugLogsRef.current.slice(-199), entry];
+    setDebugLogs(debugLogsRef.current);
+  }, []);
 
   const loadLeaderboard = useCallback(async () => {
     const { data, error } = await supabase
@@ -257,6 +280,11 @@ const Game = () => {
   }, []);
 
   const saveToLeaderboard = useCallback(async (playerInitials: string, score: number) => {
+    // Trainer mode: don't save scores
+    if (DEBUG_ENABLED && trainerModeRef.current) {
+      toast.info('Trainer mode: score not saved');
+      return;
+    }
     const { error } = await supabase
       .from('high_scores')
       .insert({ initials: playerInitials.toUpperCase(), score });
@@ -683,11 +711,13 @@ const Game = () => {
     const state = gameStateRef.current;
 
     state.wave++;
+    addDebugLog('wave', `Wave ${state.wave} started`);
     const isBossWave = state.wave % 5 === 0;
 
     if (isBossWave) {
       state.bossDefeated = false;
       state.boss = createBoss(state.wave);
+      addDebugLog('boss', `Boss spawned for wave ${state.wave}, HP: ${state.boss.hp}`);
       state.asteroids = [];
       state.aliens = [];
       state.ship = createShip();
@@ -748,7 +778,7 @@ const Game = () => {
     }
 
     toast.success(`Wave ${state.wave}!`);
-  }, []);
+  }, [addDebugLog]);
 
   const wrapPosition = (pos: Vector): Vector => {
     return {
@@ -788,6 +818,14 @@ const Game = () => {
   };
 
   const loseLife = useCallback((state: GameState) => {
+    // Trainer mode: prevent death
+    if (DEBUG_ENABLED && trainerModeRef.current) {
+      addDebugLog('death', `Trainer mode: death prevented at (${Math.round(state.ship.pos.x)}, ${Math.round(state.ship.pos.y)})`);
+      state.ship.invulnerable = true;
+      state.ship.invulnerableTime = 60;
+      return;
+    }
+    addDebugLog('death', `Ship destroyed at (${Math.round(state.ship.pos.x)}, ${Math.round(state.ship.pos.y)}), lives: ${state.lives - 1}`);
     spawnExplosion(state.ship.pos, "#FFFFFF", 20);
     state.lives--;
     setDisplayLives(state.lives);
@@ -799,7 +837,8 @@ const Game = () => {
     if (state.lives <= 0) {
       state.gameOver = true;
       setShowGameOver(true);
-      if (isHighScore(state.score)) setEnteringInitials(true);
+      // Trainer mode: don't offer score saving
+      if (!(DEBUG_ENABLED && trainerModeRef.current) && isHighScore(state.score)) setEnteringInitials(true);
       loadLeaderboard().then(setLeaderboard);
       toast.error(`Game Over! Final Score: ${state.score}`);
       haptics.gameOver();
@@ -807,7 +846,7 @@ const Game = () => {
       showLifeLostRef.current = true;
       setShowLifeLost(true);
     }
-  }, [isHighScore, loadLeaderboard]);
+  }, [isHighScore, loadLeaderboard, addDebugLog]);
 
   const shootBullet = useCallback(() => {
     if (gameModeRef.current === "solo") {
@@ -1217,6 +1256,7 @@ const Game = () => {
     if (state.ufoSpawnTimer <= 0 && state.ufos.length === 0 && !state.boss) {
       const size = state.wave > 6 ? (Math.random() < 0.5 ? "small" : "large") : "large";
       state.ufos.push(createUFO(size));
+      addDebugLog('spawn', `UFO spawned (${size})`);
       state.ufoSpawnTimer = Math.max(400, 900 - state.wave * 30) + Math.random() * 400;
     }
 
@@ -1258,9 +1298,11 @@ const Game = () => {
       if (state.alienSpawnTimer <= 0) {
         if (state.wave >= 3 && state.aliens.filter(a => a.type === "brown").length < 3) {
           state.aliens.push(createAlien("brown", state.wave));
+          addDebugLog('spawn', `Brown alien spawned (wave ${state.wave})`);
         }
         if (state.wave >= 6 && state.aliens.filter(a => a.type === "greenMan").length < 2) {
           state.aliens.push(createAlien("greenMan", state.wave));
+          addDebugLog('spawn', `Green man spawned (wave ${state.wave})`);
         }
         state.alienSpawnTimer = Math.max(180, 500 - state.wave * 20) + Math.random() * 200;
       }
@@ -1380,7 +1422,7 @@ const Game = () => {
           case "multiplier": state.powerUpActive.multiplier = 900; break;
         }
         soundEffects.powerUp();
-        haptics.medium();
+        addDebugLog('powerup', `Picked up ${powerUp.type} at (${Math.round(powerUp.pos.x)}, ${Math.round(powerUp.pos.y)})`);
         return false;
       }
       return powerUp.lifetime > 0;
@@ -1544,6 +1586,7 @@ const Game = () => {
 
             state.boss = null;
             state.bossDefeated = true;
+            addDebugLog('boss', `Boss defeated! Score: +${pts}`);
             toast.success("BOSS DEFEATED!");
           }
           return false;
@@ -1557,6 +1600,7 @@ const Game = () => {
       for (const asteroid of state.asteroids) {
         const radius = asteroid.size === "large" ? 40 : asteroid.size === "medium" ? 25 : 12;
         if (checkCollision(state.ship.pos, SHIP_SIZE, asteroid.pos, radius)) {
+          addDebugLog('collision', `Ship hit ${asteroid.size} asteroid`);
           loseLife(state);
           break;
         }
@@ -1568,6 +1612,7 @@ const Game = () => {
       for (const ufo of state.ufos) {
         const radius = ufo.size === "large" ? 20 : 10;
         if (checkCollision(state.ship.pos, SHIP_SIZE, ufo.pos, radius)) {
+          addDebugLog('collision', `Ship hit ${ufo.size} UFO`);
           loseLife(state);
           break;
         }
@@ -1578,6 +1623,7 @@ const Game = () => {
     if (!state.ship.invulnerable && state.powerUpActive.shield === 0) {
       for (const alien of state.aliens) {
         if (checkCollision(state.ship.pos, SHIP_SIZE, alien.pos, 12)) {
+          addDebugLog('collision', `Ship hit ${alien.type} alien`);
           loseLife(state);
           break;
         }
@@ -1587,6 +1633,7 @@ const Game = () => {
     // Collision: Ship vs Boss tentacles
     if (state.boss && state.boss.entered && !state.ship.invulnerable && state.powerUpActive.shield === 0) {
       if (checkCollision(state.ship.pos, SHIP_SIZE, state.boss.pos, 65)) {
+        addDebugLog('collision', 'Ship hit boss');
         loseLife(state);
       }
     }
@@ -1596,6 +1643,7 @@ const Game = () => {
       state.bullets = state.bullets.filter((bullet) => {
         if (!bullet.isUFO && !bullet.isAlien) return true;
         if (checkCollision(bullet.pos, 2, state.ship.pos, SHIP_SIZE)) {
+          addDebugLog('collision', `Ship hit by ${bullet.isUFO ? 'UFO' : 'alien'} bullet`);
           loseLife(state);
           return false;
         }
@@ -1608,7 +1656,7 @@ const Game = () => {
     if (noEnemies) {
       nextWave();
     }
-  }, [nextWave, loseLife, shootBullet, hyperspace]);
+  }, [nextWave, loseLife, shootBullet, hyperspace, addDebugLog]);
 
   // ===== DRAW SHIP HELPER =====
   const drawShip = (ctx: CanvasRenderingContext2D, ship: Ship, color: string, label?: string) => {
@@ -2399,6 +2447,21 @@ const Game = () => {
   const handleCanvasKeyDown = useCallback((e: React.KeyboardEvent<HTMLCanvasElement>) => {
     if (enteringInitialsRef.current) return;
 
+    // Debug panel toggle with § key
+    if (DEBUG_ENABLED && (e.key === "§" || e.key === "Dead")) {
+      e.preventDefault();
+      setShowDebugPanel(prev => !prev);
+      return;
+    }
+
+    // Level skip with 0 key (solo only, debug only)
+    if (DEBUG_ENABLED && e.key === "0" && gameModeRef.current === "solo" && !isPausedRef.current && !showLifeLostRef.current) {
+      e.preventDefault();
+      addDebugLog('wave', 'Level skip triggered (cheat)');
+      nextWave();
+      return;
+    }
+
     // Pause toggle on Escape
     if (e.key === "Escape" && (gameModeRef.current === "solo" || gameModeRef.current === "duel" || gameModeRef.current === "online")) {
       if (!showLifeLostRef.current && !showGameOver) {
@@ -2441,7 +2504,7 @@ const Game = () => {
       if (e.key === " ") { e.preventDefault(); }
       if (e.key === "e" || e.key === "E") { e.preventDefault(); }
     }
-  }, [shootBullet, hyperspace, togglePause, resumeGame, quitToMenu, showGameOver]);
+  }, [shootBullet, hyperspace, togglePause, resumeGame, quitToMenu, showGameOver, addDebugLog, nextWave]);
 
   const handleCanvasKeyUp = useCallback((e: React.KeyboardEvent<HTMLCanvasElement>) => {
     keysRef.current[e.key] = false;
@@ -2709,6 +2772,17 @@ const Game = () => {
             />
             AUTO-PLAY MUSIC
           </label>
+          {DEBUG_ENABLED && (
+            <label className="flex items-center gap-2 font-mono text-xs text-[#FF4444] opacity-70 hover:opacity-100 transition-opacity cursor-pointer justify-center mt-1">
+              <input
+                type="checkbox"
+                checked={trainerMode}
+                onChange={(e) => setTrainerMode(e.target.checked)}
+                className="accent-[#FF4444]"
+              />
+              TRAINER (NO SCORES)
+            </label>
+          )}
           <div className="text-[hsl(var(--game-foreground))] font-mono text-xs text-center opacity-60 mt-1">
             Thanks to <a href="https://scenestream.net/demovibes/" target="_blank" rel="noopener noreferrer" className="underline hover:opacity-80">Nectarine Demoscene Radio</a> for the music!
           </div>
@@ -2728,6 +2802,9 @@ const Game = () => {
           <div>SCORE: {displayScore.toString().padStart(8, "0")}</div>
           <div>LIVES: {displayLives}</div>
           <div>WAVE: {displayWave}</div>
+          {DEBUG_ENABLED && trainerMode && (
+            <div className="text-[#FF4444] animate-pulse">TRAINER</div>
+          )}
         </div>
       )}
       {(gameMode === "duel" || gameMode === "online") && (
@@ -2913,6 +2990,58 @@ const Game = () => {
             </Button>
           </div>
         )}
+
+        {/* Debug panel overlay */}
+        {DEBUG_ENABLED && showDebugPanel && (
+          <div className="absolute inset-0 bg-black/80 z-20 overflow-auto p-4 font-mono text-xs" onClick={(e) => e.stopPropagation()}>
+            <div className="flex justify-between items-center mb-3">
+              <div className="text-[#00FF00] text-sm">DEBUG LOG</div>
+              <button onClick={() => setShowDebugPanel(false)} className="text-[hsl(var(--game-foreground))] opacity-70 hover:opacity-100">✕ CLOSE</button>
+            </div>
+            <div className="flex flex-wrap gap-2 mb-3">
+              {DEBUG_CATEGORIES.map(cat => (
+                <label key={cat} className="flex items-center gap-1 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={debugCategories.has(cat)}
+                    onChange={() => setDebugCategories(prev => {
+                      const next = new Set(prev);
+                      if (next.has(cat)) next.delete(cat); else next.add(cat);
+                      return next;
+                    })}
+                    className="accent-[#00FF00]"
+                  />
+                  <span className="text-[#00FF00] uppercase">{cat}</span>
+                </label>
+              ))}
+            </div>
+            <button onClick={() => { debugLogsRef.current = []; setDebugLogs([]); }} className="text-[#FF4444] mb-2 hover:underline">CLEAR</button>
+            <div className="max-h-[400px] overflow-auto border border-[#00FF00]/30 p-2">
+              {debugLogs.filter(l => debugCategories.has(l.category)).slice().reverse().map((log, i) => (
+                <div key={i} className="text-[#00FF00]/80 py-0.5 border-b border-[#00FF00]/10">
+                  <span className="text-[#00FF00]/50">{new Date(log.timestamp).toLocaleTimeString()}</span>
+                  {' '}
+                  <span className="text-[#FFAA00]">[{log.category}]</span>
+                  {' '}
+                  {log.message}
+                </div>
+              ))}
+              {debugLogs.filter(l => debugCategories.has(l.category)).length === 0 && (
+                <div className="text-[#00FF00]/40">No log entries matching filters</div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Mobile debug toggle button */}
+        {DEBUG_ENABLED && isTouchDevice && (
+          <button
+            onClick={() => setShowDebugPanel(prev => !prev)}
+            className="absolute top-2 left-2 z-30 w-8 h-8 rounded border border-[#00FF00]/30 text-[#00FF00] font-mono text-xs flex items-center justify-center opacity-30 hover:opacity-80"
+          >
+            §
+          </button>
+        )}
       </div>
 
       {isTouchDevice && gameMode === "solo" && (
@@ -3051,6 +3180,17 @@ const Game = () => {
           />
           AUTO-PLAY MUSIC
         </label>
+        {DEBUG_ENABLED && (
+          <label className="flex items-center gap-2 font-mono text-xs text-[#FF4444] opacity-70 hover:opacity-100 transition-opacity cursor-pointer justify-center mt-1">
+            <input
+              type="checkbox"
+              checked={trainerMode}
+              onChange={(e) => setTrainerMode(e.target.checked)}
+              className="accent-[#FF4444]"
+            />
+            TRAINER (NO SCORES)
+          </label>
+        )}
         <div className="text-[hsl(var(--game-foreground))] font-mono text-xs text-center opacity-60 mt-1">
           Thanks to <a href="https://scenestream.net/demovibes/" target="_blank" rel="noopener noreferrer" className="underline hover:opacity-80">Nectarine Demoscene Radio</a> for the music!
         </div>
