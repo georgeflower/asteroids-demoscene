@@ -1633,6 +1633,7 @@ const Game = () => {
     // Collision: Ship vs Boss tentacles
     if (state.boss && state.boss.entered && !state.ship.invulnerable && state.powerUpActive.shield === 0) {
       if (checkCollision(state.ship.pos, SHIP_SIZE, state.boss.pos, 65)) {
+        addDebugLog('collision', 'Ship hit boss');
         loseLife(state);
       }
     }
