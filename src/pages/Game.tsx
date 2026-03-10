@@ -3487,50 +3487,58 @@ const Game = () => {
       )}
 
       {!isTouchDevice && (
-        <div className="mt-4 text-[hsl(var(--game-foreground))] font-mono text-[8px] opacity-60">
-          {gameMode === "solo" && (
-            <div className="flex gap-10 justify-center">
-              <div className="text-left space-y-0.5">
-                <div className="font-bold opacity-70 mb-1">KEYBOARD</div>
-                <div>← → ROTATE</div>
-                <div>↑ THRUST</div>
-                <div>SPACE FIRE</div>
-                <div>H HYPERSPACE</div>
-                <div>ESC PAUSE</div>
+        <div className="mt-4 text-[hsl(var(--game-foreground))] font-mono text-[8px] opacity-60 flex items-end justify-between">
+          <div className="flex-1">
+            {gameMode === "solo" && (
+              <div className="flex gap-10 justify-center">
+                <div className="text-left space-y-0.5">
+                  <div className="font-bold opacity-70 mb-1">KEYBOARD</div>
+                  <div>← → ROTATE</div>
+                  <div>↑ THRUST</div>
+                  <div>SPACE FIRE</div>
+                  <div>H HYPERSPACE</div>
+                  <div>ESC PAUSE</div>
+                </div>
+                <div className="text-left space-y-0.5">
+                  <div className="font-bold opacity-70 mb-1">GAMEPAD</div>
+                  <div>STICK/DPAD MOVE</div>
+                  <div>X/↑ THRUST</div>
+                  <div>A FIRE</div>
+                  <div>B HYPER</div>
+                  <div>START PAUSE</div>
+                </div>
               </div>
-              <div className="text-left space-y-0.5">
-                <div className="font-bold opacity-70 mb-1">GAMEPAD</div>
-                <div>STICK/DPAD MOVE</div>
-                <div>X/↑ THRUST</div>
-                <div>A FIRE</div>
-                <div>B HYPER</div>
-                <div>START PAUSE</div>
+            )}
+            {gameMode === "duel" && (
+              <div className="flex gap-10 justify-center">
+                <div className="text-left space-y-0.5">
+                  <div className="font-bold opacity-70 mb-1">KEYBOARD</div>
+                  <div style={{ color: P1_COLOR }}>P1: ← → ROTATE</div>
+                  <div style={{ color: P1_COLOR }}>P1: ↑ THRUST</div>
+                  <div style={{ color: P1_COLOR }}>P1: SPACE FIRE</div>
+                  <div style={{ color: P2_COLOR }}>P2: A D ROTATE</div>
+                  <div style={{ color: P2_COLOR }}>P2: W THRUST</div>
+                  <div style={{ color: P2_COLOR }}>P2: E FIRE</div>
+                  <div>ESC PAUSE</div>
+                </div>
+                <div className="text-left space-y-0.5">
+                  <div className="font-bold opacity-70 mb-1">GAMEPAD</div>
+                  <div style={{ color: P1_COLOR }}>P1: GP1</div>
+                  <div style={{ color: P2_COLOR }}>P2: GP2</div>
+                  <div>A FIRE</div>
+                  <div>B HYPER</div>
+                  <div>X/↑ THRUST</div>
+                  <div>START PAUSE</div>
+                </div>
               </div>
-            </div>
-          )}
-          {gameMode === "duel" && (
-            <div className="flex gap-10 justify-center">
-              <div className="text-left space-y-0.5">
-                <div className="font-bold opacity-70 mb-1">KEYBOARD</div>
-                <div style={{ color: P1_COLOR }}>P1: ← → ROTATE</div>
-                <div style={{ color: P1_COLOR }}>P1: ↑ THRUST</div>
-                <div style={{ color: P1_COLOR }}>P1: SPACE FIRE</div>
-                <div style={{ color: P2_COLOR }}>P2: A D ROTATE</div>
-                <div style={{ color: P2_COLOR }}>P2: W THRUST</div>
-                <div style={{ color: P2_COLOR }}>P2: E FIRE</div>
-                <div>ESC PAUSE</div>
-              </div>
-              <div className="text-left space-y-0.5">
-                <div className="font-bold opacity-70 mb-1">GAMEPAD</div>
-                <div style={{ color: P1_COLOR }}>P1: GP1</div>
-                <div style={{ color: P2_COLOR }}>P2: GP2</div>
-                <div>A FIRE</div>
-                <div>B HYPER</div>
-                <div>X/↑ THRUST</div>
-                <div>START PAUSE</div>
-              </div>
-            </div>
-          )}
+            )}
+          </div>
+          <div
+            className="text-xs tracking-widest shrink-0 ml-4"
+            style={{ textShadow: "0 0 8px hsl(var(--game-foreground))" }}
+          >
+            v{GAME_VERSION}
+          </div>
         </div>
       )}
 
