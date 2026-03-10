@@ -1298,9 +1298,11 @@ const Game = () => {
       if (state.alienSpawnTimer <= 0) {
         if (state.wave >= 3 && state.aliens.filter(a => a.type === "brown").length < 3) {
           state.aliens.push(createAlien("brown", state.wave));
+          addDebugLog('spawn', `Brown alien spawned (wave ${state.wave})`);
         }
         if (state.wave >= 6 && state.aliens.filter(a => a.type === "greenMan").length < 2) {
           state.aliens.push(createAlien("greenMan", state.wave));
+          addDebugLog('spawn', `Green man spawned (wave ${state.wave})`);
         }
         state.alienSpawnTimer = Math.max(180, 500 - state.wave * 20) + Math.random() * 200;
       }
