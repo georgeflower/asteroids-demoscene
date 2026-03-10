@@ -1656,7 +1656,7 @@ const Game = () => {
     if (noEnemies) {
       nextWave();
     }
-  }, [nextWave, loseLife, shootBullet, hyperspace]);
+  }, [nextWave, loseLife, shootBullet, hyperspace, addDebugLog]);
 
   // ===== DRAW SHIP HELPER =====
   const drawShip = (ctx: CanvasRenderingContext2D, ship: Ship, color: string, label?: string) => {
