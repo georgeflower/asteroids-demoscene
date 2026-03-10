@@ -706,11 +706,13 @@ const Game = () => {
     const state = gameStateRef.current;
 
     state.wave++;
+    addDebugLog('wave', `Wave ${state.wave} started`);
     const isBossWave = state.wave % 5 === 0;
 
     if (isBossWave) {
       state.bossDefeated = false;
       state.boss = createBoss(state.wave);
+      addDebugLog('boss', `Boss spawned for wave ${state.wave}, HP: ${state.boss.hp}`);
       state.asteroids = [];
       state.aliens = [];
       state.ship = createShip();
@@ -771,7 +773,7 @@ const Game = () => {
     }
 
     toast.success(`Wave ${state.wave}!`);
-  }, []);
+  }, [addDebugLog]);
 
   const wrapPosition = (pos: Vector): Vector => {
     return {
