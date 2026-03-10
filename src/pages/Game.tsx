@@ -1357,7 +1357,9 @@ const Game = () => {
 
     if (state.ship.invulnerableTime > 0) {
       state.ship.invulnerableTime--;
-      if (state.ship.invulnerableTime === 0) state.ship.invulnerable = false;
+      if (state.ship.invulnerableTime === 0 && state.powerUpActive.shield === 0) {
+        state.ship.invulnerable = false;
+      }
     }
 
     // Update asteroids with edge-homing
@@ -1552,6 +1554,7 @@ const Game = () => {
           case "shield":
             state.powerUpActive.shield = 300;
             state.ship.invulnerable = true;
+            state.ship.invulnerableTime = 0; // Clear spawn invulnerability timer
             break;
           case "rapidFire":
             state.powerUpActive.rapidFire = 600;
