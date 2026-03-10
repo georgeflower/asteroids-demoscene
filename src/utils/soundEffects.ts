@@ -12,7 +12,11 @@ class SoundEffects {
 
   constructor() {
     const windowWithWebkit = window as WindowWithWebkitAudio;
-    this.audioContext = new (window.AudioContext || windowWithWebkit.webkitAudioContext!)();
+    const AudioContextClass = window.AudioContext || windowWithWebkit.webkitAudioContext;
+    if (!AudioContextClass) {
+      throw new Error("AudioContext is not supported in this browser");
+    }
+    this.audioContext = new AudioContextClass();
   }
 
   // Shooting sound - short laser beep
