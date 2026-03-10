@@ -1623,6 +1623,7 @@ const Game = () => {
     if (!state.ship.invulnerable && state.powerUpActive.shield === 0) {
       for (const alien of state.aliens) {
         if (checkCollision(state.ship.pos, SHIP_SIZE, alien.pos, 12)) {
+          addDebugLog('collision', `Ship hit ${alien.type} alien`);
           loseLife(state);
           break;
         }
