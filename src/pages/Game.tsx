@@ -1256,6 +1256,7 @@ const Game = () => {
     if (state.ufoSpawnTimer <= 0 && state.ufos.length === 0 && !state.boss) {
       const size = state.wave > 6 ? (Math.random() < 0.5 ? "small" : "large") : "large";
       state.ufos.push(createUFO(size));
+      addDebugLog('spawn', `UFO spawned (${size})`);
       state.ufoSpawnTimer = Math.max(400, 900 - state.wave * 30) + Math.random() * 400;
     }
 
