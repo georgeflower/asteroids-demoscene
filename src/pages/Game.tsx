@@ -1612,6 +1612,7 @@ const Game = () => {
       for (const ufo of state.ufos) {
         const radius = ufo.size === "large" ? 20 : 10;
         if (checkCollision(state.ship.pos, SHIP_SIZE, ufo.pos, radius)) {
+          addDebugLog('collision', `Ship hit ${ufo.size} UFO`);
           loseLife(state);
           break;
         }
