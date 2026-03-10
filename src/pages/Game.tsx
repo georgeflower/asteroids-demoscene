@@ -112,11 +112,46 @@ interface ColorTheme {
 }
 
 const COLOR_THEMES: ColorTheme[] = [
-  { name: "Classic", ship: "#00FFFF", asteroids: ["#FFFFFF", "#88DDFF", "#44AAFF"], bg: "#050510", accent: "#00FF88", enemy: "#FFFF44" },
-  { name: "Inferno", ship: "#FF8800", asteroids: ["#FF4444", "#FF8844", "#FFAA22"], bg: "#0A0505", accent: "#FF2200", enemy: "#FFCC00" },
-  { name: "Void", ship: "#AA44FF", asteroids: ["#CC88FF", "#8844CC", "#6622AA"], bg: "#080518", accent: "#FF44FF", enemy: "#AA88FF" },
-  { name: "Solar", ship: "#FFDD00", asteroids: ["#FFD700", "#FFAA00", "#FF8800"], bg: "#0A0800", accent: "#FFFF44", enemy: "#FFEE66" },
-  { name: "Toxic", ship: "#44FF44", asteroids: ["#88FF88", "#44CC44", "#22AA22"], bg: "#030A03", accent: "#00FF00", enemy: "#AAFF44" },
+  {
+    name: "Classic",
+    ship: "#44FF44",
+    asteroids: ["#FFFFFF", "#88DDFF", "#44AAFF"],
+    bg: "#050510",
+    accent: "#00FF88",
+    enemy: "#FFFF44",
+  },
+  {
+    name: "Inferno",
+    ship: "#44FF44",
+    asteroids: ["#FF4444", "#FF8844", "#FFAA22"],
+    bg: "#0A0505",
+    accent: "#FF2200",
+    enemy: "#FFCC00",
+  },
+  {
+    name: "Void",
+    ship: "#44FF44",
+    asteroids: ["#CC88FF", "#8844CC", "#6622AA"],
+    bg: "#080518",
+    accent: "#FF44FF",
+    enemy: "#AA88FF",
+  },
+  {
+    name: "Solar",
+    ship: "#44FF44",
+    asteroids: ["#FFD700", "#FFAA00", "#FF8800"],
+    bg: "#0A0800",
+    accent: "#FFFF44",
+    enemy: "#FFEE66",
+  },
+  {
+    name: "Toxic",
+    ship: "#44FF44",
+    asteroids: ["#88FF88", "#44CC44", "#22AA22"],
+    bg: "#030A03",
+    accent: "#00FF00",
+    enemy: "#AAFF44",
+  },
 ];
 
 interface GameState {
@@ -202,7 +237,7 @@ const Game = () => {
   const [showLeaderboard, setShowLeaderboard] = useState(false);
   const [enteringInitials, setEnteringInitials] = useState(false);
   const [initials, setInitials] = useState("");
-  const [leaderboard, setLeaderboard] = useState<{initials: string; score: number; date: string}[]>([]);
+  const [leaderboard, setLeaderboard] = useState<{ initials: string; score: number; date: string }[]>([]);
   const [showLifeLost, setShowLifeLost] = useState(false);
   const showLifeLostRef = useRef(false);
   const [isTouchDevice, setIsTouchDevice] = useState(false);
@@ -250,8 +285,12 @@ const Game = () => {
   const isConnectedRef = useRef(false);
 
   // Keep ref in sync
-  useEffect(() => { gameModeRef.current = gameMode; }, [gameMode]);
-  useEffect(() => { trainerModeRef.current = trainerMode; }, [trainerMode]);
+  useEffect(() => {
+    gameModeRef.current = gameMode;
+  }, [gameMode]);
+  useEffect(() => {
+    trainerModeRef.current = trainerMode;
+  }, [trainerMode]);
   useEffect(() => {
     if (DEBUG_ENABLED) localStorage.setItem("trainerMode", String(trainerMode));
   }, [trainerMode]);
@@ -265,9 +304,9 @@ const Game = () => {
 
   const loadLeaderboard = useCallback(async () => {
     const { data, error } = await supabase
-      .from('high_scores')
-      .select('initials, score, created_at')
-      .order('score', { ascending: false })
+      .from("high_scores")
+      .select("initials, score, created_at")
+      .order("score", { ascending: false })
       .limit(10);
     if (!error && data) {
       return data.map((row) => ({
@@ -279,26 +318,30 @@ const Game = () => {
     return [];
   }, []);
 
-  const saveToLeaderboard = useCallback(async (playerInitials: string, score: number) => {
-    // Trainer mode: don't save scores
-    if (DEBUG_ENABLED && trainerModeRef.current) {
-      toast.info('Trainer mode: score not saved');
-      return;
-    }
-    const { error } = await supabase
-      .from('high_scores')
-      .insert({ initials: playerInitials.toUpperCase(), score });
-    if (error) {
-      toast.error('Failed to save score online');
-      return;
-    }
-    const board = await loadLeaderboard();
-    setLeaderboard(board);
-  }, [loadLeaderboard]);
+  const saveToLeaderboard = useCallback(
+    async (playerInitials: string, score: number) => {
+      // Trainer mode: don't save scores
+      if (DEBUG_ENABLED && trainerModeRef.current) {
+        toast.info("Trainer mode: score not saved");
+        return;
+      }
+      const { error } = await supabase.from("high_scores").insert({ initials: playerInitials.toUpperCase(), score });
+      if (error) {
+        toast.error("Failed to save score online");
+        return;
+      }
+      const board = await loadLeaderboard();
+      setLeaderboard(board);
+    },
+    [loadLeaderboard],
+  );
 
-  const isHighScore = useCallback((score: number) => {
-    return leaderboard.length < 10 || score > (leaderboard[leaderboard.length - 1]?.score ?? 0);
-  }, [leaderboard]);
+  const isHighScore = useCallback(
+    (score: number) => {
+      return leaderboard.length < 10 || score > (leaderboard[leaderboard.length - 1]?.score ?? 0);
+    },
+    [leaderboard],
+  );
 
   useEffect(() => {
     loadLeaderboard().then(setLeaderboard);
@@ -404,7 +447,7 @@ const Game = () => {
     }
 
     const angle = Math.random() * Math.PI * 2;
-    const variance = size === "large" ? (0.3 + Math.random() * 1.2) : (0.8 + Math.random() * 0.4);
+    const variance = size === "large" ? 0.3 + Math.random() * 1.2 : 0.8 + Math.random() * 0.4;
     const speed = ASTEROID_SPEEDS[size] * variance * getSpeedScale(wave);
 
     return {
@@ -432,7 +475,10 @@ const Game = () => {
 
   const createAlien = (type: "brown" | "greenMan", wave: number): Alien => {
     const side = Math.random() < 0.5 ? -20 : CANVAS_WIDTH + 20;
-    const speed = type === "brown" ? (2 + Math.random() * 1.5) * getSpeedScale(wave) : (0.8 + Math.random() * 0.4) * getSpeedScale(wave);
+    const speed =
+      type === "brown"
+        ? (2 + Math.random() * 1.5) * getSpeedScale(wave)
+        : (0.8 + Math.random() * 0.4) * getSpeedScale(wave);
     const dir = side < 0 ? 1 : -1;
     return {
       pos: { x: side, y: 30 + Math.random() * (CANVAS_HEIGHT - 60) },
@@ -476,7 +522,9 @@ const Game = () => {
   };
 
   // ===== Gamepad helpers =====
-  const readGamepad = (index: number): { left: boolean; right: boolean; up: boolean; fire: boolean; hyperspace: boolean } => {
+  const readGamepad = (
+    index: number,
+  ): { left: boolean; right: boolean; up: boolean; fire: boolean; hyperspace: boolean } => {
     const result = { left: false, right: false, up: false, fire: false, hyperspace: false };
     try {
       const gamepads = navigator.getGamepads();
@@ -495,7 +543,9 @@ const Game = () => {
       if (gp.buttons[1]?.pressed) result.hyperspace = true;
       // X button (button 2) = also thrust
       if (gp.buttons[2]?.pressed) result.up = true;
-    } catch { /* no gamepad API */ }
+    } catch {
+      /* no gamepad API */
+    }
     return result;
   };
 
@@ -547,7 +597,9 @@ const Game = () => {
     setGameMode("solo");
     toast.success("Game Started! Use Arrow Keys to move, Space to shoot");
     // Focus canvas for input capture
-    setTimeout(() => { canvasRef.current?.focus(); }, 50);
+    setTimeout(() => {
+      canvasRef.current?.focus();
+    }, 50);
   }, []);
 
   const initDuel = useCallback(() => {
@@ -592,7 +644,9 @@ const Game = () => {
     setDuelDeaths([0, 0]);
     setGameMode("duel");
     toast.success("DUEL MODE! P1: Arrows+Space | P2: WASD+E");
-    setTimeout(() => { canvasRef.current?.focus(); }, 50);
+    setTimeout(() => {
+      canvasRef.current?.focus();
+    }, 50);
   }, []);
 
   // ===== ONLINE HELPERS =====
@@ -614,34 +668,49 @@ const Game = () => {
     ds.ship2.invulnerable = net.ship2.invuln;
     ds.ship2.invulnerableTime = net.ship2.invulnTime;
 
-    ds.bullets1 = net.bullets1.map(b => ({
-      pos: { x: b.x, y: b.y }, vel: { x: b.vx, y: b.vy },
-      rotation: b.rot, lifetime: b.lifetime, owner: b.owner,
+    ds.bullets1 = net.bullets1.map((b) => ({
+      pos: { x: b.x, y: b.y },
+      vel: { x: b.vx, y: b.vy },
+      rotation: b.rot,
+      lifetime: b.lifetime,
+      owner: b.owner,
     }));
-    ds.bullets2 = net.bullets2.map(b => ({
-      pos: { x: b.x, y: b.y }, vel: { x: b.vx, y: b.vy },
-      rotation: b.rot, lifetime: b.lifetime, owner: b.owner,
+    ds.bullets2 = net.bullets2.map((b) => ({
+      pos: { x: b.x, y: b.y },
+      vel: { x: b.vx, y: b.vy },
+      rotation: b.rot,
+      lifetime: b.lifetime,
+      owner: b.owner,
     }));
 
-    ds.asteroids = net.asteroids.map(a => {
+    ds.asteroids = net.asteroids.map((a) => {
       const pts: Vector[] = [];
       for (let j = 0; j < a.points.length; j += 2) {
         pts.push({ x: a.points[j], y: a.points[j + 1] });
       }
       return {
-        pos: { x: a.x, y: a.y }, vel: { x: a.vx, y: a.vy },
-        rotation: a.rot, size: a.size as "large" | "medium" | "small",
-        rotationSpeed: a.rotSpeed, points: pts,
+        pos: { x: a.x, y: a.y },
+        vel: { x: a.vx, y: a.vy },
+        rotation: a.rot,
+        size: a.size as "large" | "medium" | "small",
+        rotationSpeed: a.rotSpeed,
+        points: pts,
       };
     });
 
-    ds.aliens = net.aliens.map(a => ({
-      pos: { x: a.x, y: a.y }, vel: { x: a.vx, y: a.vy },
-      rotation: 0, type: a.type as "brown" | "greenMan",
-      hp: 1, moveTimer: 0, shootTimer: 999, zigzagPhase: 0,
+    ds.aliens = net.aliens.map((a) => ({
+      pos: { x: a.x, y: a.y },
+      vel: { x: a.vx, y: a.vy },
+      rotation: 0,
+      type: a.type as "brown" | "greenMan",
+      hp: 1,
+      moveTimer: 0,
+      shootTimer: 999,
+      zigzagPhase: 0,
     }));
 
-    const prevK0 = ds.kills[0], prevK1 = ds.kills[1];
+    const prevK0 = ds.kills[0],
+      prevK1 = ds.kills[1];
     ds.kills = net.kills;
     ds.deaths = net.deaths;
     ds.respawnTimer = net.respawnTimer;
@@ -667,13 +736,16 @@ const Game = () => {
     const ds = duelStateRef.current;
     if (!ds) return;
     ds.floatingTexts = ds.floatingTexts.filter((ft) => {
-      ft.pos.y -= 0.5; ft.lifetime--;
+      ft.pos.y -= 0.5;
+      ft.lifetime--;
       ft.opacity = ft.lifetime / ft.maxLifetime;
       return ft.lifetime > 0;
     });
     ds.particles = ds.particles.filter((p) => {
-      p.pos.x += p.vel.x; p.pos.y += p.vel.y;
-      p.vel.x *= 0.97; p.vel.y *= 0.97;
+      p.pos.x += p.vel.x;
+      p.pos.y += p.vel.y;
+      p.vel.x *= 0.97;
+      p.vel.y *= 0.97;
       p.lifetime--;
       return p.lifetime > 0;
     });
@@ -683,27 +755,39 @@ const Game = () => {
     duelStateRef.current = {
       ship1: createShip(CANVAS_WIDTH * 0.25, CANVAS_HEIGHT / 2),
       ship2: createShip(CANVAS_WIDTH * 0.75, CANVAS_HEIGHT / 2),
-      bullets1: [], bullets2: [], asteroids: [], aliens: [],
-      kills: [0, 0], deaths: [0, 0], respawnTimer: [0, 0],
-      floatingTexts: [], particles: [], stars: createStars(),
-      alienSpawnTimer: 800, asteroidSpawnTimer: 600,
+      bullets1: [],
+      bullets2: [],
+      asteroids: [],
+      aliens: [],
+      kills: [0, 0],
+      deaths: [0, 0],
+      respawnTimer: [0, 0],
+      floatingTexts: [],
+      particles: [],
+      stars: createStars(),
+      alienSpawnTimer: 800,
+      asteroidSpawnTimer: 600,
     };
     duelStateRef.current.ship1.rotation = 0;
     duelStateRef.current.ship2.rotation = Math.PI;
     gameStateRef.current = null;
-    setShowGameOver(false); setShowLifeLost(false);
+    setShowGameOver(false);
+    setShowLifeLost(false);
     showLifeLostRef.current = false;
-    setDuelKills([0, 0]); setDuelDeaths([0, 0]);
+    setDuelKills([0, 0]);
+    setDuelDeaths([0, 0]);
     setGameMode("online");
     broadcastTickRef.current = 0;
 
     if (isHost) {
-      const worker = new Worker(new URL('../workers/gameWorker.ts', import.meta.url), { type: 'module' });
+      const worker = new Worker(new URL("../workers/gameWorker.ts", import.meta.url), { type: "module" });
       workerRef.current = worker;
-      worker.postMessage({ type: 'init' });
+      worker.postMessage({ type: "init" });
     }
     toast.success(isHost ? "Game started! You are HOST (P1)" : "Game started! You are GUEST (P2)");
-    setTimeout(() => { canvasRef.current?.focus(); }, 50);
+    setTimeout(() => {
+      canvasRef.current?.focus();
+    }, 50);
   }, []);
 
   const nextWave = useCallback(() => {
@@ -711,31 +795,21 @@ const Game = () => {
     const state = gameStateRef.current;
 
     state.wave++;
-    addDebugLog('wave', `Wave ${state.wave} started`);
+    addDebugLog("wave", `Wave ${state.wave} started`);
     const isBossWave = state.wave % 5 === 0;
 
     if (isBossWave) {
       state.bossDefeated = false;
       state.boss = createBoss(state.wave);
-      addDebugLog('boss', `Boss spawned for wave ${state.wave}, HP: ${state.boss.hp}`);
+      addDebugLog("boss", `Boss spawned for wave ${state.wave}, HP: ${state.boss.hp}`);
       state.asteroids = [];
       state.aliens = [];
       state.ship = createShip();
       setDisplayWave(state.wave);
 
       const theme = getTheme(state.wave);
-      spawnFloatingText(
-        { x: CANVAS_WIDTH / 2, y: CANVAS_HEIGHT / 2 - 40 },
-        `WAVE ${state.wave}`,
-        theme.ship,
-        28
-      );
-      spawnFloatingText(
-        { x: CANVAS_WIDTH / 2, y: CANVAS_HEIGHT / 2 + 10 },
-        "⚠ BOSS INCOMING ⚠",
-        "#FF4444",
-        22
-      );
+      spawnFloatingText({ x: CANVAS_WIDTH / 2, y: CANVAS_HEIGHT / 2 - 40 }, `WAVE ${state.wave}`, theme.ship, 28);
+      spawnFloatingText({ x: CANVAS_WIDTH / 2, y: CANVAS_HEIGHT / 2 + 10 }, "⚠ BOSS INCOMING ⚠", "#FF4444", 22);
       toast.success(`Wave ${state.wave} — BOSS FIGHT!`);
       return;
     }
@@ -761,19 +835,14 @@ const Game = () => {
     setDisplayWave(state.wave);
 
     const theme = getTheme(state.wave);
-    spawnFloatingText(
-      { x: CANVAS_WIDTH / 2, y: CANVAS_HEIGHT / 2 },
-      `WAVE ${state.wave}`,
-      theme.ship,
-      28
-    );
+    spawnFloatingText({ x: CANVAS_WIDTH / 2, y: CANVAS_HEIGHT / 2 }, `WAVE ${state.wave}`, theme.ship, 28);
 
     if ((state.wave - 1) % 5 === 0 && state.wave > 1) {
       spawnFloatingText(
         { x: CANVAS_WIDTH / 2, y: CANVAS_HEIGHT / 2 + 35 },
         `${theme.name.toUpperCase()} ZONE`,
         theme.accent,
-        18
+        18,
       );
     }
 
@@ -792,8 +861,8 @@ const Game = () => {
     const oldY = asteroid.pos.y;
     asteroid.pos = wrapPosition(asteroid.pos);
 
-    const wrapped = Math.abs(asteroid.pos.x - oldX) > CANVAS_WIDTH * 0.5 ||
-                    Math.abs(asteroid.pos.y - oldY) > CANVAS_HEIGHT * 0.5;
+    const wrapped =
+      Math.abs(asteroid.pos.x - oldX) > CANVAS_WIDTH * 0.5 || Math.abs(asteroid.pos.y - oldY) > CANVAS_HEIGHT * 0.5;
 
     if (wrapped) {
       const toShipAngle = Math.atan2(shipPos.y - asteroid.pos.y, shipPos.x - asteroid.pos.x);
@@ -817,36 +886,45 @@ const Game = () => {
     return Math.sqrt(dx * dx + dy * dy) < radius1 + radius2;
   };
 
-  const loseLife = useCallback((state: GameState) => {
-    // Trainer mode: prevent death
-    if (DEBUG_ENABLED && trainerModeRef.current) {
-      addDebugLog('death', `Trainer mode: death prevented at (${Math.round(state.ship.pos.x)}, ${Math.round(state.ship.pos.y)})`);
-      state.ship.invulnerable = true;
-      state.ship.invulnerableTime = 60;
-      return;
-    }
-    addDebugLog('death', `Ship destroyed at (${Math.round(state.ship.pos.x)}, ${Math.round(state.ship.pos.y)}), lives: ${state.lives - 1}`);
-    spawnExplosion(state.ship.pos, "#FFFFFF", 20);
-    state.lives--;
-    setDisplayLives(state.lives);
-    state.ship = createShip();
-    soundEffects.explode();
-    soundEffects.stopThrust();
-    haptics.heavy();
+  const loseLife = useCallback(
+    (state: GameState) => {
+      // Trainer mode: prevent death
+      if (DEBUG_ENABLED && trainerModeRef.current) {
+        addDebugLog(
+          "death",
+          `Trainer mode: death prevented at (${Math.round(state.ship.pos.x)}, ${Math.round(state.ship.pos.y)})`,
+        );
+        state.ship.invulnerable = true;
+        state.ship.invulnerableTime = 60;
+        return;
+      }
+      addDebugLog(
+        "death",
+        `Ship destroyed at (${Math.round(state.ship.pos.x)}, ${Math.round(state.ship.pos.y)}), lives: ${state.lives - 1}`,
+      );
+      spawnExplosion(state.ship.pos, "#FFFFFF", 20);
+      state.lives--;
+      setDisplayLives(state.lives);
+      state.ship = createShip();
+      soundEffects.explode();
+      soundEffects.stopThrust();
+      haptics.heavy();
 
-    if (state.lives <= 0) {
-      state.gameOver = true;
-      setShowGameOver(true);
-      // Trainer mode: don't offer score saving
-      if (!(DEBUG_ENABLED && trainerModeRef.current) && isHighScore(state.score)) setEnteringInitials(true);
-      loadLeaderboard().then(setLeaderboard);
-      toast.error(`Game Over! Final Score: ${state.score}`);
-      haptics.gameOver();
-    } else {
-      showLifeLostRef.current = true;
-      setShowLifeLost(true);
-    }
-  }, [isHighScore, loadLeaderboard, addDebugLog]);
+      if (state.lives <= 0) {
+        state.gameOver = true;
+        setShowGameOver(true);
+        // Trainer mode: don't offer score saving
+        if (!(DEBUG_ENABLED && trainerModeRef.current) && isHighScore(state.score)) setEnteringInitials(true);
+        loadLeaderboard().then(setLeaderboard);
+        toast.error(`Game Over! Final Score: ${state.score}`);
+        haptics.gameOver();
+      } else {
+        showLifeLostRef.current = true;
+        setShowLifeLost(true);
+      }
+    },
+    [isHighScore, loadLeaderboard, addDebugLog],
+  );
 
   const shootBullet = useCallback(() => {
     if (gameModeRef.current === "solo") {
@@ -989,13 +1067,14 @@ const Game = () => {
     if (p2Fire && ds.respawnTimer[1] === 0) shootBulletDuel(2);
 
     // Update bullets
-    const updateBullets = (bullets: Bullet[]) => bullets.filter((b) => {
-      b.pos.x += b.vel.x;
-      b.pos.y += b.vel.y;
-      b.pos = wrapPosition(b.pos);
-      b.lifetime--;
-      return b.lifetime > 0;
-    });
+    const updateBullets = (bullets: Bullet[]) =>
+      bullets.filter((b) => {
+        b.pos.x += b.vel.x;
+        b.pos.y += b.vel.y;
+        b.pos = wrapPosition(b.pos);
+        b.lifetime--;
+        return b.lifetime > 0;
+      });
     ds.bullets1 = updateBullets(ds.bullets1);
     ds.bullets2 = updateBullets(ds.bullets2);
 
@@ -1012,10 +1091,19 @@ const Game = () => {
     if (ds.asteroidSpawnTimer <= 0 && ds.asteroids.length < 6) {
       const edge = Math.random();
       let x: number, y: number;
-      if (edge < 0.25) { x = 0; y = Math.random() * CANVAS_HEIGHT; }
-      else if (edge < 0.5) { x = CANVAS_WIDTH; y = Math.random() * CANVAS_HEIGHT; }
-      else if (edge < 0.75) { x = Math.random() * CANVAS_WIDTH; y = 0; }
-      else { x = Math.random() * CANVAS_WIDTH; y = CANVAS_HEIGHT; }
+      if (edge < 0.25) {
+        x = 0;
+        y = Math.random() * CANVAS_HEIGHT;
+      } else if (edge < 0.5) {
+        x = CANVAS_WIDTH;
+        y = Math.random() * CANVAS_HEIGHT;
+      } else if (edge < 0.75) {
+        x = Math.random() * CANVAS_WIDTH;
+        y = 0;
+      } else {
+        x = Math.random() * CANVAS_WIDTH;
+        y = CANVAS_HEIGHT;
+      }
       ds.asteroids.push(createAsteroid(x, y, "large", 1));
       ds.asteroidSpawnTimer = 500 + Math.random() * 400;
     }
@@ -1055,7 +1143,13 @@ const Game = () => {
       ship.invulnerableTime = 999;
       setDuelKills([...ds.kills]);
       setDuelDeaths([...ds.deaths]);
-      spawnFloatingTextTo(ds.floatingTexts, ship.pos, `P${killerIdx + 1} KILL!`, killerIdx === 0 ? P1_COLOR : P2_COLOR, 20);
+      spawnFloatingTextTo(
+        ds.floatingTexts,
+        ship.pos,
+        `P${killerIdx + 1} KILL!`,
+        killerIdx === 0 ? P1_COLOR : P2_COLOR,
+        20,
+      );
     };
 
     const dieToEnvironment = (playerIdx: 0 | 1) => {
@@ -1187,7 +1281,13 @@ const Game = () => {
   // ===== SOLO UPDATE (original) =====
   const update = useCallback(() => {
     if (isPausedRef.current) return;
-    if (!gameStateRef.current || gameStateRef.current.gameOver || gameStateRef.current.paused || showLifeLostRef.current) return;
+    if (
+      !gameStateRef.current ||
+      gameStateRef.current.gameOver ||
+      gameStateRef.current.paused ||
+      showLifeLostRef.current
+    )
+      return;
 
     const state = gameStateRef.current;
     const theme = getTheme(state.wave);
@@ -1256,7 +1356,7 @@ const Game = () => {
     if (state.ufoSpawnTimer <= 0 && state.ufos.length === 0 && !state.boss) {
       const size = state.wave > 6 ? (Math.random() < 0.5 ? "small" : "large") : "large";
       state.ufos.push(createUFO(size));
-      addDebugLog('spawn', `UFO spawned (${size})`);
+      addDebugLog("spawn", `UFO spawned (${size})`);
       state.ufoSpawnTimer = Math.max(400, 900 - state.wave * 30) + Math.random() * 400;
     }
 
@@ -1276,9 +1376,10 @@ const Game = () => {
       ufo.shootTimer--;
       if (ufo.shootTimer <= 0) {
         ufo.shootTimer = 60 + Math.random() * 60;
-        const angle = ufo.size === "small"
-          ? Math.atan2(state.ship.pos.y - ufo.pos.y, state.ship.pos.x - ufo.pos.x)
-          : Math.random() * Math.PI * 2;
+        const angle =
+          ufo.size === "small"
+            ? Math.atan2(state.ship.pos.y - ufo.pos.y, state.ship.pos.x - ufo.pos.x)
+            : Math.random() * Math.PI * 2;
 
         state.bullets.push({
           pos: { ...ufo.pos },
@@ -1296,13 +1397,13 @@ const Game = () => {
     if (!state.boss) {
       state.alienSpawnTimer--;
       if (state.alienSpawnTimer <= 0) {
-        if (state.wave >= 3 && state.aliens.filter(a => a.type === "brown").length < 3) {
+        if (state.wave >= 3 && state.aliens.filter((a) => a.type === "brown").length < 3) {
           state.aliens.push(createAlien("brown", state.wave));
-          addDebugLog('spawn', `Brown alien spawned (wave ${state.wave})`);
+          addDebugLog("spawn", `Brown alien spawned (wave ${state.wave})`);
         }
-        if (state.wave >= 6 && state.aliens.filter(a => a.type === "greenMan").length < 2) {
+        if (state.wave >= 6 && state.aliens.filter((a) => a.type === "greenMan").length < 2) {
           state.aliens.push(createAlien("greenMan", state.wave));
-          addDebugLog('spawn', `Green man spawned (wave ${state.wave})`);
+          addDebugLog("spawn", `Green man spawned (wave ${state.wave})`);
         }
         state.alienSpawnTimer = Math.max(180, 500 - state.wave * 20) + Math.random() * 200;
       }
@@ -1346,8 +1447,12 @@ const Game = () => {
       alien.pos.x += alien.vel.x;
       alien.pos.y += alien.vel.y;
 
-      if (alien.pos.x < -60 || alien.pos.x > CANVAS_WIDTH + 60 ||
-          alien.pos.y < -60 || alien.pos.y > CANVAS_HEIGHT + 60) {
+      if (
+        alien.pos.x < -60 ||
+        alien.pos.x > CANVAS_WIDTH + 60 ||
+        alien.pos.y < -60 ||
+        alien.pos.y > CANVAS_HEIGHT + 60
+      ) {
         if (alien.moveTimer > 120) return false;
       }
 
@@ -1416,13 +1521,26 @@ const Game = () => {
         spawnFloatingText(powerUp.pos, label.text, label.color, 28);
 
         switch (powerUp.type) {
-          case "shield": state.powerUpActive.shield = 300; state.ship.invulnerable = true; break;
-          case "rapidFire": state.powerUpActive.rapidFire = 600; break;
-          case "extraLife": state.lives++; setDisplayLives(state.lives); break;
-          case "multiplier": state.powerUpActive.multiplier = 900; break;
+          case "shield":
+            state.powerUpActive.shield = 300;
+            state.ship.invulnerable = true;
+            break;
+          case "rapidFire":
+            state.powerUpActive.rapidFire = 600;
+            break;
+          case "extraLife":
+            state.lives++;
+            setDisplayLives(state.lives);
+            break;
+          case "multiplier":
+            state.powerUpActive.multiplier = 900;
+            break;
         }
         soundEffects.powerUp();
-        addDebugLog('powerup', `Picked up ${powerUp.type} at (${Math.round(powerUp.pos.x)}, ${Math.round(powerUp.pos.y)})`);
+        addDebugLog(
+          "powerup",
+          `Picked up ${powerUp.type} at (${Math.round(powerUp.pos.x)}, ${Math.round(powerUp.pos.y)})`,
+        );
         return false;
       }
       return powerUp.lifetime > 0;
@@ -1578,7 +1696,7 @@ const Game = () => {
             const types: PowerUp["type"][] = ["shield", "rapidFire", "extraLife", "multiplier"];
             state.powerUps.push({
               pos: { ...state.boss!.pos },
-              vel: { x: (Math.random() - 0.5), y: (Math.random() - 0.5) },
+              vel: { x: Math.random() - 0.5, y: Math.random() - 0.5 },
               rotation: 0,
               type: types[Math.floor(Math.random() * types.length)],
               lifetime: 600,
@@ -1586,7 +1704,7 @@ const Game = () => {
 
             state.boss = null;
             state.bossDefeated = true;
-            addDebugLog('boss', `Boss defeated! Score: +${pts}`);
+            addDebugLog("boss", `Boss defeated! Score: +${pts}`);
             toast.success("BOSS DEFEATED!");
           }
           return false;
@@ -1600,7 +1718,7 @@ const Game = () => {
       for (const asteroid of state.asteroids) {
         const radius = asteroid.size === "large" ? 40 : asteroid.size === "medium" ? 25 : 12;
         if (checkCollision(state.ship.pos, SHIP_SIZE, asteroid.pos, radius)) {
-          addDebugLog('collision', `Ship hit ${asteroid.size} asteroid`);
+          addDebugLog("collision", `Ship hit ${asteroid.size} asteroid`);
           loseLife(state);
           break;
         }
@@ -1612,7 +1730,7 @@ const Game = () => {
       for (const ufo of state.ufos) {
         const radius = ufo.size === "large" ? 20 : 10;
         if (checkCollision(state.ship.pos, SHIP_SIZE, ufo.pos, radius)) {
-          addDebugLog('collision', `Ship hit ${ufo.size} UFO`);
+          addDebugLog("collision", `Ship hit ${ufo.size} UFO`);
           loseLife(state);
           break;
         }
@@ -1623,7 +1741,7 @@ const Game = () => {
     if (!state.ship.invulnerable && state.powerUpActive.shield === 0) {
       for (const alien of state.aliens) {
         if (checkCollision(state.ship.pos, SHIP_SIZE, alien.pos, 12)) {
-          addDebugLog('collision', `Ship hit ${alien.type} alien`);
+          addDebugLog("collision", `Ship hit ${alien.type} alien`);
           loseLife(state);
           break;
         }
@@ -1633,7 +1751,7 @@ const Game = () => {
     // Collision: Ship vs Boss tentacles
     if (state.boss && state.boss.entered && !state.ship.invulnerable && state.powerUpActive.shield === 0) {
       if (checkCollision(state.ship.pos, SHIP_SIZE, state.boss.pos, 65)) {
-        addDebugLog('collision', 'Ship hit boss');
+        addDebugLog("collision", "Ship hit boss");
         loseLife(state);
       }
     }
@@ -1643,7 +1761,7 @@ const Game = () => {
       state.bullets = state.bullets.filter((bullet) => {
         if (!bullet.isUFO && !bullet.isAlien) return true;
         if (checkCollision(bullet.pos, 2, state.ship.pos, SHIP_SIZE)) {
-          addDebugLog('collision', `Ship hit by ${bullet.isUFO ? 'UFO' : 'alien'} bullet`);
+          addDebugLog("collision", `Ship hit by ${bullet.isUFO ? "UFO" : "alien"} bullet`);
           loseLife(state);
           return false;
         }
@@ -1652,7 +1770,8 @@ const Game = () => {
     }
 
     // Check wave completion
-    const noEnemies = state.asteroids.length === 0 && state.ufos.length === 0 && state.aliens.length === 0 && !state.boss;
+    const noEnemies =
+      state.asteroids.length === 0 && state.ufos.length === 0 && state.aliens.length === 0 && !state.boss;
     if (noEnemies) {
       nextWave();
     }
@@ -1694,7 +1813,16 @@ const Game = () => {
   };
 
   // ===== DRAW COMMON ELEMENTS =====
-  const drawCommon = (ctx: CanvasRenderingContext2D, stars: Star[], particles: Particle[], floatingTexts: FloatingText[], asteroids: Asteroid[], aliens: Alien[], bgColor: string, asteroidColors: string[]) => {
+  const drawCommon = (
+    ctx: CanvasRenderingContext2D,
+    stars: Star[],
+    particles: Particle[],
+    floatingTexts: FloatingText[],
+    asteroids: Asteroid[],
+    aliens: Alien[],
+    bgColor: string,
+    asteroidColors: string[],
+  ) => {
     // Clear
     ctx.fillStyle = bgColor;
     ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
@@ -1704,7 +1832,7 @@ const Game = () => {
     stars.forEach((star) => {
       const parallaxSpeed = [0.1, 0.3, 0.6][star.layer];
       const offsetX = (time * parallaxSpeed * 10) % CANVAS_WIDTH;
-      const drawX = ((star.x - offsetX) % CANVAS_WIDTH + CANVAS_WIDTH) % CANVAS_WIDTH;
+      const drawX = (((star.x - offsetX) % CANVAS_WIDTH) + CANVAS_WIDTH) % CANVAS_WIDTH;
       const twinkle = 0.7 + Math.sin(time * 2 + star.x * 0.1) * 0.3;
       ctx.fillStyle = `rgba(200, 220, 255, ${star.brightness * twinkle})`;
       ctx.beginPath();
@@ -1752,82 +1880,86 @@ const Game = () => {
     });
 
     // Brown aliens
-    aliens.filter(a => a.type === "brown").forEach((alien) => {
-      ctx.save();
-      ctx.translate(alien.pos.x, alien.pos.y);
-      ctx.rotate(Math.atan2(alien.vel.y, alien.vel.x));
-      ctx.strokeStyle = "#AA6633";
-      ctx.fillStyle = "#553311";
-      ctx.lineWidth = 2;
-      ctx.shadowBlur = 10;
-      ctx.shadowColor = "#AA6633";
-      ctx.beginPath();
-      ctx.moveTo(12, 0);
-      ctx.lineTo(-6, -8);
-      ctx.lineTo(-10, -4);
-      ctx.lineTo(-8, 0);
-      ctx.lineTo(-10, 4);
-      ctx.lineTo(-6, 8);
-      ctx.closePath();
-      ctx.fill();
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.moveTo(-6, -8);
-      ctx.lineTo(-2, -14);
-      ctx.moveTo(-6, 8);
-      ctx.lineTo(-2, 14);
-      ctx.stroke();
-      ctx.restore();
-    });
+    aliens
+      .filter((a) => a.type === "brown")
+      .forEach((alien) => {
+        ctx.save();
+        ctx.translate(alien.pos.x, alien.pos.y);
+        ctx.rotate(Math.atan2(alien.vel.y, alien.vel.x));
+        ctx.strokeStyle = "#AA6633";
+        ctx.fillStyle = "#553311";
+        ctx.lineWidth = 2;
+        ctx.shadowBlur = 10;
+        ctx.shadowColor = "#AA6633";
+        ctx.beginPath();
+        ctx.moveTo(12, 0);
+        ctx.lineTo(-6, -8);
+        ctx.lineTo(-10, -4);
+        ctx.lineTo(-8, 0);
+        ctx.lineTo(-10, 4);
+        ctx.lineTo(-6, 8);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(-6, -8);
+        ctx.lineTo(-2, -14);
+        ctx.moveTo(-6, 8);
+        ctx.lineTo(-2, 14);
+        ctx.stroke();
+        ctx.restore();
+      });
 
     // Green men
-    aliens.filter(a => a.type === "greenMan").forEach((alien) => {
-      ctx.save();
-      ctx.translate(alien.pos.x, alien.pos.y);
-      ctx.strokeStyle = "#44FF44";
-      ctx.fillStyle = "#115511";
-      ctx.lineWidth = 2;
-      ctx.shadowBlur = 12;
-      ctx.shadowColor = "#44FF44";
-      ctx.beginPath();
-      ctx.arc(0, -8, 6, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.stroke();
-      ctx.fillStyle = "#FFFFFF";
-      ctx.beginPath();
-      ctx.arc(-3, -9, 2, 0, Math.PI * 2);
-      ctx.arc(3, -9, 2, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = "#000000";
-      ctx.beginPath();
-      ctx.arc(-3, -9, 1, 0, Math.PI * 2);
-      ctx.arc(3, -9, 1, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.strokeStyle = "#44FF44";
-      ctx.beginPath();
-      ctx.moveTo(0, -2);
-      ctx.lineTo(0, 8);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.moveTo(0, 2);
-      ctx.lineTo(-8, -1);
-      ctx.moveTo(0, 2);
-      ctx.lineTo(8, 5);
-      ctx.stroke();
-      ctx.strokeStyle = "#FFFF00";
-      ctx.beginPath();
-      ctx.moveTo(8, 5);
-      ctx.lineTo(14, 3);
-      ctx.stroke();
-      ctx.strokeStyle = "#44FF44";
-      ctx.beginPath();
-      ctx.moveTo(0, 8);
-      ctx.lineTo(-5, 16);
-      ctx.moveTo(0, 8);
-      ctx.lineTo(5, 16);
-      ctx.stroke();
-      ctx.restore();
-    });
+    aliens
+      .filter((a) => a.type === "greenMan")
+      .forEach((alien) => {
+        ctx.save();
+        ctx.translate(alien.pos.x, alien.pos.y);
+        ctx.strokeStyle = "#44FF44";
+        ctx.fillStyle = "#115511";
+        ctx.lineWidth = 2;
+        ctx.shadowBlur = 12;
+        ctx.shadowColor = "#44FF44";
+        ctx.beginPath();
+        ctx.arc(0, -8, 6, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        ctx.fillStyle = "#FFFFFF";
+        ctx.beginPath();
+        ctx.arc(-3, -9, 2, 0, Math.PI * 2);
+        ctx.arc(3, -9, 2, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = "#000000";
+        ctx.beginPath();
+        ctx.arc(-3, -9, 1, 0, Math.PI * 2);
+        ctx.arc(3, -9, 1, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = "#44FF44";
+        ctx.beginPath();
+        ctx.moveTo(0, -2);
+        ctx.lineTo(0, 8);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(0, 2);
+        ctx.lineTo(-8, -1);
+        ctx.moveTo(0, 2);
+        ctx.lineTo(8, 5);
+        ctx.stroke();
+        ctx.strokeStyle = "#FFFF00";
+        ctx.beginPath();
+        ctx.moveTo(8, 5);
+        ctx.lineTo(14, 3);
+        ctx.stroke();
+        ctx.strokeStyle = "#44FF44";
+        ctx.beginPath();
+        ctx.moveTo(0, 8);
+        ctx.lineTo(-5, 16);
+        ctx.moveTo(0, 8);
+        ctx.lineTo(5, 16);
+        ctx.stroke();
+        ctx.restore();
+      });
 
     // Floating texts
     floatingTexts.forEach((ft) => {
@@ -1849,7 +1981,14 @@ const Game = () => {
     for (let y = 0; y < CANVAS_HEIGHT; y += 3) {
       ctx.fillRect(0, y, CANVAS_WIDTH, 1);
     }
-    const gradient = ctx.createRadialGradient(CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2, CANVAS_HEIGHT * 0.4, CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2, CANVAS_HEIGHT * 0.8);
+    const gradient = ctx.createRadialGradient(
+      CANVAS_WIDTH / 2,
+      CANVAS_HEIGHT / 2,
+      CANVAS_HEIGHT * 0.4,
+      CANVAS_WIDTH / 2,
+      CANVAS_HEIGHT / 2,
+      CANVAS_HEIGHT * 0.8,
+    );
     gradient.addColorStop(0, "rgba(0,0,0,0)");
     gradient.addColorStop(1, "rgba(0,0,0,0.3)");
     ctx.globalAlpha = 1;
@@ -1867,12 +2006,12 @@ const Game = () => {
       ctx.shadowBlur = 12;
       ctx.shadowColor = bColor;
       ctx.beginPath();
-      ctx.arc(bullet.pos.x, bullet.pos.y, (bullet.isUFO || bullet.isAlien) ? 3 : 2, 0, Math.PI * 2);
+      ctx.arc(bullet.pos.x, bullet.pos.y, bullet.isUFO || bullet.isAlien ? 3 : 2, 0, Math.PI * 2);
       ctx.fill();
       ctx.shadowBlur = 20;
       ctx.globalAlpha = 0.4;
       ctx.beginPath();
-      ctx.arc(bullet.pos.x, bullet.pos.y, (bullet.isUFO || bullet.isAlien) ? 5 : 4, 0, Math.PI * 2);
+      ctx.arc(bullet.pos.x, bullet.pos.y, bullet.isUFO || bullet.isAlien ? 5 : 4, 0, Math.PI * 2);
       ctx.fill();
       ctx.globalAlpha = 1;
       ctx.restore();
@@ -1887,7 +2026,11 @@ const Game = () => {
 
     if ((gameModeRef.current === "duel" || gameModeRef.current === "online") && duelStateRef.current) {
       const ds = duelStateRef.current;
-      drawCommon(ctx, ds.stars, ds.particles, ds.floatingTexts, ds.asteroids, ds.aliens, "#050510", ["#FFFFFF", "#88DDFF", "#44AAFF"]);
+      drawCommon(ctx, ds.stars, ds.particles, ds.floatingTexts, ds.asteroids, ds.aliens, "#050510", [
+        "#FFFFFF",
+        "#88DDFF",
+        "#44AAFF",
+      ]);
 
       // Draw ships
       if (ds.respawnTimer[0] === 0) drawShip(ctx, ds.ship1, P1_COLOR, "P1");
@@ -1904,7 +2047,16 @@ const Game = () => {
     const state = gameStateRef.current;
     const theme = getTheme(state.wave);
 
-    drawCommon(ctx, state.stars, state.particles, state.floatingTexts, state.asteroids, state.aliens, theme.bg, theme.asteroids);
+    drawCommon(
+      ctx,
+      state.stars,
+      state.particles,
+      state.floatingTexts,
+      state.asteroids,
+      state.aliens,
+      theme.bg,
+      theme.asteroids,
+    );
 
     // Ship
     const shipColor = state.powerUpActive.shield > 0 ? "#7FFF7F" : theme.ship;
@@ -2012,10 +2164,14 @@ const Game = () => {
       ctx.save();
       ctx.translate(powerUp.pos.x, powerUp.pos.y);
       ctx.rotate(powerUp.rotation);
-      const color = powerUp.type === "shield" ? "#7FFF7F"
-        : powerUp.type === "rapidFire" ? "#FF6666"
-        : powerUp.type === "multiplier" ? "#FFFF66"
-        : "#CC66FF";
+      const color =
+        powerUp.type === "shield"
+          ? "#7FFF7F"
+          : powerUp.type === "rapidFire"
+            ? "#FF6666"
+            : powerUp.type === "multiplier"
+              ? "#FFFF66"
+              : "#CC66FF";
       ctx.strokeStyle = color;
       ctx.lineWidth = 2;
       ctx.shadowBlur = 20;
@@ -2037,19 +2193,26 @@ const Game = () => {
       ctx.font = "bold 9px monospace";
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      const icon = powerUp.type === "shield" ? "SH"
-        : powerUp.type === "rapidFire" ? "RF"
-        : powerUp.type === "extraLife" ? "+1"
-        : "2X";
+      const icon =
+        powerUp.type === "shield"
+          ? "SH"
+          : powerUp.type === "rapidFire"
+            ? "RF"
+            : powerUp.type === "extraLife"
+              ? "+1"
+              : "2X";
       ctx.fillText(icon, 0, 0);
       ctx.restore();
     });
 
     // Power-up HUD bars
     const activePowerUps: { label: string; color: string; remaining: number; max: number }[] = [];
-    if (state.powerUpActive.shield > 0) activePowerUps.push({ label: "SHIELD", color: "#7FFF7F", remaining: state.powerUpActive.shield, max: 300 });
-    if (state.powerUpActive.rapidFire > 0) activePowerUps.push({ label: "RAPID", color: "#FF6666", remaining: state.powerUpActive.rapidFire, max: 600 });
-    if (state.powerUpActive.multiplier > 0) activePowerUps.push({ label: "2x", color: "#FFFF66", remaining: state.powerUpActive.multiplier, max: 900 });
+    if (state.powerUpActive.shield > 0)
+      activePowerUps.push({ label: "SHIELD", color: "#7FFF7F", remaining: state.powerUpActive.shield, max: 300 });
+    if (state.powerUpActive.rapidFire > 0)
+      activePowerUps.push({ label: "RAPID", color: "#FF6666", remaining: state.powerUpActive.rapidFire, max: 600 });
+    if (state.powerUpActive.multiplier > 0)
+      activePowerUps.push({ label: "2x", color: "#FFFF66", remaining: state.powerUpActive.multiplier, max: 900 });
 
     activePowerUps.forEach((pu, i) => {
       const barX = 10;
@@ -2105,7 +2268,7 @@ const Game = () => {
       const npTextWidth = ctx.measureText(npText).width;
       // Advance marquee position
       nowPlayingMarqueeXRef.current -= MARQUEE_SPEED;
-      if (nowPlayingMarqueeXRef.current < -(npTextWidth)) {
+      if (nowPlayingMarqueeXRef.current < -npTextWidth) {
         nowPlayingMarqueeXRef.current = CANVAS_WIDTH;
       }
       // Clip to bottom strip
@@ -2144,7 +2307,7 @@ const Game = () => {
       const olTextWidth = ctx.measureText(olText).width;
       // Advance marquee position
       onelinerMarqueeXRef.current -= MARQUEE_SPEED;
-      if (onelinerMarqueeXRef.current < -(olTextWidth)) {
+      if (onelinerMarqueeXRef.current < -olTextWidth) {
         onelinerMarqueeXRef.current = CANVAS_WIDTH;
       }
       // Clip to top strip
@@ -2178,7 +2341,7 @@ const Game = () => {
     ctx.save();
 
     // Scanlines — fine horizontal lines every 2px
-    ctx.globalAlpha = 0.10;
+    ctx.globalAlpha = 0.1;
     ctx.fillStyle = "#000000";
     for (let y = 0; y < CANVAS_HEIGHT; y += 2) {
       ctx.fillRect(0, y, CANVAS_WIDTH, 1);
@@ -2194,8 +2357,12 @@ const Game = () => {
     // Vignette — radial dark corners
     ctx.globalAlpha = 1;
     const vignette = ctx.createRadialGradient(
-      CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2, CANVAS_HEIGHT * 0.3,
-      CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2, CANVAS_HEIGHT * 0.85
+      CANVAS_WIDTH / 2,
+      CANVAS_HEIGHT / 2,
+      CANVAS_HEIGHT * 0.3,
+      CANVAS_WIDTH / 2,
+      CANVAS_HEIGHT / 2,
+      CANVAS_HEIGHT * 0.85,
     );
     vignette.addColorStop(0, "rgba(0,0,0,0)");
     vignette.addColorStop(1, "rgba(0,0,0,0.55)");
@@ -2226,8 +2393,13 @@ const Game = () => {
         const keys = keysRef.current;
         const gp0 = readGamepad(0);
         workerRef.current.postMessage({
-          type: 'inputs',
-          p1: { left: keys["ArrowLeft"] || gp0.left, right: keys["ArrowRight"] || gp0.right, up: keys["ArrowUp"] || gp0.up, fire: keys[" "] || gp0.fire },
+          type: "inputs",
+          p1: {
+            left: keys["ArrowLeft"] || gp0.left,
+            right: keys["ArrowRight"] || gp0.right,
+            up: keys["ArrowUp"] || gp0.up,
+            fire: keys[" "] || gp0.fire,
+          },
           p2: multiplayer.remoteInputRef.current,
         });
       }
@@ -2236,8 +2408,10 @@ const Game = () => {
         const keys = keysRef.current;
         const gp0 = readGamepad(0);
         multiplayer.sendInputs({
-          left: keys["ArrowLeft"] || gp0.left, right: keys["ArrowRight"] || gp0.right,
-          up: keys["ArrowUp"] || gp0.up, fire: keys[" "] || gp0.fire,
+          left: keys["ArrowLeft"] || gp0.left,
+          right: keys["ArrowRight"] || gp0.right,
+          up: keys["ArrowUp"] || gp0.up,
+          fire: keys[" "] || gp0.fire,
         });
       }
       updateOnlineVisuals();
@@ -2251,7 +2425,7 @@ const Game = () => {
   }, [enteringInitials]);
 
   useEffect(() => {
-    setIsTouchDevice('ontouchstart' in window || navigator.maxTouchPoints > 0);
+    setIsTouchDevice("ontouchstart" in window || navigator.maxTouchPoints > 0);
   }, []);
 
   // Persist autoPlayMusic setting
@@ -2272,9 +2446,14 @@ const Game = () => {
     const tryPlay = () => {
       if (radioStartedRef.current) return;
       if (audioRef.current) {
-        audioRef.current.play().then(() => {
-          radioStartedRef.current = true;
-        }).catch(() => { /* still blocked, will retry on next interaction */ });
+        audioRef.current
+          .play()
+          .then(() => {
+            radioStartedRef.current = true;
+          })
+          .catch(() => {
+            /* still blocked, will retry on next interaction */
+          });
       }
     };
     window.addEventListener("click", tryPlay, { once: false });
@@ -2297,14 +2476,17 @@ const Game = () => {
           body: { endpoint: "/demovibes/xml/queue/" },
         });
         if (error) throw error;
-        
+
         const text = typeof data === "string" ? data : JSON.stringify(data);
         const parser = new DOMParser();
         const xml = parser.parseFromString(text, "text/xml");
         const nowEntry = xml.querySelector("now > entry");
         if (nowEntry) {
           const artists = nowEntry.querySelectorAll("artist");
-          const artistName = Array.from(artists).map(a => a.textContent).join(" & ") || "Unknown";
+          const artistName =
+            Array.from(artists)
+              .map((a) => a.textContent)
+              .join(" & ") || "Unknown";
           const songEl = nowEntry.querySelector("song");
           const songTitle = songEl?.textContent || "Unknown";
           const info = { artist: artistName, title: songTitle };
@@ -2329,7 +2511,7 @@ const Game = () => {
           body: { endpoint: "/demovibes/xml/oneliner/" },
         });
         if (error) throw error;
-        
+
         const text = typeof data === "string" ? data : JSON.stringify(data);
         const parser = new DOMParser();
         const xml = parser.parseFromString(text, "text/xml");
@@ -2356,10 +2538,18 @@ const Game = () => {
   // ===== ONLINE EFFECTS =====
   const applyNetStateRef = useRef<(net: DuelNetState) => void>(() => {});
   const sendStateRef = useRef<(state: DuelNetState) => void>(() => {});
-  useEffect(() => { applyNetStateRef.current = applyNetState; }, [applyNetState]);
-  useEffect(() => { sendStateRef.current = multiplayer.sendState; }, [multiplayer.sendState]);
-  useEffect(() => { isHostRef.current = multiplayer.isHost; }, [multiplayer.isHost]);
-  useEffect(() => { isConnectedRef.current = multiplayer.isConnected; }, [multiplayer.isConnected]);
+  useEffect(() => {
+    applyNetStateRef.current = applyNetState;
+  }, [applyNetState]);
+  useEffect(() => {
+    sendStateRef.current = multiplayer.sendState;
+  }, [multiplayer.sendState]);
+  useEffect(() => {
+    isHostRef.current = multiplayer.isHost;
+  }, [multiplayer.isHost]);
+  useEffect(() => {
+    isConnectedRef.current = multiplayer.isConnected;
+  }, [multiplayer.isConnected]);
 
   // Guest: poll for state updates
   useEffect(() => {
@@ -2367,14 +2557,19 @@ const Game = () => {
     const remoteRef = multiplayer.remoteStateRef;
     const interval = setInterval(() => {
       const state = remoteRef.current;
-      if (state) { applyNetStateRef.current(state); remoteRef.current = null; }
+      if (state) {
+        applyNetStateRef.current(state);
+        remoteRef.current = null;
+      }
     }, 16);
     return () => clearInterval(interval);
   }, [gameMode, multiplayer.isHost]);
 
   // Guest: listen for game_start
   useEffect(() => {
-    multiplayer.onGameStartRef.current = () => { initOnline(false); };
+    multiplayer.onGameStartRef.current = () => {
+      initOnline(false);
+    };
   }, [initOnline]);
 
   // Host: worker message handler
@@ -2383,11 +2578,13 @@ const Game = () => {
     const worker = workerRef.current;
     if (!worker) return;
     worker.onmessage = (e: MessageEvent) => {
-      if (e.data.type === 'state') {
+      if (e.data.type === "state") {
         const net: DuelNetState = e.data.data;
         applyNetStateRef.current(net);
         broadcastTickRef.current++;
-        if (broadcastTickRef.current % 3 === 0) { sendStateRef.current(net); }
+        if (broadcastTickRef.current % 3 === 0) {
+          sendStateRef.current(net);
+        }
       }
     };
   }, [gameMode, multiplayer.isHost]);
@@ -2396,7 +2593,7 @@ const Game = () => {
   useEffect(() => {
     return () => {
       if (workerRef.current) {
-        workerRef.current.postMessage({ type: 'stop' });
+        workerRef.current.postMessage({ type: "stop" });
         workerRef.current.terminate();
         workerRef.current = null;
       }
@@ -2410,7 +2607,7 @@ const Game = () => {
 
   const quitToMenu = useCallback(() => {
     if (workerRef.current) {
-      workerRef.current.postMessage({ type: 'stop' });
+      workerRef.current.postMessage({ type: "stop" });
       workerRef.current.terminate();
       workerRef.current = null;
     }
@@ -2444,67 +2641,99 @@ const Game = () => {
     setIsPaused(false);
   }, []);
 
-  const handleCanvasKeyDown = useCallback((e: React.KeyboardEvent<HTMLCanvasElement>) => {
-    if (enteringInitialsRef.current) return;
+  const handleCanvasKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLCanvasElement>) => {
+      if (enteringInitialsRef.current) return;
 
-    // Debug panel toggle with § key
-    if (DEBUG_ENABLED && (e.key === "§" || e.key === "Dead")) {
-      e.preventDefault();
-      setShowDebugPanel(prev => !prev);
-      return;
-    }
-
-    // Level skip with 0 key (solo only, debug only)
-    if (DEBUG_ENABLED && e.key === "0" && gameModeRef.current === "solo" && !isPausedRef.current && !showLifeLostRef.current) {
-      e.preventDefault();
-      addDebugLog('wave', 'Level skip triggered (cheat)');
-      nextWave();
-      return;
-    }
-
-    // Pause toggle on Escape
-    if (e.key === "Escape" && (gameModeRef.current === "solo" || gameModeRef.current === "duel" || gameModeRef.current === "online")) {
-      if (!showLifeLostRef.current && !showGameOver) {
+      // Debug panel toggle with § key
+      if (DEBUG_ENABLED && (e.key === "§" || e.key === "Dead")) {
         e.preventDefault();
-        togglePause();
+        setShowDebugPanel((prev) => !prev);
         return;
       }
-    }
 
-    // When paused, handle pause menu navigation
-    if (isPausedRef.current) {
-      if (e.key === "ArrowUp" || e.key === "ArrowDown" || e.key === "w" || e.key === "W" || e.key === "s" || e.key === "S") {
+      // Level skip with 0 key (solo only, debug only)
+      if (
+        DEBUG_ENABLED &&
+        e.key === "0" &&
+        gameModeRef.current === "solo" &&
+        !isPausedRef.current &&
+        !showLifeLostRef.current
+      ) {
         e.preventDefault();
-        setPauseSelection(s => s === 0 ? 1 : 0);
+        addDebugLog("wave", "Level skip triggered (cheat)");
+        nextWave();
+        return;
       }
-      if (e.key === " " || e.key === "Enter") {
-        e.preventDefault();
-        setPauseSelection(s => {
-          if (s === 0) resumeGame();
-          else { resumeGame(); quitToMenu(); }
-          return s;
-        });
-      }
-      return;
-    }
 
-    if (showLifeLostRef.current) {
-      if (e.key === " " || e.key === "Enter") {
-        e.preventDefault();
-        showLifeLostRef.current = false;
-        setShowLifeLost(false);
+      // Pause toggle on Escape
+      if (
+        e.key === "Escape" &&
+        (gameModeRef.current === "solo" || gameModeRef.current === "duel" || gameModeRef.current === "online")
+      ) {
+        if (!showLifeLostRef.current && !showGameOver) {
+          e.preventDefault();
+          togglePause();
+          return;
+        }
       }
-      return;
-    }
-    keysRef.current[e.key] = true;
-    if (gameModeRef.current === "solo") {
-      if (e.key === " ") { e.preventDefault(); shootBullet(); }
-      if (e.key === "h" || e.key === "H") { e.preventDefault(); hyperspace(); }
-    } else if (gameModeRef.current === "duel" || gameModeRef.current === "online") {
-      if (e.key === " ") { e.preventDefault(); }
-      if (e.key === "e" || e.key === "E") { e.preventDefault(); }
-    }
-  }, [shootBullet, hyperspace, togglePause, resumeGame, quitToMenu, showGameOver, addDebugLog, nextWave]);
+
+      // When paused, handle pause menu navigation
+      if (isPausedRef.current) {
+        if (
+          e.key === "ArrowUp" ||
+          e.key === "ArrowDown" ||
+          e.key === "w" ||
+          e.key === "W" ||
+          e.key === "s" ||
+          e.key === "S"
+        ) {
+          e.preventDefault();
+          setPauseSelection((s) => (s === 0 ? 1 : 0));
+        }
+        if (e.key === " " || e.key === "Enter") {
+          e.preventDefault();
+          setPauseSelection((s) => {
+            if (s === 0) resumeGame();
+            else {
+              resumeGame();
+              quitToMenu();
+            }
+            return s;
+          });
+        }
+        return;
+      }
+
+      if (showLifeLostRef.current) {
+        if (e.key === " " || e.key === "Enter") {
+          e.preventDefault();
+          showLifeLostRef.current = false;
+          setShowLifeLost(false);
+        }
+        return;
+      }
+      keysRef.current[e.key] = true;
+      if (gameModeRef.current === "solo") {
+        if (e.key === " ") {
+          e.preventDefault();
+          shootBullet();
+        }
+        if (e.key === "h" || e.key === "H") {
+          e.preventDefault();
+          hyperspace();
+        }
+      } else if (gameModeRef.current === "duel" || gameModeRef.current === "online") {
+        if (e.key === " ") {
+          e.preventDefault();
+        }
+        if (e.key === "e" || e.key === "E") {
+          e.preventDefault();
+        }
+      }
+    },
+    [shootBullet, hyperspace, togglePause, resumeGame, quitToMenu, showGameOver, addDebugLog, nextWave],
+  );
 
   const handleCanvasKeyUp = useCallback((e: React.KeyboardEvent<HTMLCanvasElement>) => {
     keysRef.current[e.key] = false;
@@ -2548,27 +2777,39 @@ const Game = () => {
           prev[6] = btnStart;
 
           // Start button toggles pause during gameplay
-          if (justStart && (gameModeRef.current === "solo" || gameModeRef.current === "duel" || gameModeRef.current === "online") && !showLifeLostRef.current && !showGameOver) {
+          if (
+            justStart &&
+            (gameModeRef.current === "solo" || gameModeRef.current === "duel" || gameModeRef.current === "online") &&
+            !showLifeLostRef.current &&
+            !showGameOver
+          ) {
             togglePause();
           }
 
           // When paused, handle pause menu
           if (isPausedRef.current) {
             if (justUp || justDown) {
-              setPauseSelection(s => s === 0 ? 1 : 0);
+              setPauseSelection((s) => (s === 0 ? 1 : 0));
             }
             if (justA) {
-              setPauseSelection(s => {
+              setPauseSelection((s) => {
                 if (s === 0) resumeGame();
-                else { resumeGame(); quitToMenu(); }
+                else {
+                  resumeGame();
+                  quitToMenu();
+                }
                 return s;
               });
             }
           } else if (gameModeRef.current === "menu") {
-            if (justUp) { setMenuSelection(s => (s - 1 + 3) % 3); }
-            if (justDown) { setMenuSelection(s => (s + 1) % 3); }
+            if (justUp) {
+              setMenuSelection((s) => (s - 1 + 3) % 3);
+            }
+            if (justDown) {
+              setMenuSelection((s) => (s + 1) % 3);
+            }
             if (justA) {
-              setMenuSelection(s => {
+              setMenuSelection((s) => {
                 if (s === 0) initGame();
                 else if (s === 1) initDuel();
                 else setGameMode("online_lobby");
@@ -2583,10 +2824,10 @@ const Game = () => {
           } else if (showGameOver) {
             if (!enteringInitialsRef.current) {
               if (justUp || justDown) {
-                setGameOverSelection(s => s === 0 ? 1 : 0);
+                setGameOverSelection((s) => (s === 0 ? 1 : 0));
               }
               if (justA) {
-                setGameOverSelection(s => {
+                setGameOverSelection((s) => {
                   if (s === 0) initGame();
                   else {
                     gameStateRef.current = null;
@@ -2607,13 +2848,14 @@ const Game = () => {
             }
           }
         }
-      } catch { /* no gamepad */ }
+      } catch {
+        /* no gamepad */
+      }
       rafId = requestAnimationFrame(poll);
     };
     rafId = requestAnimationFrame(poll);
     return () => cancelAnimationFrame(rafId);
   }, [initGame, initDuel, showGameOver, togglePause, resumeGame, quitToMenu]);
-
 
   // ===== CRT BOOT ANIMATION =====
   if (showBootAnimation) {
@@ -2627,8 +2869,14 @@ const Game = () => {
         <OnlineLobby
           onCreateRoom={() => multiplayer.createRoom()}
           onJoinRoom={(code) => multiplayer.joinRoom(code)}
-          onBack={() => { multiplayer.disconnect(); setGameMode("menu"); }}
-          onStartGame={() => { multiplayer.startGame(); initOnline(true); }}
+          onBack={() => {
+            multiplayer.disconnect();
+            setGameMode("menu");
+          }}
+          onStartGame={() => {
+            multiplayer.startGame();
+            initOnline(true);
+          }}
           roomCode={multiplayer.roomCode}
           isHost={multiplayer.isHost}
           isConnected={multiplayer.isConnected}
@@ -2642,12 +2890,13 @@ const Game = () => {
   if (gameMode === "menu") {
     return (
       <div className="min-h-screen bg-[hsl(var(--game-background))] flex flex-col items-center justify-center p-4">
-        <div className="text-6xl font-mono text-[hsl(var(--game-foreground))] mb-2 tracking-widest" style={{ textShadow: "0 0 30px hsl(var(--game-foreground))" }}>
+        <div
+          className="text-6xl font-mono text-[hsl(var(--game-foreground))] mb-2 tracking-widest"
+          style={{ textShadow: "0 0 30px hsl(var(--game-foreground))" }}
+        >
           ASTEROIDS
         </div>
-        <div className="text-sm font-mono text-[hsl(var(--game-foreground))] opacity-50 mb-12">
-          DEMOSCENE EDITION
-        </div>
+        <div className="text-sm font-mono text-[hsl(var(--game-foreground))] opacity-50 mb-12">DEMOSCENE EDITION</div>
 
         <div className="flex flex-col gap-4 items-center mb-12">
           <Button
@@ -2663,11 +2912,13 @@ const Game = () => {
           <Button
             onClick={initDuel}
             className={`text-2xl px-12 py-6 font-mono tracking-wider border-2 transition-all ${
-              menuSelection === 1
-                ? "shadow-[0_0_20px_rgba(255,136,68,0.5)]"
-                : "opacity-60"
+              menuSelection === 1 ? "shadow-[0_0_20px_rgba(255,136,68,0.5)]" : "opacity-60"
             }`}
-            style={{ borderColor: P2_COLOR, color: P2_COLOR, background: menuSelection === 1 ? "rgba(255,136,68,0.15)" : "transparent" }}
+            style={{
+              borderColor: P2_COLOR,
+              color: P2_COLOR,
+              background: menuSelection === 1 ? "rgba(255,136,68,0.15)" : "transparent",
+            }}
           >
             {menuSelection === 1 ? "▸ " : "  "}DUEL
           </Button>
@@ -2686,14 +2937,20 @@ const Game = () => {
         {/* Top 3 High Scores */}
         {leaderboard.length > 0 && (
           <div className="mb-8 w-72">
-            <div className="text-sm font-mono text-[hsl(var(--game-glow))] text-center mb-2 tracking-wider" style={{ textShadow: "0 0 10px hsl(var(--game-glow))" }}>
+            <div
+              className="text-sm font-mono text-[hsl(var(--game-glow))] text-center mb-2 tracking-wider"
+              style={{ textShadow: "0 0 10px hsl(var(--game-glow))" }}
+            >
               ★ TOP SCORES ★
             </div>
             <div className="border border-[hsl(var(--game-foreground))]/30 p-2">
               {leaderboard.slice(0, 3).map((entry, i) => (
-                <div key={i} className="flex justify-between font-mono text-sm py-0.5 text-[hsl(var(--game-foreground))]">
+                <div
+                  key={i}
+                  className="flex justify-between font-mono text-sm py-0.5 text-[hsl(var(--game-foreground))]"
+                >
                   <span className={i === 0 ? "text-[#FFD700]" : i === 1 ? "text-[#C0C0C0]" : "text-[#CD7F32]"}>
-                    {(i + 1)}. {entry.initials.padEnd(3, " ")}
+                    {i + 1}. {entry.initials.padEnd(3, " ")}
                   </span>
                   <span className={i === 0 ? "text-[#FFD700]" : i === 1 ? "text-[#C0C0C0]" : "text-[#CD7F32]"}>
                     {entry.score.toString().padStart(8, "0")}
@@ -2712,14 +2969,28 @@ const Game = () => {
 
         {/* Full leaderboard overlay */}
         {showFullLeaderboard && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85" onClick={() => setShowFullLeaderboard(false)}>
-            <div className="bg-[hsl(var(--game-background))] border-2 border-[hsl(var(--game-foreground))]/40 p-6 max-w-sm w-full max-h-[80vh] overflow-auto" onClick={(e) => e.stopPropagation()}>
-              <div className="text-lg font-mono text-[hsl(var(--game-glow))] text-center mb-4 tracking-wider" style={{ textShadow: "0 0 10px hsl(var(--game-glow))" }}>
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/85"
+            onClick={() => setShowFullLeaderboard(false)}
+          >
+            <div
+              className="bg-[hsl(var(--game-background))] border-2 border-[hsl(var(--game-foreground))]/40 p-6 max-w-sm w-full max-h-[80vh] overflow-auto"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div
+                className="text-lg font-mono text-[hsl(var(--game-glow))] text-center mb-4 tracking-wider"
+                style={{ textShadow: "0 0 10px hsl(var(--game-glow))" }}
+              >
                 ★ HIGH SCORES ★
               </div>
               {leaderboard.map((entry, i) => (
-                <div key={i} className="flex justify-between font-mono text-sm py-0.5 text-[hsl(var(--game-foreground))]">
-                  <span>{(i + 1).toString().padStart(2, " ")}. {entry.initials.padEnd(3, " ")}</span>
+                <div
+                  key={i}
+                  className="flex justify-between font-mono text-sm py-0.5 text-[hsl(var(--game-foreground))]"
+                >
+                  <span>
+                    {(i + 1).toString().padStart(2, " ")}. {entry.initials.padEnd(3, " ")}
+                  </span>
                   <span>{entry.score.toString().padStart(8, "0")}</span>
                 </div>
               ))}
@@ -2784,7 +3055,16 @@ const Game = () => {
             </label>
           )}
           <div className="text-[hsl(var(--game-foreground))] font-mono text-xs text-center opacity-60 mt-1">
-            Thanks to <a href="https://scenestream.net/demovibes/" target="_blank" rel="noopener noreferrer" className="underline hover:opacity-80">Nectarine Demoscene Radio</a> for the music!
+            Thanks to{" "}
+            <a
+              href="https://scenestream.net/demovibes/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline hover:opacity-80"
+            >
+              Nectarine Demoscene Radio
+            </a>{" "}
+            for the music!
           </div>
           <div className="text-[hsl(var(--game-foreground))] font-mono text-[10px] text-center opacity-40 mt-0.5">
             Streaming demoscene & chiptune tracks 24/7
@@ -2798,13 +3078,14 @@ const Game = () => {
     <div className="min-h-screen bg-[hsl(var(--game-background))] flex flex-col items-center justify-center p-4">
       {/* HUD */}
       {gameMode === "solo" && (
-        <div className="mb-4 flex gap-8 text-[hsl(var(--game-foreground))] text-xs tracking-wide" style={{ fontFamily: "'Press Start 2P', monospace", textShadow: "0 0 10px hsl(var(--game-foreground))" }}>
+        <div
+          className="mb-4 flex gap-8 text-[hsl(var(--game-foreground))] text-xs tracking-wide"
+          style={{ fontFamily: "'Press Start 2P', monospace", textShadow: "0 0 10px hsl(var(--game-foreground))" }}
+        >
           <div>SCORE: {displayScore.toString().padStart(8, "0")}</div>
           <div>LIVES: {displayLives}</div>
           <div>WAVE: {displayWave}</div>
-          {DEBUG_ENABLED && trainerMode && (
-            <div className="text-[#FF4444] animate-pulse">TRAINER</div>
-          )}
+          {DEBUG_ENABLED && trainerMode && <div className="text-[#FF4444] animate-pulse">TRAINER</div>}
         </div>
       )}
       {(gameMode === "duel" || gameMode === "online") && (
@@ -2833,17 +3114,18 @@ const Game = () => {
           onKeyDown={handleCanvasKeyDown}
           onKeyUp={handleCanvasKeyUp}
           className="border-2 border-[hsl(var(--game-foreground))] shadow-[0_0_30px_hsl(var(--game-foreground))] max-w-full outline-none"
-          style={{ touchAction: 'none' }}
+          style={{ touchAction: "none" }}
         />
 
         {showLifeLost && !showGameOver && gameMode === "solo" && (
           <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/70">
-            <div className="text-4xl font-mono text-[hsl(var(--game-danger))] mb-6 animate-pulse">
-              LIFE LOST!
-            </div>
+            <div className="text-4xl font-mono text-[hsl(var(--game-danger))] mb-6 animate-pulse">LIFE LOST!</div>
             <Button
               onClick={continueAfterLifeLost}
-              onTouchEnd={(e) => { e.preventDefault(); continueAfterLifeLost(); }}
+              onTouchEnd={(e) => {
+                e.preventDefault();
+                continueAfterLifeLost();
+              }}
               className="bg-[hsl(var(--game-foreground))] text-[hsl(var(--game-background))] hover:bg-[hsl(var(--game-glow))] text-xl px-8 py-4 font-mono"
             >
               PRESS TO CONTINUE
@@ -2856,9 +3138,7 @@ const Game = () => {
 
         {showGameOver && gameMode === "solo" && (
           <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/80 overflow-auto py-4">
-            <div className="text-5xl font-mono text-[hsl(var(--game-danger))] mb-4 animate-pulse">
-              GAME OVER
-            </div>
+            <div className="text-5xl font-mono text-[hsl(var(--game-danger))] mb-4 animate-pulse">GAME OVER</div>
             <div className="text-2xl font-mono text-[hsl(var(--game-foreground))] mb-4">
               FINAL SCORE: {displayScore.toString().padStart(8, "0")}
             </div>
@@ -2903,12 +3183,17 @@ const Game = () => {
                 <div className="text-lg font-mono text-[hsl(var(--game-glow))] text-center mb-2">TOP SCORES</div>
                 <div className="border border-[hsl(var(--game-foreground))] p-2">
                   {leaderboard.map((entry, i) => (
-                    <div key={i} className={`flex justify-between font-mono text-sm py-0.5 ${
-                      entry.score === displayScore && entry.initials === initials
-                        ? "text-[hsl(var(--game-glow))]"
-                        : "text-[hsl(var(--game-foreground))]"
-                    }`}>
-                      <span>{(i + 1).toString().padStart(2, " ")}. {entry.initials.padEnd(3, " ")}</span>
+                    <div
+                      key={i}
+                      className={`flex justify-between font-mono text-sm py-0.5 ${
+                        entry.score === displayScore && entry.initials === initials
+                          ? "text-[hsl(var(--game-glow))]"
+                          : "text-[hsl(var(--game-foreground))]"
+                      }`}
+                    >
+                      <span>
+                        {(i + 1).toString().padStart(2, " ")}. {entry.initials.padEnd(3, " ")}
+                      </span>
                       <span>{entry.score.toString().padStart(8, "0")}</span>
                     </div>
                   ))}
@@ -2945,8 +3230,10 @@ const Game = () => {
         {/* Pause overlay */}
         {isPaused && (
           <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/75 z-10">
-            <div className="text-5xl font-mono text-[hsl(var(--game-foreground))] mb-8 tracking-widest animate-pulse"
-              style={{ textShadow: "0 0 30px hsl(var(--game-foreground))" }}>
+            <div
+              className="text-5xl font-mono text-[hsl(var(--game-foreground))] mb-8 tracking-widest animate-pulse"
+              style={{ textShadow: "0 0 30px hsl(var(--game-foreground))" }}
+            >
               PAUSED
             </div>
             <div className="flex flex-col gap-4 items-center mb-8">
@@ -2961,7 +3248,10 @@ const Game = () => {
                 {pauseSelection === 0 ? "▸ " : "  "}RESUME
               </Button>
               <Button
-                onClick={() => { resumeGame(); quitToMenu(); }}
+                onClick={() => {
+                  resumeGame();
+                  quitToMenu();
+                }}
                 className={`text-xl px-10 py-5 font-mono tracking-wider transition-all ${
                   pauseSelection === 1
                     ? "bg-[hsl(var(--game-danger))] text-[hsl(var(--game-background))] shadow-[0_0_20px_hsl(var(--game-danger))]"
@@ -2993,40 +3283,60 @@ const Game = () => {
 
         {/* Debug panel overlay */}
         {DEBUG_ENABLED && showDebugPanel && (
-          <div className="absolute inset-0 bg-black/80 z-20 overflow-auto p-4 font-mono text-xs" onClick={(e) => e.stopPropagation()}>
+          <div
+            className="absolute inset-0 bg-black/80 z-20 overflow-auto p-4 font-mono text-xs"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="flex justify-between items-center mb-3">
               <div className="text-[#00FF00] text-sm">DEBUG LOG</div>
-              <button onClick={() => setShowDebugPanel(false)} className="text-[hsl(var(--game-foreground))] opacity-70 hover:opacity-100">✕ CLOSE</button>
+              <button
+                onClick={() => setShowDebugPanel(false)}
+                className="text-[hsl(var(--game-foreground))] opacity-70 hover:opacity-100"
+              >
+                ✕ CLOSE
+              </button>
             </div>
             <div className="flex flex-wrap gap-2 mb-3">
-              {DEBUG_CATEGORIES.map(cat => (
+              {DEBUG_CATEGORIES.map((cat) => (
                 <label key={cat} className="flex items-center gap-1 cursor-pointer">
                   <input
                     type="checkbox"
                     checked={debugCategories.has(cat)}
-                    onChange={() => setDebugCategories(prev => {
-                      const next = new Set(prev);
-                      if (next.has(cat)) next.delete(cat); else next.add(cat);
-                      return next;
-                    })}
+                    onChange={() =>
+                      setDebugCategories((prev) => {
+                        const next = new Set(prev);
+                        if (next.has(cat)) next.delete(cat);
+                        else next.add(cat);
+                        return next;
+                      })
+                    }
                     className="accent-[#00FF00]"
                   />
                   <span className="text-[#00FF00] uppercase">{cat}</span>
                 </label>
               ))}
             </div>
-            <button onClick={() => { debugLogsRef.current = []; setDebugLogs([]); }} className="text-[#FF4444] mb-2 hover:underline">CLEAR</button>
+            <button
+              onClick={() => {
+                debugLogsRef.current = [];
+                setDebugLogs([]);
+              }}
+              className="text-[#FF4444] mb-2 hover:underline"
+            >
+              CLEAR
+            </button>
             <div className="max-h-[400px] overflow-auto border border-[#00FF00]/30 p-2">
-              {debugLogs.filter(l => debugCategories.has(l.category)).slice().reverse().map((log, i) => (
-                <div key={i} className="text-[#00FF00]/80 py-0.5 border-b border-[#00FF00]/10">
-                  <span className="text-[#00FF00]/50">{new Date(log.timestamp).toLocaleTimeString()}</span>
-                  {' '}
-                  <span className="text-[#FFAA00]">[{log.category}]</span>
-                  {' '}
-                  {log.message}
-                </div>
-              ))}
-              {debugLogs.filter(l => debugCategories.has(l.category)).length === 0 && (
+              {debugLogs
+                .filter((l) => debugCategories.has(l.category))
+                .slice()
+                .reverse()
+                .map((log, i) => (
+                  <div key={i} className="text-[#00FF00]/80 py-0.5 border-b border-[#00FF00]/10">
+                    <span className="text-[#00FF00]/50">{new Date(log.timestamp).toLocaleTimeString()}</span>{" "}
+                    <span className="text-[#FFAA00]">[{log.category}]</span> {log.message}
+                  </div>
+                ))}
+              {debugLogs.filter((l) => debugCategories.has(l.category)).length === 0 && (
                 <div className="text-[#00FF00]/40">No log entries matching filters</div>
               )}
             </div>
@@ -3036,7 +3346,7 @@ const Game = () => {
         {/* Mobile debug toggle button */}
         {DEBUG_ENABLED && isTouchDevice && (
           <button
-            onClick={() => setShowDebugPanel(prev => !prev)}
+            onClick={() => setShowDebugPanel((prev) => !prev)}
             className="absolute top-2 left-2 z-30 w-8 h-8 rounded border border-[#00FF00]/30 text-[#00FF00] font-mono text-xs flex items-center justify-center opacity-30 hover:opacity-80"
           >
             §
@@ -3047,23 +3357,39 @@ const Game = () => {
       {isTouchDevice && gameMode === "solo" && (
         <div
           className="mt-4 w-full max-w-[800px] select-none"
-          style={{ touchAction: 'none', userSelect: 'none', WebkitUserSelect: 'none' }}
+          style={{ touchAction: "none", userSelect: "none", WebkitUserSelect: "none" }}
         >
           <div className="flex justify-between items-end px-2">
             <div className="flex gap-3">
               <button
                 className="w-16 h-16 rounded-full border-2 border-[hsl(var(--game-foreground))] text-[hsl(var(--game-foreground))] font-mono text-2xl active:bg-[hsl(var(--game-foreground))]/30 flex items-center justify-center"
-                onTouchStart={(e) => { e.preventDefault(); keysRef.current["ArrowLeft"] = true; }}
-                onTouchEnd={(e) => { e.preventDefault(); keysRef.current["ArrowLeft"] = false; }}
-                onTouchCancel={() => { keysRef.current["ArrowLeft"] = false; }}
+                onTouchStart={(e) => {
+                  e.preventDefault();
+                  keysRef.current["ArrowLeft"] = true;
+                }}
+                onTouchEnd={(e) => {
+                  e.preventDefault();
+                  keysRef.current["ArrowLeft"] = false;
+                }}
+                onTouchCancel={() => {
+                  keysRef.current["ArrowLeft"] = false;
+                }}
               >
                 ◄
               </button>
               <button
                 className="w-16 h-16 rounded-full border-2 border-[hsl(var(--game-foreground))] text-[hsl(var(--game-foreground))] font-mono text-2xl active:bg-[hsl(var(--game-foreground))]/30 flex items-center justify-center"
-                onTouchStart={(e) => { e.preventDefault(); keysRef.current["ArrowRight"] = true; }}
-                onTouchEnd={(e) => { e.preventDefault(); keysRef.current["ArrowRight"] = false; }}
-                onTouchCancel={() => { keysRef.current["ArrowRight"] = false; }}
+                onTouchStart={(e) => {
+                  e.preventDefault();
+                  keysRef.current["ArrowRight"] = true;
+                }}
+                onTouchEnd={(e) => {
+                  e.preventDefault();
+                  keysRef.current["ArrowRight"] = false;
+                }}
+                onTouchCancel={() => {
+                  keysRef.current["ArrowRight"] = false;
+                }}
               >
                 ►
               </button>
@@ -3073,24 +3399,44 @@ const Game = () => {
               <div className="flex gap-3">
                 <button
                   className="w-16 h-16 rounded-full border-2 border-[hsl(var(--game-glow))] text-[hsl(var(--game-glow))] font-mono text-xs font-bold active:bg-[hsl(var(--game-glow))]/30 flex items-center justify-center shadow-[0_0_10px_hsl(var(--game-glow)/0.3)]"
-                  onTouchStart={(e) => { e.preventDefault(); keysRef.current["ArrowUp"] = true; }}
-                  onTouchEnd={(e) => { e.preventDefault(); keysRef.current["ArrowUp"] = false; }}
-                  onTouchCancel={() => { keysRef.current["ArrowUp"] = false; }}
+                  onTouchStart={(e) => {
+                    e.preventDefault();
+                    keysRef.current["ArrowUp"] = true;
+                  }}
+                  onTouchEnd={(e) => {
+                    e.preventDefault();
+                    keysRef.current["ArrowUp"] = false;
+                  }}
+                  onTouchCancel={() => {
+                    keysRef.current["ArrowUp"] = false;
+                  }}
                 >
                   THRUST
                 </button>
                 <button
                   className="w-16 h-16 rounded-full border-2 border-[hsl(var(--game-danger))] text-[hsl(var(--game-danger))] font-mono text-xs font-bold active:bg-[hsl(var(--game-danger))]/30 flex items-center justify-center shadow-[0_0_10px_hsl(var(--game-danger)/0.3)]"
-                  onTouchStart={(e) => { e.preventDefault(); shootBullet(); keysRef.current[" "] = true; }}
-                  onTouchEnd={(e) => { e.preventDefault(); keysRef.current[" "] = false; }}
-                  onTouchCancel={() => { keysRef.current[" "] = false; }}
+                  onTouchStart={(e) => {
+                    e.preventDefault();
+                    shootBullet();
+                    keysRef.current[" "] = true;
+                  }}
+                  onTouchEnd={(e) => {
+                    e.preventDefault();
+                    keysRef.current[" "] = false;
+                  }}
+                  onTouchCancel={() => {
+                    keysRef.current[" "] = false;
+                  }}
                 >
                   FIRE
                 </button>
               </div>
               <button
                 className="w-[140px] h-10 rounded-full border-2 border-[hsl(var(--game-powerup))] text-[hsl(var(--game-powerup))] font-mono text-xs font-bold active:bg-[hsl(var(--game-powerup))]/30 flex items-center justify-center shadow-[0_0_10px_hsl(var(--game-powerup)/0.3)]"
-                onTouchStart={(e) => { e.preventDefault(); hyperspace(); }}
+                onTouchStart={(e) => {
+                  e.preventDefault();
+                  hyperspace();
+                }}
               >
                 HYPERSPACE
               </button>
@@ -3192,7 +3538,16 @@ const Game = () => {
           </label>
         )}
         <div className="text-[hsl(var(--game-foreground))] font-mono text-xs text-center opacity-60 mt-1">
-          Thanks to <a href="https://scenestream.net/demovibes/" target="_blank" rel="noopener noreferrer" className="underline hover:opacity-80">Nectarine Demoscene Radio</a> for the music!
+          Thanks to{" "}
+          <a
+            href="https://scenestream.net/demovibes/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline hover:opacity-80"
+          >
+            Nectarine Demoscene Radio
+          </a>{" "}
+          for the music!
         </div>
         <div className="text-[hsl(var(--game-foreground))] font-mono text-[10px] text-center opacity-40 mt-0.5">
           Streaming demoscene & chiptune tracks 24/7
