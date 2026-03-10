@@ -261,6 +261,7 @@ const Game = () => {
     const stored = localStorage.getItem("autoPlayMusic");
     return stored === null ? true : stored === "true";
   });
+  const [userPaused, setUserPaused] = useState(false);
   const [showFullLeaderboard, setShowFullLeaderboard] = useState(false);
   const radioStartedRef = useRef(false);
   const onelinerRef = useRef<{ author: string; message: string } | null>(null);
@@ -3065,9 +3066,11 @@ const Game = () => {
           <audio
             ref={audioRef}
             controls
-            autoPlay={autoPlayMusic}
+            autoPlay={autoPlayMusic && !userPaused}
             preload="auto"
             className="w-full"
+            onPause={() => { if (audioRef.current?.isConnected) setUserPaused(true); }}
+            onPlay={() => setUserPaused(false)}
             onError={(e) => {
               const target = e.currentTarget;
               console.error("Audio loading error:", target.error?.message);
@@ -3556,9 +3559,11 @@ const Game = () => {
         <audio
           ref={audioRef}
           controls
-          autoPlay={autoPlayMusic}
+          autoPlay={autoPlayMusic && !userPaused}
           preload="auto"
           className="w-full"
+          onPause={() => { if (audioRef.current?.isConnected) setUserPaused(true); }}
+          onPlay={() => setUserPaused(false)}
           onError={(e) => {
             const target = e.currentTarget;
             console.error("Audio loading error:", target.error?.message);
