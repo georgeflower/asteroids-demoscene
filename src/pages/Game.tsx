@@ -202,6 +202,7 @@ type GameMode = "menu" | "solo" | "duel" | "online_lobby" | "online";
 
 const CANVAS_WIDTH = 800;
 const CANVAS_HEIGHT = 600;
+const GAME_VERSION = "0.1.0";
 const SHIP_SIZE = 10;
 const BULLET_SPEED = 7;
 const BULLET_LIFETIME = 60;
@@ -550,6 +551,16 @@ const Game = () => {
     return result;
   };
 
+  const checkVersion = useCallback(() => {
+    const storedVersion = localStorage.getItem("gameVersion");
+    if (storedVersion !== GAME_VERSION) {
+      if (storedVersion !== null) {
+        toast.info(`Game updated to v${GAME_VERSION}!`);
+      }
+      localStorage.setItem("gameVersion", GAME_VERSION);
+    }
+  }, []);
+
   const initGame = useCallback(() => {
     const asteroids: Asteroid[] = [];
     for (let i = 0; i < 4; i++) {
@@ -597,6 +608,7 @@ const Game = () => {
     setShowLifeLost(false);
     showLifeLostRef.current = false;
     setGameMode("solo");
+    checkVersion();
     toast.success("Game Started! Use Arrow Keys to move, Space to shoot");
     // Focus canvas for input capture
     setTimeout(() => {
@@ -645,6 +657,7 @@ const Game = () => {
     setDuelKills([0, 0]);
     setDuelDeaths([0, 0]);
     setGameMode("duel");
+    checkVersion();
     toast.success("DUEL MODE! P1: Arrows+Space | P2: WASD+E");
     setTimeout(() => {
       canvasRef.current?.focus();
@@ -780,6 +793,7 @@ const Game = () => {
     setDuelDeaths([0, 0]);
     setGameMode("online");
     broadcastTickRef.current = 0;
+    checkVersion();
 
     if (isHost) {
       const worker = new Worker(new URL("../workers/gameWorker.ts", import.meta.url), { type: "module" });
@@ -2276,6 +2290,15 @@ const Game = () => {
       ctx.fillText(`TOP: ${leaderboard[0].score.toString().padStart(8, "0")}`, CANVAS_WIDTH - 10, 38);
       ctx.restore();
     }
+
+    // Version number in top-right corner
+    ctx.save();
+    ctx.globalAlpha = 0.35;
+    ctx.font = "7px monospace";
+    ctx.fillStyle = "#AAAAAA";
+    ctx.textAlign = "right";
+    ctx.fillText(`v${GAME_VERSION}`, CANVAS_WIDTH - 10, 55);
+    ctx.restore();
 
     // Now playing marquee at bottom of canvas
     const np = nowPlayingRef.current;
