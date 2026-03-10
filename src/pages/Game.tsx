@@ -2981,6 +2981,58 @@ const Game = () => {
             </Button>
           </div>
         )}
+
+        {/* Debug panel overlay */}
+        {DEBUG_ENABLED && showDebugPanel && (
+          <div className="absolute inset-0 bg-black/80 z-20 overflow-auto p-4 font-mono text-xs" onClick={(e) => e.stopPropagation()}>
+            <div className="flex justify-between items-center mb-3">
+              <div className="text-[#00FF00] text-sm">DEBUG LOG</div>
+              <button onClick={() => setShowDebugPanel(false)} className="text-[hsl(var(--game-foreground))] opacity-70 hover:opacity-100">✕ CLOSE</button>
+            </div>
+            <div className="flex flex-wrap gap-2 mb-3">
+              {DEBUG_CATEGORIES.map(cat => (
+                <label key={cat} className="flex items-center gap-1 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={debugCategories.has(cat)}
+                    onChange={() => setDebugCategories(prev => {
+                      const next = new Set(prev);
+                      if (next.has(cat)) next.delete(cat); else next.add(cat);
+                      return next;
+                    })}
+                    className="accent-[#00FF00]"
+                  />
+                  <span className="text-[#00FF00] uppercase">{cat}</span>
+                </label>
+              ))}
+            </div>
+            <button onClick={() => { debugLogsRef.current = []; setDebugLogs([]); }} className="text-[#FF4444] mb-2 hover:underline">CLEAR</button>
+            <div className="max-h-[400px] overflow-auto border border-[#00FF00]/30 p-2">
+              {debugLogs.filter(l => debugCategories.has(l.category)).slice().reverse().map((log, i) => (
+                <div key={i} className="text-[#00FF00]/80 py-0.5 border-b border-[#00FF00]/10">
+                  <span className="text-[#00FF00]/50">{new Date(log.timestamp).toLocaleTimeString()}</span>
+                  {' '}
+                  <span className="text-[#FFAA00]">[{log.category}]</span>
+                  {' '}
+                  {log.message}
+                </div>
+              ))}
+              {debugLogs.filter(l => debugCategories.has(l.category)).length === 0 && (
+                <div className="text-[#00FF00]/40">No log entries matching filters</div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Mobile debug toggle button */}
+        {DEBUG_ENABLED && isTouchDevice && (
+          <button
+            onClick={() => setShowDebugPanel(prev => !prev)}
+            className="absolute top-2 left-2 z-30 w-8 h-8 rounded border border-[#00FF00]/30 text-[#00FF00] font-mono text-xs flex items-center justify-center opacity-30 hover:opacity-80"
+          >
+            §
+          </button>
+        )}
       </div>
 
       {isTouchDevice && gameMode === "solo" && (
