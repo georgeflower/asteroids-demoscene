@@ -2571,7 +2571,6 @@ const Game = () => {
   }, []);
 
   const handleRadioPause = useCallback(() => {
-    if (!audioRef.current?.isConnected) return;
     setUserPaused(true);
     setAutoPlayMusic(false);
   }, []);
