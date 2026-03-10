@@ -9,6 +9,7 @@ import { useMultiplayer } from "@/hooks/useMultiplayer";
 import OnlineLobby from "@/components/OnlineLobby";
 import CRTBootOverlay from "@/components/CRTBootOverlay";
 import type { DuelNetState } from "@/types/multiplayer";
+import { DEBUG_ENABLED, DEBUG_CATEGORIES, type DebugCategory, type DebugLogEntry } from "@/constants/debug";
 
 interface Vector {
   x: number;
