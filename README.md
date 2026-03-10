@@ -1,7 +1,7 @@
 ASTEROIDS
 A Retro Vector Graphics Arcade Game
 
-SOLO: Arrow Keys + Space | Gamepad supported
+SOLO: Arrow Keys + Space + Ctrl for Hyperspace | Gamepad supported
 DUEL: P1 Arrows+Space | P2 WASD+E | Gamepads 1 & 2
 ONLINE: Create or join a room to duel remotely
 
