@@ -231,6 +231,17 @@ const Game = () => {
   const nowPlayingMarqueeXRef = useRef<number>(CANVAS_WIDTH);
   const onelinerMarqueeXRef = useRef<number>(CANVAS_WIDTH);
 
+  // Debug system state (only active when DEBUG_ENABLED is true)
+  const [debugLogs, setDebugLogs] = useState<DebugLogEntry[]>([]);
+  const debugLogsRef = useRef<DebugLogEntry[]>([]);
+  const [showDebugPanel, setShowDebugPanel] = useState(false);
+  const [debugCategories, setDebugCategories] = useState<Set<DebugCategory>>(new Set(DEBUG_CATEGORIES));
+  const [trainerMode, setTrainerMode] = useState(() => {
+    if (!DEBUG_ENABLED) return false;
+    return localStorage.getItem("trainerMode") === "true";
+  });
+  const trainerModeRef = useRef(trainerMode);
+
   // Online multiplayer state
   const multiplayer = useMultiplayer();
   const workerRef = useRef<Worker | null>(null);
