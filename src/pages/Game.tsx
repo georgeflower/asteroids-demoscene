@@ -2782,6 +2782,9 @@ const Game = () => {
           <div>SCORE: {displayScore.toString().padStart(8, "0")}</div>
           <div>LIVES: {displayLives}</div>
           <div>WAVE: {displayWave}</div>
+          {DEBUG_ENABLED && trainerMode && (
+            <div className="text-[#FF4444] animate-pulse">TRAINER</div>
+          )}
         </div>
       )}
       {(gameMode === "duel" || gameMode === "online") && (
