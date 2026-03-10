@@ -1706,6 +1706,10 @@ const Game = () => {
             state.bossDefeated = true;
             addDebugLog("boss", `Boss defeated! Score: +${pts}`);
             toast.success("BOSS DEFEATED!");
+
+            // Boss waves can soft-lock if generic wave-clear checks don't resolve.
+            // Advance immediately after boss defeat.
+            nextWave();
           }
           return false;
         }
