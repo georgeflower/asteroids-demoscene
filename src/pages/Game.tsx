@@ -1422,7 +1422,7 @@ const Game = () => {
           case "multiplier": state.powerUpActive.multiplier = 900; break;
         }
         soundEffects.powerUp();
-        haptics.medium();
+        addDebugLog('powerup', `Picked up ${powerUp.type} at (${Math.round(powerUp.pos.x)}, ${Math.round(powerUp.pos.y)})`);
         return false;
       }
       return powerUp.lifetime > 0;
