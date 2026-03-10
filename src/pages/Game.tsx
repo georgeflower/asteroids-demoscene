@@ -1586,6 +1586,7 @@ const Game = () => {
 
             state.boss = null;
             state.bossDefeated = true;
+            addDebugLog('boss', `Boss defeated! Score: +${pts}`);
             toast.success("BOSS DEFEATED!");
           }
           return false;
