@@ -146,7 +146,7 @@ const COLOR_THEMES: ColorTheme[] = [
   },
   {
     name: "Toxic",
-    ship: "#44FF44",
+    ship: "#FFFFFF",
     asteroids: ["#88FF88", "#44CC44", "#22AA22"],
     bg: "#030A03",
     accent: "#00FF00",
