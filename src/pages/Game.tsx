@@ -1600,6 +1600,7 @@ const Game = () => {
       for (const asteroid of state.asteroids) {
         const radius = asteroid.size === "large" ? 40 : asteroid.size === "medium" ? 25 : 12;
         if (checkCollision(state.ship.pos, SHIP_SIZE, asteroid.pos, radius)) {
+          addDebugLog('collision', `Ship hit ${asteroid.size} asteroid`);
           loseLife(state);
           break;
         }
