@@ -1495,19 +1495,21 @@ const Game = () => {
         boss.shootTimer--;
         if (boss.shootTimer <= 0) {
           boss.shootTimer = Math.max(40, 90 - state.wave * 3);
-          const baseAngle = Math.atan2(state.ship.pos.y - boss.pos.y, state.ship.pos.x - boss.pos.x);
-          for (let i = -1; i <= 1; i++) {
-            state.bullets.push({
-              pos: { ...boss.pos },
-              vel: {
-                x: Math.cos(baseAngle + i * 0.3) * 4,
-                y: Math.sin(baseAngle + i * 0.3) * 4,
-              },
-              rotation: baseAngle + i * 0.3,
-              lifetime: BULLET_LIFETIME * 1.5,
-              isUFO: true,
-              color: "#FF66FF",
-            });
+          if (state.boss) {  // Re-verify boss still exists
+            const baseAngle = Math.atan2(state.ship.pos.y - boss.pos.y, state.ship.pos.x - boss.pos.x);
+            for (let i = -1; i <= 1; i++) {
+              state.bullets.push({
+                pos: { ...boss.pos },
+                vel: {
+                  x: Math.cos(baseAngle + i * 0.3) * 4,
+                  y: Math.sin(baseAngle + i * 0.3) * 4,
+                },
+                rotation: baseAngle + i * 0.3,
+                lifetime: BULLET_LIFETIME * 1.5,
+                isUFO: true,
+                color: "#FF66FF",
+              });
+            }
           }
         }
       }
@@ -1688,6 +1690,7 @@ const Game = () => {
     // Collision: Bullets vs Boss
     if (state.boss && state.boss.entered) {
       state.bullets = state.bullets.filter((bullet) => {
+        if (!state.boss) return true;  // Boss defeated mid-filter, keep remaining bullets
         if (bullet.isUFO || bullet.isAlien) return true;
         if (checkCollision(bullet.pos, 2, state.boss!.pos, 60)) {
           state.boss!.hp--;
@@ -1764,7 +1767,8 @@ const Game = () => {
 
     // Collision: Ship vs Boss tentacles
     if (state.boss && state.boss.entered && !state.ship.invulnerable && state.powerUpActive.shield === 0) {
-      if (checkCollision(state.ship.pos, SHIP_SIZE, state.boss.pos, 65)) {
+      const boss = state.boss;
+      if (boss && checkCollision(state.ship.pos, SHIP_SIZE, boss.pos, 65)) {
         addDebugLog("collision", "Ship hit boss");
         loseLife(state);
       }
