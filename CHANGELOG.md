@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.2] - 2026-03-10
+
+### Fixed
+- **Shield Power-Up Activation**: Fixed issue where Shield power-ups collected during spawn invulnerability were prematurely deactivated when the spawn timer expired
+- **Music Player Auto-Resume**: Fixed music player automatically resuming after being paused when transitioning between game modes or starting a game
+- **Pause Music State**: AUTO-PLAY MUSIC checkbox now properly unchecks when pausing the game and remains unchecked until manually re-enabled
+
 ## [0.1.1] - 2026-03-10
 
 ### Changed
@@ -22,7 +29,7 @@ All notable changes to this project will be documented in this file.
 - Multiple color themes that change every 5 waves
 - Keyboard and gamepad support
 - Power-ups: Shield, Rapid Fire, Extra Life, Score Multiplier
-- Boss fights every 10 waves
+- Boss fights every 5 waves
 - UFO and alien enemies
 - Leaderboard system
 - CRT screen effects and retro graphics
