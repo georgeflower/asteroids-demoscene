@@ -811,6 +811,14 @@ const Game = () => {
   };
 
   const loseLife = useCallback((state: GameState) => {
+    // Trainer mode: prevent death
+    if (DEBUG_ENABLED && trainerModeRef.current) {
+      addDebugLog('death', `Trainer mode: death prevented at (${Math.round(state.ship.pos.x)}, ${Math.round(state.ship.pos.y)})`);
+      state.ship.invulnerable = true;
+      state.ship.invulnerableTime = 60;
+      return;
+    }
+    addDebugLog('death', `Ship destroyed at (${Math.round(state.ship.pos.x)}, ${Math.round(state.ship.pos.y)}), lives: ${state.lives - 1}`);
     spawnExplosion(state.ship.pos, "#FFFFFF", 20);
     state.lives--;
     setDisplayLives(state.lives);
@@ -822,7 +830,8 @@ const Game = () => {
     if (state.lives <= 0) {
       state.gameOver = true;
       setShowGameOver(true);
-      if (isHighScore(state.score)) setEnteringInitials(true);
+      // Trainer mode: don't offer score saving
+      if (!(DEBUG_ENABLED && trainerModeRef.current) && isHighScore(state.score)) setEnteringInitials(true);
       loadLeaderboard().then(setLeaderboard);
       toast.error(`Game Over! Final Score: ${state.score}`);
       haptics.gameOver();
@@ -830,7 +839,7 @@ const Game = () => {
       showLifeLostRef.current = true;
       setShowLifeLost(true);
     }
-  }, [isHighScore, loadLeaderboard]);
+  }, [isHighScore, loadLeaderboard, addDebugLog]);
 
   const shootBullet = useCallback(() => {
     if (gameModeRef.current === "solo") {
