@@ -178,6 +178,7 @@ interface GameState {
   boss: Boss | null;
   alienSpawnTimer: number;
   bossDefeated: boolean;
+  pendingNextWave: boolean;
 }
 
 interface DuelState {
@@ -582,6 +583,7 @@ const Game = () => {
       boss: null,
       alienSpawnTimer: 600,
       bossDefeated: false,
+      pendingNextWave: false,
     };
 
     duelStateRef.current = null;
@@ -800,6 +802,7 @@ const Game = () => {
 
     if (isBossWave) {
       state.bossDefeated = false;
+      state.pendingNextWave = false;
       state.boss = createBoss(state.wave);
       addDebugLog("boss", `Boss spawned for wave ${state.wave}, HP: ${state.boss.hp}`);
       state.asteroids = [];
@@ -815,6 +818,7 @@ const Game = () => {
     }
 
     state.bossDefeated = false;
+    state.pendingNextWave = false;
     const numAsteroids = Math.min(4 + state.wave * 2, 20);
     const asteroids: Asteroid[] = [];
 
@@ -1290,6 +1294,13 @@ const Game = () => {
       return;
 
     const state = gameStateRef.current;
+
+    // Resolve deferred wave transition on a clean tick
+    if (state.pendingNextWave) {
+      state.pendingNextWave = false;
+      nextWave();
+      return;
+    }
     const theme = getTheme(state.wave);
     const gp0 = readGamepad(0);
 
@@ -1704,10 +1715,11 @@ const Game = () => {
 
             state.boss = null;
             state.bossDefeated = true;
+            state.pendingNextWave = true;
             addDebugLog("boss", `Boss defeated! Score: +${pts}`);
             toast.success("BOSS DEFEATED!");
 
-            // Wave completion check will handle advancing to next wave
+            // Advance is deferred to next update tick to avoid same-frame state churn
           }
           return false;
         }
@@ -1774,7 +1786,7 @@ const Game = () => {
     // Check wave completion
     const noEnemies =
       state.asteroids.length === 0 && state.ufos.length === 0 && state.aliens.length === 0 && !state.boss;
-    if (noEnemies) {
+    if (noEnemies && !state.pendingNextWave) {
       nextWave();
     }
   }, [nextWave, loseLife, shootBullet, hyperspace, addDebugLog]);
