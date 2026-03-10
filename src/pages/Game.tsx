@@ -2570,6 +2570,15 @@ const Game = () => {
     setIsTouchDevice("ontouchstart" in window || navigator.maxTouchPoints > 0);
   }, []);
 
+  const handleRadioPause = useCallback(() => {
+    setUserPaused(true);
+    setAutoPlayMusic(false);
+  }, []);
+
+  const handleRadioPlay = useCallback(() => {
+    setUserPaused(false);
+  }, []);
+
   // Persist autoPlayMusic setting
   useEffect(() => {
     localStorage.setItem("autoPlayMusic", String(autoPlayMusic));
@@ -3180,8 +3189,8 @@ const Game = () => {
             autoPlay={autoPlayMusic && !userPaused}
             preload="auto"
             className="w-full"
-            onPause={() => { if (audioRef.current?.isConnected) setUserPaused(true); }}
-            onPlay={() => setUserPaused(false)}
+            onPause={handleRadioPause}
+            onPlay={handleRadioPlay}
             onError={(e) => {
               const target = e.currentTarget;
               console.error("Audio loading error:", target.error?.message);
@@ -3673,8 +3682,8 @@ const Game = () => {
           autoPlay={autoPlayMusic && !userPaused}
           preload="auto"
           className="w-full"
-          onPause={() => { if (audioRef.current?.isConnected) setUserPaused(true); }}
-          onPlay={() => setUserPaused(false)}
+          onPause={handleRadioPause}
+          onPlay={handleRadioPlay}
           onError={(e) => {
             const target = e.currentTarget;
             console.error("Audio loading error:", target.error?.message);
