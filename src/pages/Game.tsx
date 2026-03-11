@@ -3322,12 +3322,39 @@ const Game = () => {
       {/* HUD */}
       {gameMode === "solo" && (
         <div
-          className="mb-4 flex gap-8 text-[hsl(var(--game-foreground))] text-xs tracking-wide"
+          className="mb-4 flex gap-8 items-center text-[hsl(var(--game-foreground))] text-xs tracking-wide"
           style={{ fontFamily: "'Press Start 2P', monospace", textShadow: "0 0 10px hsl(var(--game-foreground))" }}
         >
           <div>SCORE: {displayScore.toString().padStart(8, "0")}</div>
           <div>LIVES: {displayLives}</div>
-          <div>WAVE: {displayWave}</div>
+          <div className="flex items-center gap-2">
+            <span>WAVE: {displayWave}</span>
+            <span className="text-[#888888] text-[7px]" style={{ textShadow: "none" }}>v{GAME_VERSION}</span>
+          </div>
+          {/* Hyperspace charge indicator */}
+          <div className="relative w-8 h-8 flex items-center justify-center">
+            <svg className="absolute inset-0 w-8 h-8 -rotate-90" viewBox="0 0 36 36">
+              <circle cx="18" cy="18" r="15" fill="none" stroke="hsl(var(--game-foreground))" strokeWidth="2" opacity="0.2" />
+              <circle
+                cx="18" cy="18" r="15"
+                fill="none"
+                stroke={hyperChargePercent >= 100 ? "#CC66FF" : "#666666"}
+                strokeWidth="2.5"
+                strokeDasharray={`${(hyperChargePercent / 100) * 94.25} 94.25`}
+                strokeLinecap="round"
+                style={{ transition: "stroke-dasharray 0.1s linear" }}
+              />
+            </svg>
+            <img
+              src={hyperspaceIcon}
+              alt="Hyperspace"
+              className={`w-5 h-5 relative z-10 ${hyperChargePercent >= 100 ? "animate-pulse" : ""}`}
+              style={{
+                filter: hyperChargePercent >= 100 ? "none" : "grayscale(1) opacity(0.4)",
+                transition: "filter 0.3s ease",
+              }}
+            />
+          </div>
           {DEBUG_ENABLED && trainerMode && <div className="text-[#FF4444] animate-pulse">TRAINER</div>}
         </div>
       )}
