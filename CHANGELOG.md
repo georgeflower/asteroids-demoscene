@@ -2,13 +2,64 @@
 
 All notable changes to this project will be documented in this file.
 
+## 🚀 v0.1.4 — UI/UX Polish & HUD Improvements
+
+## Summary Table
+
+| Category | Changes                                                           |
+| -------- | ----------------------------------------------------------------- |
+| UI/UX    | New hyperspace indicator, compact controls, HUD version placement |
+| Marquee  | GIF replacements, 5‑message separator, country flags              |
+| Audio    | autoPlayMusic now defaults to false                               |
+| Branding | Title links to scenestream.net                                    |
+
+## **Hyperspace Charge Indicator**
+
+- Added circular **SVG progress indicator** using the uploaded logo
+- Greyscale while charging
+- Full‑color + **pulse animation** when ready
+- Plays **powerUp** sound on full charge
+- Removed all hyperspace‑related toast notifications
+
+## **Controls Layout**
+
+- Keyboard/gamepad controls condensed into a **single-line row** across the canvas
+- Reduces vertical space usage and improves clarity
+
+## **Marquee & Oneliner Enhancements**
+
+- Replaced text tokens with inline animated GIFs:
+  - `:necta:`
+  - `:nectawall:`
+  - `d^^b`
+  - `:D`
+- Oneliner now shows the **latest 5 messages** separated by `|`
+- Added **country flag emoji** before author names (derived from `flag` attribute)
+
+## **Branding Updates**
+
+- “NECTARINE DEMOSCENE RADIO” now links to **scenestream.net**
+- Removed “Thanks to…” text below the title
+
+## **HUD & Version Display**
+
+- Version moved to the **HUD**, next to WAVE
+- Shown in smaller gray text
+- Removed version text from canvas and controls area
+
+## **Audio Defaults**
+
+- `autoPlayMusic` now defaults to **false**
+
 ## [0.1.3] - 2026-03-11
 
 ## PR #24 - Fix 11 ESLint errors: type safety and ES module compliance
+
 **Merged:** 2026-03-11 at 07:14:37 UTC  
 **Files changed:** 5 files (+31 additions, -11 deletions)
 
 ### Fixed
+
 - **ESLint Errors**: Resolved 11 ESLint errors including:
   - Empty interface types converted to type aliases (`@typescript-eslint/no-empty-object-type`)
     - `command.tsx`: Changed `interface CommandDialogProps extends DialogProps {}` to `type CommandDialogProps = DialogProps`
@@ -23,11 +74,13 @@ All notable changes to this project will be documented in this file.
 ---
 
 ## PR #26 - Fix high score rank alignment with CSS whitespace preservation
+
 **Merged:** 2026-03-11 at 11:04:17 UTC  
 **Fixes:** Issue #25  
 **Files changed:** 1 file (+4 additions, -4 deletions)
 
 ### Fixed
+
 - **High Score Alignment**: Fixed alignment issue where high score rank 10 didn't align with ranks 1-9 by adding CSS whitespace preservation (`whiteSpace: "pre"`) to rank span elements in:
   - Full leaderboard modal (line 3142)
   - Game over leaderboard (line 3358)
@@ -37,6 +90,7 @@ All notable changes to this project will be documented in this file.
 ## [0.1.2] - 2026-03-10
 
 ### Fixed
+
 - **Shield Power-Up Activation**: Fixed issue where Shield power-ups collected during spawn invulnerability were prematurely deactivated when the spawn timer expired
 - **Music Player Auto-Resume**: Fixed music player automatically resuming after being paused when transitioning between game modes or starting a game
 - **Pause Music State**: AUTO-PLAY MUSIC checkbox now properly unchecks when pausing the game and remains unchecked until manually re-enabled
@@ -44,17 +98,20 @@ All notable changes to this project will be documented in this file.
 ## [0.1.1] - 2026-03-10
 
 ### Changed
+
 - **Hyperspace Control**: Changed hyperspace key from `H` to `Left Ctrl` or `Right Ctrl` for easier access during gameplay
 - **Hyperspace Safety**: Hyperspace now teleports the ship to a safe location away from asteroids, UFOs, aliens, boss, and enemy bullets
 - **Hyperspace Cooldown**: Added 10-second cooldown period between hyperspace jumps to prevent abuse
 - Removed random 10% death chance from hyperspace jumps
 
 ### Fixed
+
 - Improved usability of hyperspace feature by making it accessible without looking at the keyboard
 
 ## [0.1.0] - Initial Release
 
 ### Added
+
 - Solo mode with wave-based progression
 - Duel mode for local 2-player gameplay
 - Online multiplayer mode
