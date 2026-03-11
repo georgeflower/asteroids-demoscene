@@ -803,7 +803,7 @@ const Game = () => {
       workerRef.current = worker;
       worker.postMessage({ type: "init" });
     }
-    toast.success(isHost ? "Game started! You are HOST (P1)" : "Game started! You are GUEST (P2)");
+    // Online game started
     setTimeout(() => {
       canvasRef.current?.focus();
     }, 50);
