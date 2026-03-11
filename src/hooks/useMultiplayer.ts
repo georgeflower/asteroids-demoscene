@@ -2,6 +2,14 @@ import { useState, useCallback, useRef, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import type { InputState, DuelNetState } from "@/types/multiplayer";
 
+interface PresenceInfo {
+  role: "host" | "guest";
+}
+
+interface PresenceState {
+  [key: string]: PresenceInfo[];
+}
+
 function generateRoomCode(): string {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
   let code = "";
@@ -30,12 +38,12 @@ export function useMultiplayer() {
 
     channel
       .on("presence", { event: "join" }, ({ newPresences }) => {
-        if (newPresences.some((p: any) => p.role === "guest")) {
+        if (newPresences.some((p: PresenceInfo) => p.role === "guest")) {
           setOpponentConnected(true);
         }
       })
       .on("presence", { event: "leave" }, ({ leftPresences }) => {
-        if (leftPresences.some((p: any) => p.role === "guest")) {
+        if (leftPresences.some((p: PresenceInfo) => p.role === "guest")) {
           setOpponentConnected(false);
         }
       })
@@ -63,12 +71,12 @@ export function useMultiplayer() {
 
     channel
       .on("presence", { event: "join" }, ({ newPresences }) => {
-        if (newPresences.some((p: any) => p.role === "host")) {
+        if (newPresences.some((p: PresenceInfo) => p.role === "host")) {
           setOpponentConnected(true);
         }
       })
       .on("presence", { event: "leave" }, ({ leftPresences }) => {
-        if (leftPresences.some((p: any) => p.role === "host")) {
+        if (leftPresences.some((p: PresenceInfo) => p.role === "host")) {
           setOpponentConnected(false);
         }
       })
@@ -83,10 +91,10 @@ export function useMultiplayer() {
           await channel.track({ role: "guest" });
           setIsConnected(true);
           // Check if host is already present
-          const state = channel.presenceState();
+          const state = channel.presenceState() as PresenceState;
           const keys = Object.keys(state);
           for (const key of keys) {
-            if ((state as any)[key]?.some?.((p: any) => p.role === "host")) {
+            if (state[key]?.some?.((p: PresenceInfo) => p.role === "host")) {
               setOpponentConnected(true);
               break;
             }

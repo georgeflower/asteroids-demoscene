@@ -1,11 +1,22 @@
 // Retro arcade sound effects using Web Audio API
+
+// Extend Window interface to include webkit prefix
+interface WindowWithWebkitAudio extends Window {
+  webkitAudioContext?: typeof AudioContext;
+}
+
 class SoundEffects {
   private audioContext: AudioContext;
   private thrustOscillator: OscillatorNode | null = null;
   private thrustGain: GainNode | null = null;
 
   constructor() {
-    this.audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+    const windowWithWebkit = window as WindowWithWebkitAudio;
+    const AudioContextClass = window.AudioContext || windowWithWebkit.webkitAudioContext;
+    if (!AudioContextClass) {
+      throw new Error("AudioContext is not supported in this browser");
+    }
+    this.audioContext = new AudioContextClass();
   }
 
   // Shooting sound - short laser beep
@@ -83,7 +94,7 @@ class SoundEffects {
     this.thrustGain.connect(this.audioContext.destination);
 
     noiseSource.start();
-    this.thrustOscillator = noiseSource as any; // Store reference for stopping
+    this.thrustOscillator = noiseSource as unknown as OscillatorNode; // Store reference for stopping
   }
 
   stopThrust() {
