@@ -661,7 +661,7 @@ const Game = () => {
     setDuelDeaths([0, 0]);
     setGameMode("duel");
     checkVersion();
-    toast.success("DUEL MODE! P1: Arrows+Space | P2: WASD+E");
+    // Duel started
     setTimeout(() => {
       canvasRef.current?.focus();
     }, 50);
