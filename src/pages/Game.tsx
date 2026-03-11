@@ -239,6 +239,8 @@ function FpsOverlay() {
   const [data, setData] = useState<FpsDisplayData>({ fps: 0, ups: 0, frameTime: 0 });
   useEffect(() => {
     _fps.lastTime = performance.now();
+    _fps.frames = 0;
+    _fps.updates = 0;
     const id = setInterval(() => {
       const now = performance.now();
       const elapsed = (now - _fps.lastTime) / 1000;

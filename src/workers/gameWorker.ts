@@ -359,7 +359,7 @@ onmessage = (e: MessageEvent) => {
   const msg = e.data;
   if (msg.type === "init") {
     initGame();
-    if (timeoutId !== null) clearTimeout(timeoutId);
+    if (timeoutId !== null) { clearTimeout(timeoutId); timeoutId = null; }
     workerLastTime = performance.now();
     workerAccumulator = 0;
     pendingEvents = [];
