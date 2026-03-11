@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Fixed
+
+- **Arrow Key Scrolling**: Arrow keys (Up, Down, Left, Right) and WASD keys no longer scroll the browser page during active gameplay. Keyboard input now only affects the game when playing, and reverts to normal browser behavior when paused with Esc.
+
 ## 🚀 v0.1.4 — UI/UX Polish & HUD Improvements
 
 ## Summary Table
