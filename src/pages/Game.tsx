@@ -260,8 +260,11 @@ const Game = () => {
   const audioRef = useRef<HTMLAudioElement>(null);
   const [autoPlayMusic, setAutoPlayMusic] = useState(() => {
     const stored = localStorage.getItem("autoPlayMusic");
-    return stored === null ? true : stored === "true";
+    return stored === "true";
   });
+  const [hyperChargePercent, setHyperChargePercent] = useState(100);
+  const hyperChargeReadyRef = useRef(true);
+  const onelinerGifsRef = useRef<Record<string, HTMLImageElement>>({});
   const [userPaused, setUserPaused] = useState(false);
   const [showFullLeaderboard, setShowFullLeaderboard] = useState(false);
   const radioStartedRef = useRef(false);
