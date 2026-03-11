@@ -937,7 +937,7 @@ const Game = () => {
         // Trainer mode: don't offer score saving
         if (!(DEBUG_ENABLED && trainerModeRef.current) && isHighScore(state.score)) setEnteringInitials(true);
         loadLeaderboard().then(setLeaderboard);
-        toast.error(`Game Over! Final Score: ${state.score}`);
+        // Game over
         haptics.gameOver();
       } else {
         showLifeLostRef.current = true;
