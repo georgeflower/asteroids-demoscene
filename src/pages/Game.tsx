@@ -1093,7 +1093,7 @@ const Game = () => {
     state.ship.invulnerable = true;
     state.ship.invulnerableTime = 120; // 2 seconds of invulnerability after hyperspace
 
-    toast.success("Hyperspace jump!");
+    // Hyperspace jump executed
   }, []);
 
   // ===== Ship update helper =====
