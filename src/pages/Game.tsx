@@ -203,6 +203,13 @@ type GameMode = "menu" | "solo" | "duel" | "online_lobby" | "online";
 
 const CANVAS_WIDTH = 800;
 const CANVAS_HEIGHT = 600;
+
+const FIXED_TIMESTEP = 1000 / 60; // 16.666ms – game logic always runs at 60 Hz
+const FRAME_MIN_TIME = FIXED_TIMESTEP; // 60 FPS render cap (tied to fixed timestep)
+// Allow up to 1 ms of timing jitter when checking the FPS cap to avoid
+// accidentally skipping a frame due to sub-millisecond precision drift.
+const FRAME_TIME_TOLERANCE = 1;
+
 const GAME_VERSION = "0.1.4";
 const SHIP_SIZE = 10;
 const BULLET_SPEED = 7;
@@ -222,6 +229,43 @@ const getTheme = (wave: number): ColorTheme => {
 };
 
 const getSpeedScale = (wave: number): number => 1 + wave * 0.05;
+
+// Module-level counters written by gameLoop; read by FpsOverlay via polling.
+// Plain object (no React state) so there is zero overhead in Game itself.
+const _fps = { frames: 0, updates: 0, lastTime: 0 };
+
+interface FpsDisplayData { fps: number; ups: number; frameTime: number; }
+
+function FpsOverlay() {
+  const [data, setData] = useState<FpsDisplayData>({ fps: 0, ups: 0, frameTime: 0 });
+  useEffect(() => {
+    _fps.lastTime = performance.now();
+    _fps.frames = 0;
+    _fps.updates = 0;
+    const id = setInterval(() => {
+      const now = performance.now();
+      const elapsed = (now - _fps.lastTime) / 1000;
+      if (elapsed > 0) {
+        setData({
+          fps: Math.round(_fps.frames / elapsed),
+          ups: Math.round(_fps.updates / elapsed),
+          frameTime: _fps.frames > 0 ? (elapsed / _fps.frames) * 1000 : 0,
+        });
+      }
+      _fps.frames = 0;
+      _fps.updates = 0;
+      _fps.lastTime = now;
+    }, 500);
+    return () => clearInterval(id);
+  }, []);
+  return (
+    <div className="absolute top-2 right-2 z-50 bg-black/70 text-[#00FF00] font-mono text-xs p-2 rounded pointer-events-none leading-relaxed">
+      <div>FPS: {data.fps}</div>
+      <div>UPS: {data.ups}</div>
+      <div>FRAME: {data.frameTime.toFixed(1)}ms</div>
+    </div>
+  );
+}
 
 const Game = () => {
   const navigate = useNavigate();
@@ -290,6 +334,11 @@ const Game = () => {
   const broadcastTickRef = useRef(0);
   const isHostRef = useRef(false);
   const isConnectedRef = useRef(false);
+
+  // Fixed timestep game loop timing
+  const accumulatorRef = useRef(0);
+  const lastTimeRef = useRef(0);
+  const lastFrameTimeRef = useRef(0);
 
   // Keep ref in sync
   useEffect(() => {
@@ -2584,13 +2633,24 @@ const Game = () => {
     ctx.restore();
   }, []);
 
-  const gameLoop = useCallback(() => {
-    if (gameModeRef.current === "duel") {
-      updateDuel();
-    } else if (gameModeRef.current === "solo") {
-      update();
-    } else if (gameModeRef.current === "online") {
-      // Host: send inputs to worker
+  const gameLoop = useCallback((currentTime: number) => {
+    // --- 60 FPS render cap ---
+    if (lastFrameTimeRef.current !== 0 && currentTime - lastFrameTimeRef.current < FRAME_MIN_TIME - FRAME_TIME_TOLERANCE) {
+      animationFrameRef.current = requestAnimationFrame(gameLoop);
+      return;
+    }
+
+    const deltaTime = currentTime - lastTimeRef.current;
+    lastTimeRef.current = currentTime;
+    lastFrameTimeRef.current = currentTime;
+
+    // Cap delta to prevent "spiral of death" after pauses / tab switches
+    const cappedDelta = Math.min(deltaTime, 250);
+
+    let updatesThisFrame = 0;
+
+    if (gameModeRef.current === "online") {
+      // Online: the worker owns game physics; we just send inputs and render
       if (isHostRef.current && workerRef.current) {
         const keys = keysRef.current;
         const gp0 = readGamepad(0);
@@ -2605,7 +2665,6 @@ const Game = () => {
           p2: multiplayer.remoteInputRef.current,
         });
       }
-      // Guest: send inputs to host
       if (!isHostRef.current && isConnectedRef.current) {
         const keys = keysRef.current;
         const gp0 = readGamepad(0);
@@ -2617,8 +2676,30 @@ const Game = () => {
         });
       }
       updateOnlineVisuals();
+      // Physics run in the worker; don't count as local updates
+      updatesThisFrame = 0;
+    } else {
+      // Solo / Duel: fixed timestep accumulator – game logic always runs at 60 Hz
+      accumulatorRef.current += cappedDelta;
+      while (accumulatorRef.current >= FIXED_TIMESTEP) {
+        if (gameModeRef.current === "duel") {
+          updateDuel();
+        } else if (gameModeRef.current === "solo") {
+          update();
+        }
+        accumulatorRef.current -= FIXED_TIMESTEP;
+        updatesThisFrame++;
+      }
     }
+
     draw();
+
+    // FPS tracking for debug overlay – writes to module-level counters (no setState)
+    if (DEBUG_ENABLED) {
+      _fps.frames++;
+      _fps.updates += updatesThisFrame;
+    }
+
     animationFrameRef.current = requestAnimationFrame(gameLoop);
   }, [update, updateDuel, draw, updateOnlineVisuals, multiplayer.sendInputs]);
 
@@ -2986,6 +3067,10 @@ const Game = () => {
 
   // Start game loop
   useEffect(() => {
+    // Reset timing state so the first frame doesn't produce a huge delta
+    lastTimeRef.current = performance.now();
+    lastFrameTimeRef.current = 0;
+    accumulatorRef.current = 0;
     animationFrameRef.current = requestAnimationFrame(gameLoop);
     return () => {
       if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
@@ -3563,6 +3648,9 @@ const Game = () => {
             </Button>
           </div>
         )}
+
+        {/* FPS overlay – debug mode only */}
+        {DEBUG_ENABLED && <FpsOverlay />}
 
         {/* Debug panel overlay */}
         {DEBUG_ENABLED && showDebugPanel && (
