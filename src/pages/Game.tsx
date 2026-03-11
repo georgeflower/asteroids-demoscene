@@ -3269,16 +3269,14 @@ const Game = () => {
         </div>
 
         <div className="mt-8 flex flex-col gap-2 max-w-md">
-          <div className="text-[hsl(var(--game-foreground))] font-mono text-sm text-center">
+          <a
+            href="https://scenestream.net/demovibes/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-[hsl(var(--game-foreground))] font-mono text-sm text-center hover:opacity-80 transition-opacity"
+          >
             🎵 NECTARINE DEMOSCENE RADIO
-          </div>
-          {nowPlaying && (
-            <div className="text-[hsl(var(--game-foreground))] font-mono text-xs text-center animate-pulse">
-              <span className="opacity-90">{nowPlaying.artist}</span>
-              <span className="opacity-50"> — </span>
-              <span className="opacity-80">{nowPlaying.title}</span>
-            </div>
-          )}
+          </a>
           <audio
             ref={audioRef}
             controls
@@ -3314,21 +3312,6 @@ const Game = () => {
               TRAINER (NO SCORES)
             </label>
           )}
-          <div className="text-[hsl(var(--game-foreground))] font-mono text-xs text-center opacity-60 mt-1">
-            Thanks to{" "}
-            <a
-              href="https://scenestream.net/demovibes/"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="underline hover:opacity-80"
-            >
-              Nectarine Demoscene Radio
-            </a>{" "}
-            for the music!
-          </div>
-          <div className="text-[hsl(var(--game-foreground))] font-mono text-[10px] text-center opacity-40 mt-0.5">
-            Streaming demoscene & chiptune tracks 24/7
-          </div>
         </div>
       </div>
     );
