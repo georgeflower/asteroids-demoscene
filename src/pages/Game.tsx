@@ -560,9 +560,6 @@ const Game = () => {
   const checkVersion = useCallback(() => {
     const storedVersion = localStorage.getItem("gameVersion");
     if (storedVersion !== GAME_VERSION) {
-      if (storedVersion !== null) {
-        toast.info(`Game updated to v${GAME_VERSION}!`);
-      }
       localStorage.setItem("gameVersion", GAME_VERSION);
     }
   }, []);
