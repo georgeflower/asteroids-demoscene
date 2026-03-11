@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
-import { toast } from "sonner";
+import hyperspaceIcon from "@/assets/hyperspace.png";
 import { soundEffects } from "@/utils/soundEffects";
 import { haptics } from "@/utils/haptics";
 import { useMultiplayer } from "@/hooks/useMultiplayer";
@@ -260,12 +260,15 @@ const Game = () => {
   const audioRef = useRef<HTMLAudioElement>(null);
   const [autoPlayMusic, setAutoPlayMusic] = useState(() => {
     const stored = localStorage.getItem("autoPlayMusic");
-    return stored === null ? true : stored === "true";
+    return stored === "true";
   });
+  const [hyperChargePercent, setHyperChargePercent] = useState(100);
+  const hyperChargeReadyRef = useRef(true);
+  const onelinerGifsRef = useRef<Record<string, HTMLImageElement>>({});
   const [userPaused, setUserPaused] = useState(false);
   const [showFullLeaderboard, setShowFullLeaderboard] = useState(false);
   const radioStartedRef = useRef(false);
-  const onelinerRef = useRef<{ author: string; message: string } | null>(null);
+  const onelinerRef = useRef<{ author: string; message: string; flag: string }[] | null>(null);
   const lastOnelinerTimeRef = useRef<string>("");
   const nowPlayingMarqueeXRef = useRef<number>(CANVAS_WIDTH);
   const onelinerMarqueeXRef = useRef<number>(CANVAS_WIDTH);
@@ -326,12 +329,12 @@ const Game = () => {
     async (playerInitials: string, score: number) => {
       // Trainer mode: don't save scores
       if (DEBUG_ENABLED && trainerModeRef.current) {
-        toast.info("Trainer mode: score not saved");
+        console.log("Trainer mode: score not saved");
         return;
       }
       const { error } = await supabase.from("high_scores").insert({ initials: playerInitials.toUpperCase(), score });
       if (error) {
-        toast.error("Failed to save score online");
+        console.error("Failed to save score online");
         return;
       }
       const board = await loadLeaderboard();
@@ -557,9 +560,6 @@ const Game = () => {
   const checkVersion = useCallback(() => {
     const storedVersion = localStorage.getItem("gameVersion");
     if (storedVersion !== GAME_VERSION) {
-      if (storedVersion !== null) {
-        toast.info(`Game updated to v${GAME_VERSION}!`);
-      }
       localStorage.setItem("gameVersion", GAME_VERSION);
     }
   }, []);
@@ -612,7 +612,7 @@ const Game = () => {
     showLifeLostRef.current = false;
     setGameMode("solo");
     checkVersion();
-    toast.success("Game Started! Use Arrow Keys to move, Space to shoot");
+    // Game started
     // Focus canvas for input capture
     setTimeout(() => {
       canvasRef.current?.focus();
@@ -661,7 +661,7 @@ const Game = () => {
     setDuelDeaths([0, 0]);
     setGameMode("duel");
     checkVersion();
-    toast.success("DUEL MODE! P1: Arrows+Space | P2: WASD+E");
+    // Duel started
     setTimeout(() => {
       canvasRef.current?.focus();
     }, 50);
@@ -803,7 +803,7 @@ const Game = () => {
       workerRef.current = worker;
       worker.postMessage({ type: "init" });
     }
-    toast.success(isHost ? "Game started! You are HOST (P1)" : "Game started! You are GUEST (P2)");
+    // Online game started
     setTimeout(() => {
       canvasRef.current?.focus();
     }, 50);
@@ -830,7 +830,7 @@ const Game = () => {
       const theme = getTheme(state.wave);
       spawnFloatingText({ x: CANVAS_WIDTH / 2, y: CANVAS_HEIGHT / 2 - 40 }, `WAVE ${state.wave}`, theme.ship, 28);
       spawnFloatingText({ x: CANVAS_WIDTH / 2, y: CANVAS_HEIGHT / 2 + 10 }, "⚠ BOSS INCOMING ⚠", "#FF4444", 22);
-      toast.success(`Wave ${state.wave} — BOSS FIGHT!`);
+      // Boss wave started
       return;
     }
 
@@ -867,7 +867,7 @@ const Game = () => {
       );
     }
 
-    toast.success(`Wave ${state.wave}!`);
+    // Wave started
   }, [addDebugLog]);
 
   const wrapPosition = (pos: Vector): Vector => {
@@ -937,7 +937,7 @@ const Game = () => {
         // Trainer mode: don't offer score saving
         if (!(DEBUG_ENABLED && trainerModeRef.current) && isHighScore(state.score)) setEnteringInitials(true);
         loadLeaderboard().then(setLeaderboard);
-        toast.error(`Game Over! Final Score: ${state.score}`);
+        // Game over
         haptics.gameOver();
       } else {
         showLifeLostRef.current = true;
@@ -1001,8 +1001,6 @@ const Game = () => {
 
     // Check cooldown
     if (state.ship.hyperspaceCooldown > 0) {
-      const secondsLeft = Math.ceil(state.ship.hyperspaceCooldown / 60);
-      toast.error(`Hyperspace charging: ${secondsLeft}s`);
       return;
     }
 
@@ -1095,7 +1093,7 @@ const Game = () => {
     state.ship.invulnerable = true;
     state.ship.invulnerableTime = 120; // 2 seconds of invulnerability after hyperspace
 
-    toast.success("Hyperspace jump!");
+    // Hyperspace jump executed
   }, []);
 
   // ===== Ship update helper =====
@@ -1457,6 +1455,16 @@ const Game = () => {
 
     if (state.ship.hyperspaceCooldown > 0) {
       state.ship.hyperspaceCooldown--;
+    }
+
+    // Update hyperspace charge display
+    const chargePercent = Math.round(((600 - state.ship.hyperspaceCooldown) / 600) * 100);
+    setHyperChargePercent(chargePercent);
+    if (chargePercent >= 100 && !hyperChargeReadyRef.current) {
+      hyperChargeReadyRef.current = true;
+      soundEffects.powerUp();
+    } else if (chargePercent < 100) {
+      hyperChargeReadyRef.current = false;
     }
 
     // Update asteroids with edge-homing
@@ -1836,7 +1844,7 @@ const Game = () => {
             state.bossDefeated = true;
             state.pendingNextWave = true;
             addDebugLog("boss", `Boss defeated! Score: +${pts}`);
-            toast.success("BOSS DEFEATED!");
+            // Boss defeated
 
             // Advance is deferred to next update tick to avoid same-frame state churn
           }
@@ -2393,14 +2401,7 @@ const Game = () => {
       ctx.restore();
     }
 
-    // Version number in top-right corner
-    ctx.save();
-    ctx.globalAlpha = 0.35;
-    ctx.font = "7px monospace";
-    ctx.fillStyle = "#AAAAAA";
-    ctx.textAlign = "right";
-    ctx.fillText(`v${GAME_VERSION}`, CANVAS_WIDTH - 10, 55);
-    ctx.restore();
+    // Version number removed from canvas (moved to HUD)
 
     // Now playing marquee at bottom of canvas
     const np = nowPlayingRef.current;
@@ -2442,15 +2443,43 @@ const Game = () => {
     }
 
     // Oneliner marquee near top of canvas
-    const ol = onelinerRef.current;
-    if (ol) {
+    const olEntries = onelinerRef.current;
+    if (olEntries && olEntries.length > 0) {
       ctx.save();
       ctx.font = "11px 'Press Start 2P', monospace";
-      const olText = `[${ol.author}] ${ol.message}   `;
-      const olTextWidth = ctx.measureText(olText).width;
+      const separator = "          |          ";
+      const olText = olEntries.map((e) => `${e.flag ? e.flag + " " : ""}[${e.author}] ${e.message}`).join(separator) + "   ";
+
+      // Measure total width including GIF replacements
+      const gifTokens = [":necta:", ":nectawall:", "d^^b", ":D"];
+      const gifHeight = 14;
+
+      // Calculate total width
+      let totalWidth = 0;
+      let remaining = olText;
+      while (remaining.length > 0) {
+        let earliestIdx = remaining.length;
+        let earliestToken = "";
+        for (const token of gifTokens) {
+          const idx = remaining.indexOf(token);
+          if (idx !== -1 && idx < earliestIdx) {
+            earliestIdx = idx;
+            earliestToken = token;
+          }
+        }
+        if (earliestToken) {
+          totalWidth += ctx.measureText(remaining.substring(0, earliestIdx)).width;
+          totalWidth += gifHeight; // GIF width = height (square)
+          remaining = remaining.substring(earliestIdx + earliestToken.length);
+        } else {
+          totalWidth += ctx.measureText(remaining).width;
+          remaining = "";
+        }
+      }
+
       // Advance marquee position
       onelinerMarqueeXRef.current -= MARQUEE_SPEED;
-      if (onelinerMarqueeXRef.current < -olTextWidth) {
+      if (onelinerMarqueeXRef.current < -totalWidth) {
         onelinerMarqueeXRef.current = CANVAS_WIDTH;
       }
       // Clip to top strip
@@ -2470,13 +2499,42 @@ const Game = () => {
       for (let i = 0; i < 11; i++) {
         ctx.fillRect(0, 18 + i * 2, CANVAS_WIDTH, 1);
       }
-      // Glow text effect
+      // Draw text with inline GIFs
       ctx.globalAlpha = 0.85;
       ctx.shadowColor = "#FFAA00";
       ctx.shadowBlur = 10;
       ctx.fillStyle = "#FFE066";
       ctx.textAlign = "left";
-      ctx.fillText(olText, onelinerMarqueeXRef.current, 35);
+
+      let drawX = onelinerMarqueeXRef.current;
+      remaining = olText;
+      while (remaining.length > 0) {
+        let earliestIdx = remaining.length;
+        let earliestToken = "";
+        for (const token of gifTokens) {
+          const idx = remaining.indexOf(token);
+          if (idx !== -1 && idx < earliestIdx) {
+            earliestIdx = idx;
+            earliestToken = token;
+          }
+        }
+        if (earliestToken) {
+          const beforeText = remaining.substring(0, earliestIdx);
+          if (beforeText) {
+            ctx.fillText(beforeText, drawX, 35);
+            drawX += ctx.measureText(beforeText).width;
+          }
+          const gifImg = onelinerGifsRef.current[earliestToken];
+          if (gifImg && gifImg.complete) {
+            ctx.drawImage(gifImg, drawX, 22, gifHeight, gifHeight);
+          }
+          drawX += gifHeight;
+          remaining = remaining.substring(earliestIdx + earliestToken.length);
+        } else {
+          ctx.fillText(remaining, drawX, 35);
+          remaining = "";
+        }
+      }
       ctx.restore();
     }
 
@@ -2655,8 +2713,34 @@ const Game = () => {
     return () => clearInterval(interval);
   }, []);
 
+  // Preload oneliner GIFs
+  useEffect(() => {
+    const gifMap: Record<string, string> = {
+      ":necta:": "/images/necta.gif",
+      ":nectawall:": "/images/nectawall.gif",
+      "d^^b": "/images/headphones.gif",
+      ":D": "/images/D.gif",
+    };
+    const imgs: Record<string, HTMLImageElement> = {};
+    for (const [key, src] of Object.entries(gifMap)) {
+      const img = new Image();
+      img.src = src;
+      imgs[key] = img;
+    }
+    onelinerGifsRef.current = imgs;
+  }, []);
+
   // Poll Nectarine oneliner chat via edge function
   useEffect(() => {
+    const countryCodeToFlag = (code: string): string => {
+      if (!code || code.length !== 2) return "";
+      return code
+        .toUpperCase()
+        .split("")
+        .map((c) => String.fromCodePoint(0x1f1e6 + c.charCodeAt(0) - 65))
+        .join("");
+    };
+
     const fetchOneliner = async () => {
       try {
         const { data, error } = await supabase.functions.invoke("scenestream-proxy", {
@@ -2667,14 +2751,22 @@ const Game = () => {
         const text = typeof data === "string" ? data : JSON.stringify(data);
         const parser = new DOMParser();
         const xml = parser.parseFromString(text, "text/xml");
-        const firstEntry = xml.querySelector("entry");
-        if (firstEntry) {
-          const time = firstEntry.getAttribute("time") || "";
-          if (time !== lastOnelinerTimeRef.current) {
-            lastOnelinerTimeRef.current = time;
-            const author = firstEntry.querySelector("author")?.textContent || "???";
-            const message = firstEntry.querySelector("message")?.textContent || "";
-            onelinerRef.current = { author, message };
+        const entries = xml.querySelectorAll("entry");
+        if (entries.length > 0) {
+          const firstTime = entries[0].getAttribute("time") || "";
+          if (firstTime !== lastOnelinerTimeRef.current) {
+            lastOnelinerTimeRef.current = firstTime;
+            const items: { author: string; message: string; flag: string }[] = [];
+            const count = Math.min(entries.length, 5);
+            for (let i = 0; i < count; i++) {
+              const entry = entries[i];
+              const authorEl = entry.querySelector("author");
+              const author = authorEl?.textContent || "???";
+              const flag = authorEl?.getAttribute("flag") || "";
+              const message = entry.querySelector("message")?.textContent || "";
+              items.push({ author, message, flag: countryCodeToFlag(flag) });
+            }
+            onelinerRef.current = items;
             onelinerMarqueeXRef.current = CANVAS_WIDTH;
           }
         }
@@ -3177,16 +3269,14 @@ const Game = () => {
         </div>
 
         <div className="mt-8 flex flex-col gap-2 max-w-md">
-          <div className="text-[hsl(var(--game-foreground))] font-mono text-sm text-center">
+          <a
+            href="https://scenestream.net/demovibes/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-[hsl(var(--game-foreground))] font-mono text-sm text-center hover:opacity-80 transition-opacity"
+          >
             🎵 NECTARINE DEMOSCENE RADIO
-          </div>
-          {nowPlaying && (
-            <div className="text-[hsl(var(--game-foreground))] font-mono text-xs text-center animate-pulse">
-              <span className="opacity-90">{nowPlaying.artist}</span>
-              <span className="opacity-50"> — </span>
-              <span className="opacity-80">{nowPlaying.title}</span>
-            </div>
-          )}
+          </a>
           <audio
             ref={audioRef}
             controls
@@ -3222,21 +3312,6 @@ const Game = () => {
               TRAINER (NO SCORES)
             </label>
           )}
-          <div className="text-[hsl(var(--game-foreground))] font-mono text-xs text-center opacity-60 mt-1">
-            Thanks to{" "}
-            <a
-              href="https://scenestream.net/demovibes/"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="underline hover:opacity-80"
-            >
-              Nectarine Demoscene Radio
-            </a>{" "}
-            for the music!
-          </div>
-          <div className="text-[hsl(var(--game-foreground))] font-mono text-[10px] text-center opacity-40 mt-0.5">
-            Streaming demoscene & chiptune tracks 24/7
-          </div>
         </div>
       </div>
     );
@@ -3247,12 +3322,39 @@ const Game = () => {
       {/* HUD */}
       {gameMode === "solo" && (
         <div
-          className="mb-4 flex gap-8 text-[hsl(var(--game-foreground))] text-xs tracking-wide"
+          className="mb-4 flex gap-8 items-center text-[hsl(var(--game-foreground))] text-xs tracking-wide"
           style={{ fontFamily: "'Press Start 2P', monospace", textShadow: "0 0 10px hsl(var(--game-foreground))" }}
         >
           <div>SCORE: {displayScore.toString().padStart(8, "0")}</div>
           <div>LIVES: {displayLives}</div>
-          <div>WAVE: {displayWave}</div>
+          <div className="flex items-center gap-2">
+            <span>WAVE: {displayWave}</span>
+            <span className="text-[#888888] text-[7px]" style={{ textShadow: "none" }}>v{GAME_VERSION}</span>
+          </div>
+          {/* Hyperspace charge indicator */}
+          <div className="relative w-8 h-8 flex items-center justify-center">
+            <svg className="absolute inset-0 w-8 h-8 -rotate-90" viewBox="0 0 36 36">
+              <circle cx="18" cy="18" r="15" fill="none" stroke="hsl(var(--game-foreground))" strokeWidth="2" opacity="0.2" />
+              <circle
+                cx="18" cy="18" r="15"
+                fill="none"
+                stroke={hyperChargePercent >= 100 ? "#CC66FF" : "#666666"}
+                strokeWidth="2.5"
+                strokeDasharray={`${(hyperChargePercent / 100) * 94.25} 94.25`}
+                strokeLinecap="round"
+                style={{ transition: "stroke-dasharray 0.1s linear" }}
+              />
+            </svg>
+            <img
+              src={hyperspaceIcon}
+              alt="Hyperspace"
+              className={`w-5 h-5 relative z-10 ${hyperChargePercent >= 100 ? "animate-pulse" : ""}`}
+              style={{
+                filter: hyperChargePercent >= 100 ? "none" : "grayscale(1) opacity(0.4)",
+                transition: "filter 0.3s ease",
+              }}
+            />
+          </div>
           {DEBUG_ENABLED && trainerMode && <div className="text-[#FF4444] animate-pulse">TRAINER</div>}
         </div>
       )}
@@ -3614,72 +3716,32 @@ const Game = () => {
       )}
 
       {!isTouchDevice && (
-        <div className="mt-4 text-[hsl(var(--game-foreground))] font-mono text-[8px] opacity-60 flex items-end justify-between">
-          <div className="flex-1">
-            {gameMode === "solo" && (
-              <div className="flex gap-10 justify-center">
-                <div className="text-left space-y-0.5">
-                  <div className="font-bold opacity-70 mb-1">KEYBOARD</div>
-                  <div>← → ROTATE</div>
-                  <div>↑ THRUST</div>
-                  <div>SPACE FIRE</div>
-                  <div>CTRL HYPERSPACE</div>
-                  <div>ESC PAUSE</div>
-                </div>
-                <div className="text-left space-y-0.5">
-                  <div className="font-bold opacity-70 mb-1">GAMEPAD</div>
-                  <div>STICK/DPAD MOVE</div>
-                  <div>X/↑ THRUST</div>
-                  <div>A FIRE</div>
-                  <div>B HYPER</div>
-                  <div>START PAUSE</div>
-                </div>
-              </div>
-            )}
-            {gameMode === "duel" && (
-              <div className="flex gap-10 justify-center">
-                <div className="text-left space-y-0.5">
-                  <div className="font-bold opacity-70 mb-1">KEYBOARD</div>
-                  <div style={{ color: P1_COLOR }}>P1: ← → ROTATE</div>
-                  <div style={{ color: P1_COLOR }}>P1: ↑ THRUST</div>
-                  <div style={{ color: P1_COLOR }}>P1: SPACE FIRE</div>
-                  <div style={{ color: P2_COLOR }}>P2: A D ROTATE</div>
-                  <div style={{ color: P2_COLOR }}>P2: W THRUST</div>
-                  <div style={{ color: P2_COLOR }}>P2: E FIRE</div>
-                  <div>ESC PAUSE</div>
-                </div>
-                <div className="text-left space-y-0.5">
-                  <div className="font-bold opacity-70 mb-1">GAMEPAD</div>
-                  <div style={{ color: P1_COLOR }}>P1: GP1</div>
-                  <div style={{ color: P2_COLOR }}>P2: GP2</div>
-                  <div>A FIRE</div>
-                  <div>B HYPER</div>
-                  <div>X/↑ THRUST</div>
-                  <div>START PAUSE</div>
-                </div>
-              </div>
-            )}
-          </div>
-          <div
-            className="text-xs tracking-widest shrink-0 ml-4"
-            style={{ textShadow: "0 0 8px hsl(var(--game-foreground))" }}
-          >
-            v{GAME_VERSION}
-          </div>
+        <div className="mt-2 text-[hsl(var(--game-foreground))] font-mono text-[7px] opacity-50 max-w-[800px] w-full">
+          {gameMode === "solo" && (
+            <div className="flex justify-center gap-6 flex-wrap">
+              <span>⌨ ← → ROTATE | ↑ THRUST | SPACE FIRE | CTRL HYPER | ESC PAUSE</span>
+              <span>🎮 STICK MOVE | A FIRE | B HYPER | X THRUST | START PAUSE</span>
+            </div>
+          )}
+          {gameMode === "duel" && (
+            <div className="flex justify-center gap-6 flex-wrap">
+              <span style={{ color: P1_COLOR }}>P1: ←→↑ SPACE</span>
+              <span style={{ color: P2_COLOR }}>P2: WASD E</span>
+              <span>🎮 GP1/GP2 | A FIRE | B HYPER | ESC PAUSE</span>
+            </div>
+          )}
         </div>
       )}
 
-      <div className="mt-6 flex flex-col gap-2 max-w-md">
-        <div className="text-[hsl(var(--game-foreground))] font-mono text-sm text-center">
+      <div className="mt-4 flex flex-col gap-2 max-w-md">
+        <a
+          href="https://scenestream.net/demovibes/"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-[hsl(var(--game-foreground))] font-mono text-sm text-center hover:opacity-80 transition-opacity"
+        >
           🎵 NECTARINE DEMOSCENE RADIO
-        </div>
-        {nowPlaying && (
-          <div className="text-[hsl(var(--game-foreground))] font-mono text-xs text-center animate-pulse">
-            <span className="opacity-90">{nowPlaying.artist}</span>
-            <span className="opacity-50"> — </span>
-            <span className="opacity-80">{nowPlaying.title}</span>
-          </div>
-        )}
+        </a>
         <audio
           ref={audioRef}
           controls
@@ -3715,21 +3777,6 @@ const Game = () => {
             TRAINER (NO SCORES)
           </label>
         )}
-        <div className="text-[hsl(var(--game-foreground))] font-mono text-xs text-center opacity-60 mt-1">
-          Thanks to{" "}
-          <a
-            href="https://scenestream.net/demovibes/"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="underline hover:opacity-80"
-          >
-            Nectarine Demoscene Radio
-          </a>{" "}
-          for the music!
-        </div>
-        <div className="text-[hsl(var(--game-foreground))] font-mono text-[10px] text-center opacity-40 mt-0.5">
-          Streaming demoscene & chiptune tracks 24/7
-        </div>
       </div>
 
       <button
