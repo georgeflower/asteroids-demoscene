@@ -1457,6 +1457,16 @@ const Game = () => {
       state.ship.hyperspaceCooldown--;
     }
 
+    // Update hyperspace charge display
+    const chargePercent = Math.round(((600 - state.ship.hyperspaceCooldown) / 600) * 100);
+    setHyperChargePercent(chargePercent);
+    if (chargePercent >= 100 && !hyperChargeReadyRef.current) {
+      hyperChargeReadyRef.current = true;
+      soundEffects.powerUp();
+    } else if (chargePercent < 100) {
+      hyperChargeReadyRef.current = false;
+    }
+
     // Update asteroids with edge-homing
     state.asteroids.forEach((asteroid) => {
       asteroid.pos.x += asteroid.vel.x;
