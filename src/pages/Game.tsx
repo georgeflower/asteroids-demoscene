@@ -2401,14 +2401,7 @@ const Game = () => {
       ctx.restore();
     }
 
-    // Version number in top-right corner
-    ctx.save();
-    ctx.globalAlpha = 0.35;
-    ctx.font = "7px monospace";
-    ctx.fillStyle = "#AAAAAA";
-    ctx.textAlign = "right";
-    ctx.fillText(`v${GAME_VERSION}`, CANVAS_WIDTH - 10, 55);
-    ctx.restore();
+    // Version number removed from canvas (moved to HUD)
 
     // Now playing marquee at bottom of canvas
     const np = nowPlayingRef.current;
