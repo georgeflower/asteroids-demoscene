@@ -334,7 +334,7 @@ const Game = () => {
       }
       const { error } = await supabase.from("high_scores").insert({ initials: playerInitials.toUpperCase(), score });
       if (error) {
-        toast.error("Failed to save score online");
+        console.error("Failed to save score online");
         return;
       }
       const board = await loadLeaderboard();
