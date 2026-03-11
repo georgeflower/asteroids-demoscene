@@ -1834,7 +1834,7 @@ const Game = () => {
             state.bossDefeated = true;
             state.pendingNextWave = true;
             addDebugLog("boss", `Boss defeated! Score: +${pts}`);
-            toast.success("BOSS DEFEATED!");
+            // Boss defeated
 
             // Advance is deferred to next update tick to avoid same-frame state churn
           }
