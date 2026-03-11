@@ -867,7 +867,7 @@ const Game = () => {
       );
     }
 
-    toast.success(`Wave ${state.wave}!`);
+    // Wave started
   }, [addDebugLog]);
 
   const wrapPosition = (pos: Vector): Vector => {
