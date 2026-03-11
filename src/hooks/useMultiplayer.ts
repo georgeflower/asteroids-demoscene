@@ -38,12 +38,12 @@ export function useMultiplayer() {
 
     channel
       .on("presence", { event: "join" }, ({ newPresences }) => {
-        if (newPresences.some((p: PresenceInfo) => p.role === "guest")) {
+        if (newPresences.some((p: any) => p.role === "guest")) {
           setOpponentConnected(true);
         }
       })
       .on("presence", { event: "leave" }, ({ leftPresences }) => {
-        if (leftPresences.some((p: PresenceInfo) => p.role === "guest")) {
+        if (leftPresences.some((p: any) => p.role === "guest")) {
           setOpponentConnected(false);
         }
       })
@@ -71,12 +71,12 @@ export function useMultiplayer() {
 
     channel
       .on("presence", { event: "join" }, ({ newPresences }) => {
-        if (newPresences.some((p: PresenceInfo) => p.role === "host")) {
+        if (newPresences.some((p: any) => p.role === "host")) {
           setOpponentConnected(true);
         }
       })
       .on("presence", { event: "leave" }, ({ leftPresences }) => {
-        if (leftPresences.some((p: PresenceInfo) => p.role === "host")) {
+        if (leftPresences.some((p: any) => p.role === "host")) {
           setOpponentConnected(false);
         }
       })

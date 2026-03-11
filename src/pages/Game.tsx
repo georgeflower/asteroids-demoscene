@@ -203,12 +203,13 @@ type GameMode = "menu" | "solo" | "duel" | "online_lobby" | "online";
 
 const CANVAS_WIDTH = 800;
 const CANVAS_HEIGHT = 600;
-const GAME_VERSION = "0.1.1";
+
 const FIXED_TIMESTEP = 1000 / 60; // 16.666ms – game logic always runs at 60 Hz
 const FRAME_MIN_TIME = FIXED_TIMESTEP; // 60 FPS render cap (tied to fixed timestep)
 // Allow up to 1 ms of timing jitter when checking the FPS cap to avoid
 // accidentally skipping a frame due to sub-millisecond precision drift.
 const FRAME_TIME_TOLERANCE = 1;
+const GAME_VERSION = "0.1.3";
 const SHIP_SIZE = 10;
 const BULLET_SPEED = 7;
 const BULLET_LIFETIME = 60;
@@ -1041,9 +1042,9 @@ const Game = () => {
 
   const hyperspace = useCallback(() => {
     if (!gameStateRef.current || gameStateRef.current.gameOver) return;
-    
+
     const state = gameStateRef.current;
-    
+
     // Check cooldown
     if (state.ship.hyperspaceCooldown > 0) {
       const secondsLeft = Math.ceil(state.ship.hyperspaceCooldown / 60);
@@ -1055,15 +1056,15 @@ const Game = () => {
     let safePos: Vector | null = null;
     let attempts = 0;
     const maxAttempts = 100;
-    
+
     while (!safePos && attempts < maxAttempts) {
       const testPos = {
         x: Math.random() * CANVAS_WIDTH,
         y: Math.random() * CANVAS_HEIGHT,
       };
-      
+
       let isSafe = true;
-      
+
       // Check distance from asteroids
       for (const asteroid of state.asteroids) {
         const radius = asteroid.size === "large" ? 40 : asteroid.size === "medium" ? 25 : 12;
@@ -1074,7 +1075,7 @@ const Game = () => {
           break;
         }
       }
-      
+
       // Check distance from UFOs
       if (isSafe) {
         for (const ufo of state.ufos) {
@@ -1087,7 +1088,7 @@ const Game = () => {
           }
         }
       }
-      
+
       // Check distance from aliens
       if (isSafe) {
         for (const alien of state.aliens) {
@@ -1099,7 +1100,7 @@ const Game = () => {
           }
         }
       }
-      
+
       // Check distance from boss
       if (isSafe && state.boss && state.boss.entered) {
         const minSafeDist = 65 + SHIP_SIZE + 80;
@@ -1108,7 +1109,7 @@ const Game = () => {
           isSafe = false;
         }
       }
-      
+
       // Check distance from enemy bullets
       if (isSafe) {
         for (const bullet of state.bullets) {
@@ -1122,24 +1123,24 @@ const Game = () => {
           }
         }
       }
-      
+
       if (isSafe) {
         safePos = testPos;
       }
       attempts++;
     }
-    
+
     // If no safe position found after max attempts, use best effort (center of screen)
     if (!safePos) {
       safePos = { x: CANVAS_WIDTH / 2, y: CANVAS_HEIGHT / 2 };
     }
-    
+
     state.ship.pos = safePos;
     state.ship.vel = { x: 0, y: 0 };
     state.ship.hyperspaceCooldown = 600; // 10 seconds at 60fps
     state.ship.invulnerable = true;
     state.ship.invulnerableTime = 120; // 2 seconds of invulnerability after hyperspace
-    
+
     toast.success("Hyperspace jump!");
   }, []);
 
@@ -1173,7 +1174,7 @@ const Game = () => {
       ship.invulnerableTime--;
       if (ship.invulnerableTime === 0) ship.invulnerable = false;
     }
-    
+
     if (ship.hyperspaceCooldown > 0) {
       ship.hyperspaceCooldown--;
     }
@@ -1499,7 +1500,7 @@ const Game = () => {
         state.ship.invulnerable = false;
       }
     }
-    
+
     if (state.ship.hyperspaceCooldown > 0) {
       state.ship.hyperspaceCooldown--;
     }
@@ -1654,7 +1655,8 @@ const Game = () => {
         boss.shootTimer--;
         if (boss.shootTimer <= 0) {
           boss.shootTimer = Math.max(40, 90 - state.wave * 3);
-          if (state.boss) {  // Re-verify boss still exists
+          if (state.boss) {
+            // Re-verify boss still exists
             const baseAngle = Math.atan2(state.ship.pos.y - boss.pos.y, state.ship.pos.x - boss.pos.x);
             for (let i = -1; i <= 1; i++) {
               state.bullets.push({
@@ -1850,7 +1852,7 @@ const Game = () => {
     // Collision: Bullets vs Boss
     if (state.boss && state.boss.entered) {
       state.bullets = state.bullets.filter((bullet) => {
-        if (!state.boss) return true;  // Boss defeated mid-filter, keep remaining bullets
+        if (!state.boss) return true; // Boss defeated mid-filter, keep remaining bullets
         if (bullet.isUFO || bullet.isAlien) return true;
         if (checkCollision(bullet.pos, 2, state.boss!.pos, 60)) {
           state.boss!.hp--;
@@ -3181,7 +3183,10 @@ const Game = () => {
                   key={i}
                   className="flex justify-between font-mono text-sm py-0.5 text-[hsl(var(--game-foreground))]"
                 >
-                  <span className={i === 0 ? "text-[#FFD700]" : i === 1 ? "text-[#C0C0C0]" : "text-[#CD7F32]"} style={{ whiteSpace: "pre" }}>
+                  <span
+                    className={i === 0 ? "text-[#FFD700]" : i === 1 ? "text-[#C0C0C0]" : "text-[#CD7F32]"}
+                    style={{ whiteSpace: "pre" }}
+                  >
                     {(i + 1).toString().padStart(2, " ")}. {entry.initials.padEnd(3, " ")}
                   </span>
                   <span className={i === 0 ? "text-[#FFD700]" : i === 1 ? "text-[#C0C0C0]" : "text-[#CD7F32]"}>
