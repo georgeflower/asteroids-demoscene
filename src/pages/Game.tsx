@@ -3100,8 +3100,8 @@ const Game = () => {
                   key={i}
                   className="flex justify-between font-mono text-sm py-0.5 text-[hsl(var(--game-foreground))]"
                 >
-                  <span className={i === 0 ? "text-[#FFD700]" : i === 1 ? "text-[#C0C0C0]" : "text-[#CD7F32]"}>
-                    {i + 1}. {entry.initials.padEnd(3, " ")}
+                  <span className={i === 0 ? "text-[#FFD700]" : i === 1 ? "text-[#C0C0C0]" : "text-[#CD7F32]"} style={{ whiteSpace: "pre" }}>
+                    {(i + 1).toString().padStart(2, " ")}. {entry.initials.padEnd(3, " ")}
                   </span>
                   <span className={i === 0 ? "text-[#FFD700]" : i === 1 ? "text-[#C0C0C0]" : "text-[#CD7F32]"}>
                     {entry.score.toString().padStart(8, "0")}
@@ -3139,7 +3139,7 @@ const Game = () => {
                   key={i}
                   className="flex justify-between font-mono text-sm py-0.5 text-[hsl(var(--game-foreground))]"
                 >
-                  <span>
+                  <span style={{ whiteSpace: "pre" }}>
                     {(i + 1).toString().padStart(2, " ")}. {entry.initials.padEnd(3, " ")}
                   </span>
                   <span>{entry.score.toString().padStart(8, "0")}</span>
@@ -3355,7 +3355,7 @@ const Game = () => {
                           : "text-[hsl(var(--game-foreground))]"
                       }`}
                     >
-                      <span>
+                      <span style={{ whiteSpace: "pre" }}>
                         {(i + 1).toString().padStart(2, " ")}. {entry.initials.padEnd(3, " ")}
                       </span>
                       <span>{entry.score.toString().padStart(8, "0")}</span>
