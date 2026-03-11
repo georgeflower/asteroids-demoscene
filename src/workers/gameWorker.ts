@@ -33,6 +33,7 @@ interface GameEvent {
 
 const W = 800, H = 600, SHIP_SIZE = 10, BULLET_SPEED = 7, BULLET_LIFETIME = 60;
 const ASTEROID_SPEEDS: Record<string, number> = { large: 0.5, medium: 0.8, small: 1.2 };
+const WORKER_FIXED_TIMESTEP = 1000 / 60; // 16.666ms – always update at 60 Hz
 
 let asteroidIdCounter = 0;
 let ship1: Ship, ship2: Ship;
@@ -42,7 +43,9 @@ let kills: [number, number] = [0, 0], deaths: [number, number] = [0, 0];
 let respawnTimer: [number, number] = [0, 0];
 let alienSpawnTimer = 800, asteroidSpawnTimer = 600;
 let tick = 0, lastShotTime = [0, 0];
-let intervalId: ReturnType<typeof setInterval> | null = null;
+let timeoutId: ReturnType<typeof setTimeout> | null = null;
+let workerLastTime = 0;
+let workerAccumulator = 0;
 let p1Input: InputState = { left: false, right: false, up: false, fire: false };
 let p2Input: InputState = { left: false, right: false, up: false, fire: false };
 
@@ -350,13 +353,30 @@ onmessage = (e: MessageEvent) => {
   const msg = e.data;
   if (msg.type === "init") {
     initGame();
-    if (intervalId) clearInterval(intervalId);
-    intervalId = setInterval(updateTick, 16);
+    if (timeoutId !== null) clearTimeout(timeoutId);
+    workerLastTime = performance.now();
+    workerAccumulator = 0;
+    workerLoop();
   } else if (msg.type === "inputs") {
     p1Input = msg.p1;
     p2Input = msg.p2;
   } else if (msg.type === "stop") {
-    if (intervalId) clearInterval(intervalId);
-    intervalId = null;
+    if (timeoutId !== null) { clearTimeout(timeoutId); timeoutId = null; }
   }
 };
+
+function workerLoop() {
+  const now = performance.now();
+  const delta = Math.min(now - workerLastTime, 250);
+  workerLastTime = now;
+  workerAccumulator += delta;
+
+  while (workerAccumulator >= WORKER_FIXED_TIMESTEP) {
+    updateTick();
+    workerAccumulator -= WORKER_FIXED_TIMESTEP;
+  }
+
+  // Schedule next run at the right time to maintain 60 Hz
+  const nextDelay = Math.max(0, WORKER_FIXED_TIMESTEP - workerAccumulator);
+  timeoutId = setTimeout(workerLoop, nextDelay);
+}
