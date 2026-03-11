@@ -612,7 +612,7 @@ const Game = () => {
     showLifeLostRef.current = false;
     setGameMode("solo");
     checkVersion();
-    toast.success("Game Started! Use Arrow Keys to move, Space to shoot");
+    // Game started
     // Focus canvas for input capture
     setTimeout(() => {
       canvasRef.current?.focus();
