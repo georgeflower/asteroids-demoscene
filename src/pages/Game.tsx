@@ -830,7 +830,7 @@ const Game = () => {
       const theme = getTheme(state.wave);
       spawnFloatingText({ x: CANVAS_WIDTH / 2, y: CANVAS_HEIGHT / 2 - 40 }, `WAVE ${state.wave}`, theme.ship, 28);
       spawnFloatingText({ x: CANVAS_WIDTH / 2, y: CANVAS_HEIGHT / 2 + 10 }, "⚠ BOSS INCOMING ⚠", "#FF4444", 22);
-      toast.success(`Wave ${state.wave} — BOSS FIGHT!`);
+      // Boss wave started
       return;
     }
 
