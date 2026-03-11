@@ -329,7 +329,7 @@ const Game = () => {
     async (playerInitials: string, score: number) => {
       // Trainer mode: don't save scores
       if (DEBUG_ENABLED && trainerModeRef.current) {
-        toast.info("Trainer mode: score not saved");
+        console.log("Trainer mode: score not saved");
         return;
       }
       const { error } = await supabase.from("high_scores").insert({ initials: playerInitials.toUpperCase(), score });
