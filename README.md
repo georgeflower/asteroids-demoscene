@@ -8,4 +8,6 @@ ONLINE: Create or join a room to duel remotely
 Thanks to Nectarine Demoscene Radio for the music!
 Streaming demoscene & chiptune tracks 24/7
 
+open source GPL: see LICENSE in repo for full details
+
 Play here: https://asteroids-demoscene.lovable.app/
