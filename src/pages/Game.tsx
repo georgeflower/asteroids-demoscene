@@ -1001,8 +1001,6 @@ const Game = () => {
 
     // Check cooldown
     if (state.ship.hyperspaceCooldown > 0) {
-      const secondsLeft = Math.ceil(state.ship.hyperspaceCooldown / 60);
-      toast.error(`Hyperspace charging: ${secondsLeft}s`);
       return;
     }
 
