@@ -2450,15 +2450,43 @@ const Game = () => {
     }
 
     // Oneliner marquee near top of canvas
-    const ol = onelinerRef.current;
-    if (ol) {
+    const olEntries = onelinerRef.current;
+    if (olEntries && olEntries.length > 0) {
       ctx.save();
       ctx.font = "11px 'Press Start 2P', monospace";
-      const olText = `[${ol.author}] ${ol.message}   `;
-      const olTextWidth = ctx.measureText(olText).width;
+      const separator = "          |          ";
+      const olText = olEntries.map((e) => `${e.flag ? e.flag + " " : ""}[${e.author}] ${e.message}`).join(separator) + "   ";
+
+      // Measure total width including GIF replacements
+      const gifTokens = [":necta:", ":nectawall:", "d^^b", ":D"];
+      const gifHeight = 14;
+
+      // Calculate total width
+      let totalWidth = 0;
+      let remaining = olText;
+      while (remaining.length > 0) {
+        let earliestIdx = remaining.length;
+        let earliestToken = "";
+        for (const token of gifTokens) {
+          const idx = remaining.indexOf(token);
+          if (idx !== -1 && idx < earliestIdx) {
+            earliestIdx = idx;
+            earliestToken = token;
+          }
+        }
+        if (earliestToken) {
+          totalWidth += ctx.measureText(remaining.substring(0, earliestIdx)).width;
+          totalWidth += gifHeight; // GIF width = height (square)
+          remaining = remaining.substring(earliestIdx + earliestToken.length);
+        } else {
+          totalWidth += ctx.measureText(remaining).width;
+          remaining = "";
+        }
+      }
+
       // Advance marquee position
       onelinerMarqueeXRef.current -= MARQUEE_SPEED;
-      if (onelinerMarqueeXRef.current < -olTextWidth) {
+      if (onelinerMarqueeXRef.current < -totalWidth) {
         onelinerMarqueeXRef.current = CANVAS_WIDTH;
       }
       // Clip to top strip
@@ -2478,13 +2506,42 @@ const Game = () => {
       for (let i = 0; i < 11; i++) {
         ctx.fillRect(0, 18 + i * 2, CANVAS_WIDTH, 1);
       }
-      // Glow text effect
+      // Draw text with inline GIFs
       ctx.globalAlpha = 0.85;
       ctx.shadowColor = "#FFAA00";
       ctx.shadowBlur = 10;
       ctx.fillStyle = "#FFE066";
       ctx.textAlign = "left";
-      ctx.fillText(olText, onelinerMarqueeXRef.current, 35);
+
+      let drawX = onelinerMarqueeXRef.current;
+      remaining = olText;
+      while (remaining.length > 0) {
+        let earliestIdx = remaining.length;
+        let earliestToken = "";
+        for (const token of gifTokens) {
+          const idx = remaining.indexOf(token);
+          if (idx !== -1 && idx < earliestIdx) {
+            earliestIdx = idx;
+            earliestToken = token;
+          }
+        }
+        if (earliestToken) {
+          const beforeText = remaining.substring(0, earliestIdx);
+          if (beforeText) {
+            ctx.fillText(beforeText, drawX, 35);
+            drawX += ctx.measureText(beforeText).width;
+          }
+          const gifImg = onelinerGifsRef.current[earliestToken];
+          if (gifImg && gifImg.complete) {
+            ctx.drawImage(gifImg, drawX, 22, gifHeight, gifHeight);
+          }
+          drawX += gifHeight;
+          remaining = remaining.substring(earliestIdx + earliestToken.length);
+        } else {
+          ctx.fillText(remaining, drawX, 35);
+          remaining = "";
+        }
+      }
       ctx.restore();
     }
 
