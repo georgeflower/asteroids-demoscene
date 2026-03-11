@@ -46,6 +46,8 @@ let tick = 0, lastShotTime = [0, 0];
 let timeoutId: ReturnType<typeof setTimeout> | null = null;
 let workerLastTime = 0;
 let workerAccumulator = 0;
+// Events from all steps in a workerLoop call are accumulated here and sent once.
+let pendingEvents: GameEvent[] = [];
 let p1Input: InputState = { left: false, right: false, up: false, fire: false };
 let p2Input: InputState = { left: false, right: false, up: false, fire: false };
 
@@ -327,7 +329,11 @@ function updateTick() {
     }
   }
 
-  // Build & send output state
+  // Accumulate events for this tick; state will be sent once after all steps complete.
+  pendingEvents.push(...events);
+}
+
+function buildAndSendState() {
   const state = {
     ship1: { x: ship1.pos.x, y: ship1.pos.y, vx: ship1.vel.x, vy: ship1.vel.y, rot: ship1.rotation, thrust: ship1.isThrusting, invuln: ship1.invulnerable, invulnTime: ship1.invulnerableTime },
     ship2: { x: ship2.pos.x, y: ship2.pos.y, vx: ship2.vel.x, vy: ship2.vel.y, rot: ship2.rotation, thrust: ship2.isThrusting, invuln: ship2.invulnerable, invulnTime: ship2.invulnerableTime },
@@ -342,10 +348,10 @@ function updateTick() {
     kills: [...kills] as [number, number],
     deaths: [...deaths] as [number, number],
     respawnTimer: [...respawnTimer] as [number, number],
-    events,
+    events: pendingEvents,
     tick,
   };
-
+  pendingEvents = [];
   postMessage({ type: "state", data: state });
 }
 
@@ -356,12 +362,14 @@ onmessage = (e: MessageEvent) => {
     if (timeoutId !== null) clearTimeout(timeoutId);
     workerLastTime = performance.now();
     workerAccumulator = 0;
+    pendingEvents = [];
     workerLoop();
   } else if (msg.type === "inputs") {
     p1Input = msg.p1;
     p2Input = msg.p2;
   } else if (msg.type === "stop") {
     if (timeoutId !== null) { clearTimeout(timeoutId); timeoutId = null; }
+    pendingEvents = [];
   }
 };
 
@@ -375,6 +383,10 @@ function workerLoop() {
     updateTick();
     workerAccumulator -= WORKER_FIXED_TIMESTEP;
   }
+
+  // Send one state message per workerLoop call (even if multiple steps ran),
+  // aggregating all events from those steps to avoid main-thread message bursts.
+  buildAndSendState();
 
   // Schedule next run at the right time to maintain 60 Hz
   const nextDelay = Math.max(0, WORKER_FIXED_TIMESTEP - workerAccumulator);

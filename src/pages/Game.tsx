@@ -205,7 +205,7 @@ const CANVAS_WIDTH = 800;
 const CANVAS_HEIGHT = 600;
 const GAME_VERSION = "0.1.1";
 const FIXED_TIMESTEP = 1000 / 60; // 16.666ms – game logic always runs at 60 Hz
-const FRAME_MIN_TIME = 1000 / 60; // 60 FPS render cap
+const FRAME_MIN_TIME = FIXED_TIMESTEP; // 60 FPS render cap (tied to fixed timestep)
 // Allow up to 1 ms of timing jitter when checking the FPS cap to avoid
 // accidentally skipping a frame due to sub-millisecond precision drift.
 const FRAME_TIME_TOLERANCE = 1;
@@ -227,6 +227,41 @@ const getTheme = (wave: number): ColorTheme => {
 };
 
 const getSpeedScale = (wave: number): number => 1 + wave * 0.05;
+
+// Module-level counters written by gameLoop; read by FpsOverlay via polling.
+// Plain object (no React state) so there is zero overhead in Game itself.
+const _fps = { frames: 0, updates: 0, lastTime: 0 };
+
+interface FpsDisplayData { fps: number; ups: number; frameTime: number; }
+
+function FpsOverlay() {
+  const [data, setData] = useState<FpsDisplayData>({ fps: 0, ups: 0, frameTime: 0 });
+  useEffect(() => {
+    _fps.lastTime = performance.now();
+    const id = setInterval(() => {
+      const now = performance.now();
+      const elapsed = (now - _fps.lastTime) / 1000;
+      if (elapsed > 0) {
+        setData({
+          fps: Math.round(_fps.frames / elapsed),
+          ups: Math.round(_fps.updates / elapsed),
+          frameTime: _fps.frames > 0 ? (elapsed / _fps.frames) * 1000 : 0,
+        });
+      }
+      _fps.frames = 0;
+      _fps.updates = 0;
+      _fps.lastTime = now;
+    }, 500);
+    return () => clearInterval(id);
+  }, []);
+  return (
+    <div className="absolute top-2 right-2 z-50 bg-black/70 text-[#00FF00] font-mono text-xs p-2 rounded pointer-events-none leading-relaxed">
+      <div>FPS: {data.fps}</div>
+      <div>UPS: {data.ups}</div>
+      <div>FRAME: {data.frameTime.toFixed(1)}ms</div>
+    </div>
+  );
+}
 
 const Game = () => {
   const navigate = useNavigate();
@@ -297,12 +332,6 @@ const Game = () => {
   const accumulatorRef = useRef(0);
   const lastTimeRef = useRef(0);
   const lastFrameTimeRef = useRef(0);
-
-  // FPS debug tracking (only used when DEBUG_ENABLED)
-  const fpsCountRef = useRef(0);
-  const upsCountRef = useRef(0);
-  const fpsTimerRef = useRef(0);
-  const [fpsData, setFpsData] = useState({ fps: 0, ups: 0, frameTime: 0 });
 
   // Keep ref in sync
   useEffect(() => {
@@ -2583,7 +2612,8 @@ const Game = () => {
         });
       }
       updateOnlineVisuals();
-      updatesThisFrame = 1;
+      // Physics run in the worker; don't count as local updates
+      updatesThisFrame = 0;
     } else {
       // Solo / Duel: fixed timestep accumulator – game logic always runs at 60 Hz
       accumulatorRef.current += cappedDelta;
@@ -2600,23 +2630,10 @@ const Game = () => {
 
     draw();
 
-    // FPS tracking for debug overlay
+    // FPS tracking for debug overlay – writes to module-level counters (no setState)
     if (DEBUG_ENABLED) {
-      fpsCountRef.current++;
-      upsCountRef.current += updatesThisFrame;
-      if (fpsTimerRef.current === 0) fpsTimerRef.current = currentTime;
-      const elapsed = currentTime - fpsTimerRef.current;
-      if (elapsed >= 500) {
-        const seconds = elapsed / 1000;
-        setFpsData({
-          fps: Math.round(fpsCountRef.current / seconds),
-          ups: Math.round(upsCountRef.current / seconds),
-          frameTime: fpsCountRef.current > 0 ? (seconds / fpsCountRef.current) * 1000 : 0,
-        });
-        fpsCountRef.current = 0;
-        upsCountRef.current = 0;
-        fpsTimerRef.current = currentTime;
-      }
+      _fps.frames++;
+      _fps.updates += updatesThisFrame;
     }
 
     animationFrameRef.current = requestAnimationFrame(gameLoop);
@@ -2956,11 +2973,6 @@ const Game = () => {
     lastTimeRef.current = performance.now();
     lastFrameTimeRef.current = 0;
     accumulatorRef.current = 0;
-    if (DEBUG_ENABLED) {
-      fpsCountRef.current = 0;
-      upsCountRef.current = 0;
-      fpsTimerRef.current = 0;
-    }
     animationFrameRef.current = requestAnimationFrame(gameLoop);
     return () => {
       if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
@@ -3515,13 +3527,7 @@ const Game = () => {
         )}
 
         {/* FPS overlay – debug mode only */}
-        {DEBUG_ENABLED && (
-          <div className="absolute top-2 right-2 z-50 bg-black/70 text-[#00FF00] font-mono text-xs p-2 rounded pointer-events-none leading-relaxed">
-            <div>FPS: {fpsData.fps}</div>
-            <div>UPS: {fpsData.ups}</div>
-            <div>FRAME: {fpsData.frameTime.toFixed(1)}ms</div>
-          </div>
-        )}
+        {DEBUG_ENABLED && <FpsOverlay />}
 
         {/* Debug panel overlay */}
         {DEBUG_ENABLED && showDebugPanel && (
