@@ -2448,7 +2448,8 @@ const Game = () => {
       ctx.save();
       ctx.font = "11px 'Press Start 2P', monospace";
       const separator = "          |          ";
-      const olText = olEntries.map((e) => `${e.flag ? e.flag + " " : ""}[${e.author}] ${e.message}`).join(separator) + "   ";
+      const olText =
+        olEntries.map((e) => `${e.flag ? e.flag + " " : ""}[${e.author}] ${e.message}`).join(separator) + "   ";
 
       // Measure total width including GIF replacements
       const gifTokens = [":necta:", ":nectawall:", "d^^b", ":D"];
@@ -3329,14 +3330,26 @@ const Game = () => {
           <div>LIVES: {displayLives}</div>
           <div className="flex items-center gap-2">
             <span>WAVE: {displayWave}</span>
-            <span className="text-[#888888] text-[7px]" style={{ textShadow: "none" }}>v{GAME_VERSION}</span>
+            <span className="text-[#888888] text-[7px]" style={{ textShadow: "none" }}>
+              v{GAME_VERSION}
+            </span>
           </div>
           {/* Hyperspace charge indicator */}
           <div className="relative w-8 h-8 flex items-center justify-center">
             <svg className="absolute inset-0 w-8 h-8 -rotate-90" viewBox="0 0 36 36">
-              <circle cx="18" cy="18" r="15" fill="none" stroke="hsl(var(--game-foreground))" strokeWidth="2" opacity="0.2" />
               <circle
-                cx="18" cy="18" r="15"
+                cx="18"
+                cy="18"
+                r="15"
+                fill="none"
+                stroke="hsl(var(--game-foreground))"
+                strokeWidth="2"
+                opacity="0.2"
+              />
+              <circle
+                cx="18"
+                cy="18"
+                r="15"
                 fill="none"
                 stroke={hyperChargePercent >= 100 ? "#CC66FF" : "#666666"}
                 strokeWidth="2.5"
@@ -3780,7 +3793,7 @@ const Game = () => {
       </div>
 
       <button
-        onClick={() => navigate("/")}
+        onClick={() => navigate("/game")}
         className="mt-6 px-6 py-2 font-mono text-xs text-[hsl(var(--game-foreground))] opacity-50 hover:opacity-100 transition-opacity uppercase tracking-widest"
       >
         home page
