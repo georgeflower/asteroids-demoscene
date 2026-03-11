@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
-import { toast } from "sonner";
+import hyperspaceIcon from "@/assets/hyperspace.png";
 import { soundEffects } from "@/utils/soundEffects";
 import { haptics } from "@/utils/haptics";
 import { useMultiplayer } from "@/hooks/useMultiplayer";
