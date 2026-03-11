@@ -2663,8 +2663,34 @@ const Game = () => {
     return () => clearInterval(interval);
   }, []);
 
+  // Preload oneliner GIFs
+  useEffect(() => {
+    const gifMap: Record<string, string> = {
+      ":necta:": "/images/necta.gif",
+      ":nectawall:": "/images/nectawall.gif",
+      "d^^b": "/images/headphones.gif",
+      ":D": "/images/D.gif",
+    };
+    const imgs: Record<string, HTMLImageElement> = {};
+    for (const [key, src] of Object.entries(gifMap)) {
+      const img = new Image();
+      img.src = src;
+      imgs[key] = img;
+    }
+    onelinerGifsRef.current = imgs;
+  }, []);
+
   // Poll Nectarine oneliner chat via edge function
   useEffect(() => {
+    const countryCodeToFlag = (code: string): string => {
+      if (!code || code.length !== 2) return "";
+      return code
+        .toUpperCase()
+        .split("")
+        .map((c) => String.fromCodePoint(0x1f1e6 + c.charCodeAt(0) - 65))
+        .join("");
+    };
+
     const fetchOneliner = async () => {
       try {
         const { data, error } = await supabase.functions.invoke("scenestream-proxy", {
@@ -2675,14 +2701,22 @@ const Game = () => {
         const text = typeof data === "string" ? data : JSON.stringify(data);
         const parser = new DOMParser();
         const xml = parser.parseFromString(text, "text/xml");
-        const firstEntry = xml.querySelector("entry");
-        if (firstEntry) {
-          const time = firstEntry.getAttribute("time") || "";
-          if (time !== lastOnelinerTimeRef.current) {
-            lastOnelinerTimeRef.current = time;
-            const author = firstEntry.querySelector("author")?.textContent || "???";
-            const message = firstEntry.querySelector("message")?.textContent || "";
-            onelinerRef.current = { author, message };
+        const entries = xml.querySelectorAll("entry");
+        if (entries.length > 0) {
+          const firstTime = entries[0].getAttribute("time") || "";
+          if (firstTime !== lastOnelinerTimeRef.current) {
+            lastOnelinerTimeRef.current = firstTime;
+            const items: { author: string; message: string; flag: string }[] = [];
+            const count = Math.min(entries.length, 5);
+            for (let i = 0; i < count; i++) {
+              const entry = entries[i];
+              const authorEl = entry.querySelector("author");
+              const author = authorEl?.textContent || "???";
+              const flag = authorEl?.getAttribute("flag") || "";
+              const message = entry.querySelector("message")?.textContent || "";
+              items.push({ author, message, flag: countryCodeToFlag(flag) });
+            }
+            onelinerRef.current = items;
             onelinerMarqueeXRef.current = CANVAS_WIDTH;
           }
         }
