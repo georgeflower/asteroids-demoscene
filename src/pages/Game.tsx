@@ -259,10 +259,9 @@ function FpsOverlay() {
     return () => clearInterval(id);
   }, []);
   return (
-    <div className="absolute top-2 right-2 z-50 bg-black/70 text-[#00FF00] font-mono text-xs p-2 rounded pointer-events-none leading-relaxed">
-      <div>FPS: {data.fps}</div>
-      <div>UPS: {data.ups}</div>
-      <div>FRAME: {data.frameTime.toFixed(1)}ms</div>
+    <div className="absolute bottom-1 left-1 z-50 bg-black/40 text-[#00FF00]/60 font-mono text-[9px] px-1.5 py-0.5 rounded pointer-events-none leading-tight">
+      <span>FPS: {data.fps}</span>
+      <span className="ml-2 opacity-60">{data.frameTime.toFixed(1)}ms</span>
     </div>
   );
 }
