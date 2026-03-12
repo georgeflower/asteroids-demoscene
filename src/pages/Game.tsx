@@ -259,10 +259,9 @@ function FpsOverlay() {
     return () => clearInterval(id);
   }, []);
   return (
-    <div className="absolute top-2 right-2 z-50 bg-black/70 text-[#00FF00] font-mono text-xs p-2 rounded pointer-events-none leading-relaxed">
-      <div>FPS: {data.fps}</div>
-      <div>UPS: {data.ups}</div>
-      <div>FRAME: {data.frameTime.toFixed(1)}ms</div>
+    <div className="absolute bottom-1 left-1 z-50 bg-black/40 text-[#00FF00]/60 font-mono text-[9px] px-1.5 py-0.5 rounded pointer-events-none leading-tight">
+      <span>FPS: {data.fps}</span>
+      <span className="ml-2 opacity-60">{data.frameTime.toFixed(1)}ms</span>
     </div>
   );
 }
@@ -3428,7 +3427,7 @@ const Game = () => {
       {/* HUD */}
       {gameMode === "solo" && (
         <div
-          className="mb-4 flex gap-8 items-center text-[hsl(var(--game-foreground))] text-xs tracking-wide"
+          className="mb-2 sm:mb-4 flex flex-wrap gap-2 sm:gap-8 items-center text-[hsl(var(--game-foreground))] text-[8px] sm:text-xs tracking-wide justify-center"
           style={{ fontFamily: "'Press Start 2P', monospace", textShadow: "0 0 10px hsl(var(--game-foreground))" }}
         >
           <div>SCORE: {displayScore.toString().padStart(8, "0")}</div>
@@ -3477,7 +3476,7 @@ const Game = () => {
         </div>
       )}
       {(gameMode === "duel" || gameMode === "online") && (
-        <div className="mb-4 flex gap-6 text-xs tracking-wide" style={{ fontFamily: "'Press Start 2P', monospace" }}>
+        <div className="mb-2 sm:mb-4 flex flex-wrap gap-2 sm:gap-6 text-[8px] sm:text-xs tracking-wide justify-center" style={{ fontFamily: "'Press Start 2P', monospace" }}>
           <div style={{ color: P1_COLOR, textShadow: `0 0 10px ${P1_COLOR}` }}>
             P1{gameMode === "online" && multiplayer.isHost ? " (YOU)" : ""} K:{duelKills[0]} D:{duelDeaths[0]}
           </div>
@@ -3507,18 +3506,18 @@ const Game = () => {
 
         {showLifeLost && !showGameOver && gameMode === "solo" && (
           <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/70">
-            <div className="text-4xl font-mono text-[hsl(var(--game-danger))] mb-6 animate-pulse">LIFE LOST!</div>
+            <div className="text-2xl sm:text-4xl font-mono text-[hsl(var(--game-danger))] mb-4 sm:mb-6 animate-pulse">LIFE LOST!</div>
             <Button
               onClick={continueAfterLifeLost}
               onTouchEnd={(e) => {
                 e.preventDefault();
                 continueAfterLifeLost();
               }}
-              className="bg-[hsl(var(--game-foreground))] text-[hsl(var(--game-background))] hover:bg-[hsl(var(--game-glow))] text-xl px-8 py-4 font-mono"
+              className="bg-[hsl(var(--game-foreground))] text-[hsl(var(--game-background))] hover:bg-[hsl(var(--game-glow))] text-base sm:text-xl px-6 sm:px-8 py-3 sm:py-4 font-mono"
             >
               PRESS TO CONTINUE
             </Button>
-            <div className="text-lg font-mono text-[hsl(var(--game-foreground))] mt-4 opacity-70">
+            <div className="text-sm sm:text-lg font-mono text-[hsl(var(--game-foreground))] mt-3 sm:mt-4 opacity-70">
               LIVES REMAINING: {displayLives}
             </div>
           </div>
@@ -3526,8 +3525,8 @@ const Game = () => {
 
         {showGameOver && gameMode === "solo" && (
           <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/80 overflow-auto py-4">
-            <div className="text-5xl font-mono text-[hsl(var(--game-danger))] mb-4 animate-pulse">GAME OVER</div>
-            <div className="text-2xl font-mono text-[hsl(var(--game-foreground))] mb-4">
+            <div className="text-3xl sm:text-5xl font-mono text-[hsl(var(--game-danger))] mb-3 sm:mb-4 animate-pulse">GAME OVER</div>
+            <div className="text-base sm:text-2xl font-mono text-[hsl(var(--game-foreground))] mb-3 sm:mb-4">
               FINAL SCORE: {displayScore.toString().padStart(8, "0")}
             </div>
 
@@ -3619,7 +3618,7 @@ const Game = () => {
         {isPaused && (
           <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/75 z-10">
             <div
-              className="text-5xl font-mono text-[hsl(var(--game-foreground))] mb-8 tracking-widest animate-pulse"
+              className="text-3xl sm:text-5xl font-mono text-[hsl(var(--game-foreground))] mb-6 sm:mb-8 tracking-widest animate-pulse"
               style={{ textShadow: "0 0 30px hsl(var(--game-foreground))" }}
             >
               PAUSED
@@ -3669,8 +3668,8 @@ const Game = () => {
           </div>
         )}
 
-        {/* FPS overlay – debug mode only */}
-        {DEBUG_ENABLED && <FpsOverlay />}
+        {/* FPS overlay – always visible, subtle */}
+        <FpsOverlay />
 
         {/* Debug panel overlay */}
         {DEBUG_ENABLED && showDebugPanel && (
