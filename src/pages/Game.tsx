@@ -3669,8 +3669,8 @@ const Game = () => {
           </div>
         )}
 
-        {/* FPS overlay – debug mode only */}
-        {DEBUG_ENABLED && <FpsOverlay />}
+        {/* FPS overlay – always visible, subtle */}
+        <FpsOverlay />
 
         {/* Debug panel overlay */}
         {DEBUG_ENABLED && showDebugPanel && (
