@@ -3507,18 +3507,18 @@ const Game = () => {
 
         {showLifeLost && !showGameOver && gameMode === "solo" && (
           <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/70">
-            <div className="text-4xl font-mono text-[hsl(var(--game-danger))] mb-6 animate-pulse">LIFE LOST!</div>
+            <div className="text-2xl sm:text-4xl font-mono text-[hsl(var(--game-danger))] mb-4 sm:mb-6 animate-pulse">LIFE LOST!</div>
             <Button
               onClick={continueAfterLifeLost}
               onTouchEnd={(e) => {
                 e.preventDefault();
                 continueAfterLifeLost();
               }}
-              className="bg-[hsl(var(--game-foreground))] text-[hsl(var(--game-background))] hover:bg-[hsl(var(--game-glow))] text-xl px-8 py-4 font-mono"
+              className="bg-[hsl(var(--game-foreground))] text-[hsl(var(--game-background))] hover:bg-[hsl(var(--game-glow))] text-base sm:text-xl px-6 sm:px-8 py-3 sm:py-4 font-mono"
             >
               PRESS TO CONTINUE
             </Button>
-            <div className="text-lg font-mono text-[hsl(var(--game-foreground))] mt-4 opacity-70">
+            <div className="text-sm sm:text-lg font-mono text-[hsl(var(--game-foreground))] mt-3 sm:mt-4 opacity-70">
               LIVES REMAINING: {displayLives}
             </div>
           </div>
