@@ -2467,8 +2467,6 @@ const Game = () => {
       ctx.globalAlpha = 0.5;
       ctx.font = "8px 'Press Start 2P', monospace";
       ctx.fillStyle = "#FFD700";
-      ctx.shadowBlur = 6;
-      ctx.shadowColor = "#FFD700";
       ctx.textAlign = "right";
       ctx.fillText(`TOP: ${leaderboard[0].score.toString().padStart(8, "0")}`, CANVAS_WIDTH - 10, 38);
       ctx.restore();
