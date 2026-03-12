@@ -3241,7 +3241,7 @@ const Game = () => {
     return (
       <div className="min-h-screen bg-[hsl(var(--game-background))] flex flex-col items-center justify-center p-4">
         <div
-          className="text-6xl font-mono text-[hsl(var(--game-foreground))] mb-2 tracking-widest"
+          className="text-3xl sm:text-4xl md:text-6xl font-mono text-[hsl(var(--game-foreground))] mb-2 tracking-widest"
           style={{ textShadow: "0 0 30px hsl(var(--game-foreground))" }}
         >
           ASTEROIDS
