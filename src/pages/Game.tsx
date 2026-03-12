@@ -3619,7 +3619,7 @@ const Game = () => {
         {isPaused && (
           <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/75 z-10">
             <div
-              className="text-5xl font-mono text-[hsl(var(--game-foreground))] mb-8 tracking-widest animate-pulse"
+              className="text-3xl sm:text-5xl font-mono text-[hsl(var(--game-foreground))] mb-6 sm:mb-8 tracking-widest animate-pulse"
               style={{ textShadow: "0 0 30px hsl(var(--game-foreground))" }}
             >
               PAUSED
