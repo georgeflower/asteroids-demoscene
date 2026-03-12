@@ -7,7 +7,7 @@ const Index = () => {
   return (
     <div className="flex min-h-screen items-center justify-center bg-[hsl(var(--game-background))]">
       <div className="text-center space-y-8">
-        <h1 className="text-7xl font-mono font-bold text-[hsl(var(--game-foreground))] animate-pulse">
+        <h1 className="text-4xl sm:text-5xl md:text-7xl font-mono font-bold text-[hsl(var(--game-foreground))] animate-pulse">
           ASTEROIDS
         </h1>
         <p className="text-2xl font-mono text-[hsl(var(--game-glow))]">
