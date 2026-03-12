@@ -3477,7 +3477,7 @@ const Game = () => {
         </div>
       )}
       {(gameMode === "duel" || gameMode === "online") && (
-        <div className="mb-4 flex gap-6 text-xs tracking-wide" style={{ fontFamily: "'Press Start 2P', monospace" }}>
+        <div className="mb-2 sm:mb-4 flex flex-wrap gap-2 sm:gap-6 text-[8px] sm:text-xs tracking-wide justify-center" style={{ fontFamily: "'Press Start 2P', monospace" }}>
           <div style={{ color: P1_COLOR, textShadow: `0 0 10px ${P1_COLOR}` }}>
             P1{gameMode === "online" && multiplayer.isHost ? " (YOU)" : ""} K:{duelKills[0]} D:{duelDeaths[0]}
           </div>
