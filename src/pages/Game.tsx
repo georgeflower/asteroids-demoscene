@@ -2587,46 +2587,29 @@ const Game = () => {
       ctx.restore();
     }
 
-    // ===== CRT / SCANLINE OVERLAY =====
+    // ===== CRT / SCANLINE OVERLAY (lightweight) =====
     ctx.save();
 
-    // Scanlines — fine horizontal lines every 2px
-    ctx.globalAlpha = 0.1;
+    // Scanlines — every 4px for performance
+    ctx.globalAlpha = 0.06;
     ctx.fillStyle = "#000000";
-    for (let y = 0; y < CANVAS_HEIGHT; y += 2) {
+    for (let y = 0; y < CANVAS_HEIGHT; y += 4) {
       ctx.fillRect(0, y, CANVAS_WIDTH, 1);
     }
 
-    // Phosphor RGB sub-pixel shimmer (very subtle vertical lines)
-    ctx.globalAlpha = 0.025;
-    for (let x = 0; x < CANVAS_WIDTH; x += 3) {
-      ctx.fillStyle = x % 3 === 0 ? "#FF0000" : x % 3 === 1 ? "#00FF00" : "#0000FF";
-      ctx.fillRect(x, 0, 1, CANVAS_HEIGHT);
-    }
-
-    // Vignette — radial dark corners
+    // Vignette — radial dark corners (lighter)
     ctx.globalAlpha = 1;
     const vignette = ctx.createRadialGradient(
       CANVAS_WIDTH / 2,
       CANVAS_HEIGHT / 2,
-      CANVAS_HEIGHT * 0.3,
+      CANVAS_HEIGHT * 0.35,
       CANVAS_WIDTH / 2,
       CANVAS_HEIGHT / 2,
-      CANVAS_HEIGHT * 0.85,
+      CANVAS_HEIGHT * 0.9,
     );
     vignette.addColorStop(0, "rgba(0,0,0,0)");
-    vignette.addColorStop(1, "rgba(0,0,0,0.55)");
+    vignette.addColorStop(1, "rgba(0,0,0,0.35)");
     ctx.fillStyle = vignette;
-    ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
-
-    // Subtle top-to-bottom phosphor roll flicker
-    const flickerAlpha = 0.015 + Math.sin(Date.now() * 0.003) * 0.01;
-    ctx.globalAlpha = flickerAlpha;
-    const flickerGrad = ctx.createLinearGradient(0, 0, 0, CANVAS_HEIGHT);
-    flickerGrad.addColorStop(0, "rgba(255,255,255,0)");
-    flickerGrad.addColorStop(0.5, "rgba(255,255,255,1)");
-    flickerGrad.addColorStop(1, "rgba(255,255,255,0)");
-    ctx.fillStyle = flickerGrad;
     ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
     ctx.restore();
