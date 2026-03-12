@@ -3428,7 +3428,7 @@ const Game = () => {
       {/* HUD */}
       {gameMode === "solo" && (
         <div
-          className="mb-4 flex gap-8 items-center text-[hsl(var(--game-foreground))] text-xs tracking-wide"
+          className="mb-2 sm:mb-4 flex flex-wrap gap-2 sm:gap-8 items-center text-[hsl(var(--game-foreground))] text-[8px] sm:text-xs tracking-wide justify-center"
           style={{ fontFamily: "'Press Start 2P', monospace", textShadow: "0 0 10px hsl(var(--game-foreground))" }}
         >
           <div>SCORE: {displayScore.toString().padStart(8, "0")}</div>
