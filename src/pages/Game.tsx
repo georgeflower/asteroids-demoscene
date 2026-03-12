@@ -2207,26 +2207,17 @@ const Game = () => {
       ctx.restore();
     });
 
-    // CRT scanline overlay (lightweight)
+    // CRT scanline overlay (cached offscreen canvas)
     ctx.save();
-    ctx.globalAlpha = 0.03;
-    ctx.fillStyle = "#000000";
-    for (let y = 0; y < CANVAS_HEIGHT; y += 6) {
-      ctx.fillRect(0, y, CANVAS_WIDTH, 1);
+    if (menuScanlineCanvasRef.current) {
+      ctx.globalAlpha = 0.03;
+      ctx.drawImage(menuScanlineCanvasRef.current, 0, 0);
     }
-    const gradient = ctx.createRadialGradient(
-      CANVAS_WIDTH / 2,
-      CANVAS_HEIGHT / 2,
-      CANVAS_HEIGHT * 0.4,
-      CANVAS_WIDTH / 2,
-      CANVAS_HEIGHT / 2,
-      CANVAS_HEIGHT * 0.8,
-    );
-    gradient.addColorStop(0, "rgba(0,0,0,0)");
-    gradient.addColorStop(1, "rgba(0,0,0,0.3)");
-    ctx.globalAlpha = 1;
-    ctx.fillStyle = gradient;
-    ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+    if (menuVignetteGradientRef.current) {
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = menuVignetteGradientRef.current;
+      ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+    }
     ctx.restore();
   };
 
