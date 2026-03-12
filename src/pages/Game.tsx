@@ -2548,23 +2548,13 @@ const Game = () => {
       ctx.beginPath();
       ctx.rect(0, 18, CANVAS_WIDTH, 22);
       ctx.clip();
-      // Demoscene glow backdrop (gold)
-      const olGlowGrad = ctx.createLinearGradient(0, 18, 0, 40);
-      olGlowGrad.addColorStop(0, "rgba(255, 180, 0, 0)");
-      olGlowGrad.addColorStop(0.5, "rgba(255, 180, 0, 0.12)");
-      olGlowGrad.addColorStop(1, "rgba(255, 180, 0, 0)");
-      ctx.fillStyle = olGlowGrad;
-      ctx.fillRect(0, 18, CANVAS_WIDTH, 22);
-      // Scanlines overlay
-      ctx.globalAlpha = 0.07;
-      ctx.fillStyle = "#000000";
-      for (let i = 0; i < 11; i++) {
-        ctx.fillRect(0, 18 + i * 2, CANVAS_WIDTH, 1);
+      // Demoscene glow backdrop (cached gradient)
+      if (olMarqueeGradientRef.current) {
+        ctx.fillStyle = olMarqueeGradientRef.current;
+        ctx.fillRect(0, 18, CANVAS_WIDTH, 22);
       }
-      // Draw text with inline GIFs
+      // Draw text with inline GIFs (no shadowBlur)
       ctx.globalAlpha = 0.85;
-      ctx.shadowColor = "#FFAA00";
-      ctx.shadowBlur = 10;
       ctx.fillStyle = "#FFE066";
       ctx.textAlign = "left";
 
