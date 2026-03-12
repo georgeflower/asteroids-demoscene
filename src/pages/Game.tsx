@@ -2087,14 +2087,12 @@ const Game = () => {
       ctx.fill();
     });
 
-    // Particles
+    // Particles (no shadow for performance)
     particles.forEach((p) => {
       const alpha = p.lifetime / p.maxLifetime;
       ctx.save();
       ctx.globalAlpha = alpha;
       ctx.fillStyle = p.color;
-      ctx.shadowBlur = 6;
-      ctx.shadowColor = p.color;
       ctx.beginPath();
       ctx.arc(p.pos.x, p.pos.y, p.size * alpha, 0, Math.PI * 2);
       ctx.fill();
