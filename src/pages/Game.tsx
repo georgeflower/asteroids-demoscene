@@ -2448,8 +2448,6 @@ const Game = () => {
       ctx.globalAlpha = 0.9;
       ctx.font = "7px 'Press Start 2P', monospace";
       ctx.fillStyle = pu.color;
-      ctx.shadowBlur = 4;
-      ctx.shadowColor = pu.color;
       ctx.fillText(pu.label, barX + 3, barY + 10);
       ctx.restore();
     });
