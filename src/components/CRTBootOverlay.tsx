@@ -4,7 +4,7 @@ interface CRTBootOverlayProps {
   onComplete: () => void;
 }
 
-const DURATION = 1800; // ms total
+const DURATION = 1000; // ms total
 
 const CRTBootOverlay = ({ onComplete }: CRTBootOverlayProps) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
