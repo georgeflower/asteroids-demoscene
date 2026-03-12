@@ -2590,31 +2590,17 @@ const Game = () => {
       ctx.restore();
     }
 
-    // ===== CRT / SCANLINE OVERLAY (lightweight) =====
+    // ===== CRT / SCANLINE OVERLAY (cached offscreen canvas) =====
     ctx.save();
-
-    // Scanlines — every 4px for performance
-    ctx.globalAlpha = 0.06;
-    ctx.fillStyle = "#000000";
-    for (let y = 0; y < CANVAS_HEIGHT; y += 4) {
-      ctx.fillRect(0, y, CANVAS_WIDTH, 1);
+    if (scanlineCanvasRef.current) {
+      ctx.globalAlpha = 0.06;
+      ctx.drawImage(scanlineCanvasRef.current, 0, 0);
     }
-
-    // Vignette — radial dark corners (lighter)
-    ctx.globalAlpha = 1;
-    const vignette = ctx.createRadialGradient(
-      CANVAS_WIDTH / 2,
-      CANVAS_HEIGHT / 2,
-      CANVAS_HEIGHT * 0.35,
-      CANVAS_WIDTH / 2,
-      CANVAS_HEIGHT / 2,
-      CANVAS_HEIGHT * 0.9,
-    );
-    vignette.addColorStop(0, "rgba(0,0,0,0)");
-    vignette.addColorStop(1, "rgba(0,0,0,0.35)");
-    ctx.fillStyle = vignette;
-    ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
-
+    if (vignetteGradientRef.current) {
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = vignetteGradientRef.current;
+      ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+    }
     ctx.restore();
   }, []);
 
