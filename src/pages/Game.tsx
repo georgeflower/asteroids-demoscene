@@ -3526,8 +3526,8 @@ const Game = () => {
 
         {showGameOver && gameMode === "solo" && (
           <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/80 overflow-auto py-4">
-            <div className="text-5xl font-mono text-[hsl(var(--game-danger))] mb-4 animate-pulse">GAME OVER</div>
-            <div className="text-2xl font-mono text-[hsl(var(--game-foreground))] mb-4">
+            <div className="text-3xl sm:text-5xl font-mono text-[hsl(var(--game-danger))] mb-3 sm:mb-4 animate-pulse">GAME OVER</div>
+            <div className="text-base sm:text-2xl font-mono text-[hsl(var(--game-foreground))] mb-3 sm:mb-4">
               FINAL SCORE: {displayScore.toString().padStart(8, "0")}
             </div>
 
