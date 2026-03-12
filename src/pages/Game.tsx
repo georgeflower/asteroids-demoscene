@@ -2099,7 +2099,7 @@ const Game = () => {
       ctx.restore();
     });
 
-    // Asteroids
+    // Asteroids (no shadow for performance)
     asteroids.forEach((asteroid) => {
       ctx.save();
       ctx.translate(asteroid.pos.x, asteroid.pos.y);
@@ -2108,8 +2108,6 @@ const Game = () => {
       const color = asteroidColors[colorIdx];
       ctx.strokeStyle = color;
       ctx.lineWidth = 1.5;
-      ctx.shadowBlur = 10;
-      ctx.shadowColor = color;
       ctx.beginPath();
       asteroid.points.forEach((point, i) => {
         if (i === 0) ctx.moveTo(point.x, point.y);
@@ -2117,10 +2115,6 @@ const Game = () => {
       });
       ctx.closePath();
       ctx.stroke();
-      ctx.shadowBlur = 20;
-      ctx.globalAlpha = 0.15;
-      ctx.stroke();
-      ctx.globalAlpha = 1;
       ctx.restore();
     });
 
