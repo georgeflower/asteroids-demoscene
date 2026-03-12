@@ -2393,8 +2393,6 @@ const Game = () => {
               : "#CC66FF";
       ctx.strokeStyle = color;
       ctx.lineWidth = 2;
-      ctx.shadowBlur = 20;
-      ctx.shadowColor = color;
       // Draw hexagon (6 sides, bigger = 14px radius)
       ctx.beginPath();
       for (let i = 0; i < 6; i++) {
