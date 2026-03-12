@@ -316,6 +316,67 @@ const Game = () => {
   const nowPlayingMarqueeXRef = useRef<number>(CANVAS_WIDTH);
   const onelinerMarqueeXRef = useRef<number>(CANVAS_WIDTH);
 
+  // Cached offscreen canvases & gradients for performance
+  const scanlineCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const menuScanlineCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const vignetteGradientRef = useRef<CanvasGradient | null>(null);
+  const menuVignetteGradientRef = useRef<CanvasGradient | null>(null);
+  const marqueeGradientRef = useRef<CanvasGradient | null>(null);
+  const olMarqueeGradientRef = useRef<CanvasGradient | null>(null);
+  const cachedCanvasSize = useRef<{ w: number; h: number }>({ w: 0, h: 0 });
+
+  // Build or rebuild cached overlays when canvas size changes
+  const ensureCachedOverlays = useCallback((ctx: CanvasRenderingContext2D) => {
+    const w = CANVAS_WIDTH;
+    const h = CANVAS_HEIGHT;
+    if (cachedCanvasSize.current.w === w && cachedCanvasSize.current.h === h && scanlineCanvasRef.current) return;
+    cachedCanvasSize.current = { w, h };
+
+    // Main CRT scanline overlay (every 4px)
+    const sc = document.createElement("canvas");
+    sc.width = w;
+    sc.height = h;
+    const sctx = sc.getContext("2d")!;
+    sctx.fillStyle = "#000000";
+    for (let y = 0; y < h; y += 4) {
+      sctx.fillRect(0, y, w, 1);
+    }
+    scanlineCanvasRef.current = sc;
+
+    // Menu scanline overlay (every 6px)
+    const msc = document.createElement("canvas");
+    msc.width = w;
+    msc.height = h;
+    const msctx = msc.getContext("2d")!;
+    msctx.fillStyle = "#000000";
+    for (let y = 0; y < h; y += 6) {
+      msctx.fillRect(0, y, w, 1);
+    }
+    menuScanlineCanvasRef.current = msc;
+
+    // Main vignette gradient
+    vignetteGradientRef.current = ctx.createRadialGradient(w / 2, h / 2, h * 0.35, w / 2, h / 2, h * 0.9);
+    vignetteGradientRef.current.addColorStop(0, "rgba(0,0,0,0)");
+    vignetteGradientRef.current.addColorStop(1, "rgba(0,0,0,0.35)");
+
+    // Menu vignette gradient
+    menuVignetteGradientRef.current = ctx.createRadialGradient(w / 2, h / 2, h * 0.4, w / 2, h / 2, h * 0.8);
+    menuVignetteGradientRef.current.addColorStop(0, "rgba(0,0,0,0)");
+    menuVignetteGradientRef.current.addColorStop(1, "rgba(0,0,0,0.3)");
+
+    // Now-playing marquee gradient
+    marqueeGradientRef.current = ctx.createLinearGradient(0, h - 30, 0, h);
+    marqueeGradientRef.current.addColorStop(0, "rgba(0, 150, 255, 0)");
+    marqueeGradientRef.current.addColorStop(0.5, "rgba(0, 150, 255, 0.15)");
+    marqueeGradientRef.current.addColorStop(1, "rgba(0, 150, 255, 0.05)");
+
+    // Oneliner marquee gradient
+    olMarqueeGradientRef.current = ctx.createLinearGradient(0, 18, 0, 40);
+    olMarqueeGradientRef.current.addColorStop(0, "rgba(255, 180, 0, 0)");
+    olMarqueeGradientRef.current.addColorStop(0.5, "rgba(255, 180, 0, 0.12)");
+    olMarqueeGradientRef.current.addColorStop(1, "rgba(255, 180, 0, 0)");
+  }, []);
+
   // Debug system state (only active when DEBUG_ENABLED is true)
   const [debugLogs, setDebugLogs] = useState<DebugLogEntry[]>([]);
   const debugLogsRef = useRef<DebugLogEntry[]>([]);
@@ -1975,7 +2036,7 @@ const Game = () => {
     if (!ship.invulnerable || Math.floor(Date.now() / 100) % 2 === 0) {
       ctx.strokeStyle = color;
       ctx.lineWidth = 2;
-      ctx.shadowBlur = 15;
+      ctx.shadowBlur = 8;
       ctx.shadowColor = color;
       ctx.beginPath();
       ctx.moveTo(SHIP_SIZE, 0);
@@ -1984,13 +2045,9 @@ const Game = () => {
       ctx.lineTo(-SHIP_SIZE, SHIP_SIZE / 2);
       ctx.closePath();
       ctx.stroke();
-      ctx.shadowBlur = 25;
-      ctx.globalAlpha = 0.3;
-      ctx.stroke();
-      ctx.globalAlpha = 1;
+      ctx.shadowBlur = 0;
     }
     ctx.restore();
-    // Draw label above ship
     if (label) {
       ctx.save();
       ctx.font = "7px 'Press Start 2P', monospace";
@@ -2030,21 +2087,19 @@ const Game = () => {
       ctx.fill();
     });
 
-    // Particles
+    // Particles (no shadow for performance)
     particles.forEach((p) => {
       const alpha = p.lifetime / p.maxLifetime;
       ctx.save();
       ctx.globalAlpha = alpha;
       ctx.fillStyle = p.color;
-      ctx.shadowBlur = 6;
-      ctx.shadowColor = p.color;
       ctx.beginPath();
       ctx.arc(p.pos.x, p.pos.y, p.size * alpha, 0, Math.PI * 2);
       ctx.fill();
       ctx.restore();
     });
 
-    // Asteroids
+    // Asteroids (no shadow for performance)
     asteroids.forEach((asteroid) => {
       ctx.save();
       ctx.translate(asteroid.pos.x, asteroid.pos.y);
@@ -2053,8 +2108,6 @@ const Game = () => {
       const color = asteroidColors[colorIdx];
       ctx.strokeStyle = color;
       ctx.lineWidth = 1.5;
-      ctx.shadowBlur = 10;
-      ctx.shadowColor = color;
       ctx.beginPath();
       asteroid.points.forEach((point, i) => {
         if (i === 0) ctx.moveTo(point.x, point.y);
@@ -2062,10 +2115,6 @@ const Game = () => {
       });
       ctx.closePath();
       ctx.stroke();
-      ctx.shadowBlur = 20;
-      ctx.globalAlpha = 0.15;
-      ctx.stroke();
-      ctx.globalAlpha = 1;
       ctx.restore();
     });
 
@@ -2079,8 +2128,6 @@ const Game = () => {
         ctx.strokeStyle = "#AA6633";
         ctx.fillStyle = "#553311";
         ctx.lineWidth = 2;
-        ctx.shadowBlur = 10;
-        ctx.shadowColor = "#AA6633";
         ctx.beginPath();
         ctx.moveTo(12, 0);
         ctx.lineTo(-6, -8);
@@ -2109,8 +2156,6 @@ const Game = () => {
         ctx.strokeStyle = "#44FF44";
         ctx.fillStyle = "#115511";
         ctx.lineWidth = 2;
-        ctx.shadowBlur = 12;
-        ctx.shadowColor = "#44FF44";
         ctx.beginPath();
         ctx.arc(0, -8, 6, 0, Math.PI * 2);
         ctx.fill();
@@ -2157,33 +2202,22 @@ const Game = () => {
       ctx.globalAlpha = ft.opacity;
       ctx.font = `${ft.size}px 'Press Start 2P', monospace`;
       ctx.fillStyle = ft.color;
-      ctx.shadowBlur = 10;
-      ctx.shadowColor = ft.color;
       ctx.textAlign = "center";
       ctx.fillText(ft.text, ft.pos.x, ft.pos.y);
       ctx.restore();
     });
 
-    // CRT scanline overlay (lightweight)
+    // CRT scanline overlay (cached offscreen canvas)
     ctx.save();
-    ctx.globalAlpha = 0.03;
-    ctx.fillStyle = "#000000";
-    for (let y = 0; y < CANVAS_HEIGHT; y += 6) {
-      ctx.fillRect(0, y, CANVAS_WIDTH, 1);
+    if (menuScanlineCanvasRef.current) {
+      ctx.globalAlpha = 0.03;
+      ctx.drawImage(menuScanlineCanvasRef.current, 0, 0);
     }
-    const gradient = ctx.createRadialGradient(
-      CANVAS_WIDTH / 2,
-      CANVAS_HEIGHT / 2,
-      CANVAS_HEIGHT * 0.4,
-      CANVAS_WIDTH / 2,
-      CANVAS_HEIGHT / 2,
-      CANVAS_HEIGHT * 0.8,
-    );
-    gradient.addColorStop(0, "rgba(0,0,0,0)");
-    gradient.addColorStop(1, "rgba(0,0,0,0.3)");
-    ctx.globalAlpha = 1;
-    ctx.fillStyle = gradient;
-    ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+    if (menuVignetteGradientRef.current) {
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = menuVignetteGradientRef.current;
+      ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+    }
     ctx.restore();
   };
 
@@ -2193,12 +2227,10 @@ const Game = () => {
       ctx.save();
       const bColor = bullet.color || defaultColor;
       ctx.fillStyle = bColor;
-      ctx.shadowBlur = 12;
-      ctx.shadowColor = bColor;
       ctx.beginPath();
       ctx.arc(bullet.pos.x, bullet.pos.y, bullet.isUFO || bullet.isAlien ? 3 : 2, 0, Math.PI * 2);
       ctx.fill();
-      ctx.shadowBlur = 20;
+      // Soft glow circle (no shadowBlur)
       ctx.globalAlpha = 0.4;
       ctx.beginPath();
       ctx.arc(bullet.pos.x, bullet.pos.y, bullet.isUFO || bullet.isAlien ? 5 : 4, 0, Math.PI * 2);
@@ -2213,6 +2245,7 @@ const Game = () => {
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
+    ensureCachedOverlays(ctx);
 
     if ((gameModeRef.current === "duel" || gameModeRef.current === "online") && duelStateRef.current) {
       const ds = duelStateRef.current;
@@ -2262,8 +2295,6 @@ const Game = () => {
       const ufoColor = ufo.size === "large" ? theme.enemy : "#FF44FF";
       ctx.strokeStyle = ufoColor;
       ctx.lineWidth = 2;
-      ctx.shadowBlur = 18;
-      ctx.shadowColor = ufoColor;
       const radius = ufo.size === "large" ? 20 : 10;
       ctx.beginPath();
       ctx.ellipse(0, 0, radius, radius / 2, 0, 0, Math.PI * 2);
@@ -2288,8 +2319,6 @@ const Game = () => {
       ctx.translate(boss.pos.x, boss.pos.y);
 
       const bossColor = boss.hitFlash > 0 ? "#FFFFFF" : "#FF44CC";
-      ctx.shadowBlur = 30;
-      ctx.shadowColor = bossColor;
 
       const tentCount = boss.tentacles;
       for (let i = 0; i < tentCount; i++) {
@@ -2364,8 +2393,6 @@ const Game = () => {
               : "#CC66FF";
       ctx.strokeStyle = color;
       ctx.lineWidth = 2;
-      ctx.shadowBlur = 20;
-      ctx.shadowColor = color;
       // Draw hexagon (6 sides, bigger = 14px radius)
       ctx.beginPath();
       for (let i = 0; i < 6; i++) {
@@ -2421,8 +2448,6 @@ const Game = () => {
       ctx.globalAlpha = 0.9;
       ctx.font = "7px 'Press Start 2P', monospace";
       ctx.fillStyle = pu.color;
-      ctx.shadowBlur = 4;
-      ctx.shadowColor = pu.color;
       ctx.fillText(pu.label, barX + 3, barY + 10);
       ctx.restore();
     });
@@ -2442,8 +2467,6 @@ const Game = () => {
       ctx.globalAlpha = 0.5;
       ctx.font = "8px 'Press Start 2P', monospace";
       ctx.fillStyle = "#FFD700";
-      ctx.shadowBlur = 6;
-      ctx.shadowColor = "#FFD700";
       ctx.textAlign = "right";
       ctx.fillText(`TOP: ${leaderboard[0].score.toString().padStart(8, "0")}`, CANVAS_WIDTH - 10, 38);
       ctx.restore();
@@ -2467,23 +2490,13 @@ const Game = () => {
       ctx.beginPath();
       ctx.rect(0, CANVAS_HEIGHT - 30, CANVAS_WIDTH, 30);
       ctx.clip();
-      // Demoscene glow backdrop
-      const glowGrad = ctx.createLinearGradient(0, CANVAS_HEIGHT - 30, 0, CANVAS_HEIGHT);
-      glowGrad.addColorStop(0, "rgba(0, 150, 255, 0)");
-      glowGrad.addColorStop(0.5, "rgba(0, 150, 255, 0.15)");
-      glowGrad.addColorStop(1, "rgba(0, 150, 255, 0.05)");
-      ctx.fillStyle = glowGrad;
-      ctx.fillRect(0, CANVAS_HEIGHT - 30, CANVAS_WIDTH, 30);
-      // Scanlines overlay
-      ctx.globalAlpha = 0.07;
-      ctx.fillStyle = "#000000";
-      for (let i = 0; i < 15; i++) {
-        ctx.fillRect(0, CANVAS_HEIGHT - 30 + i * 2, CANVAS_WIDTH, 1);
+      // Demoscene glow backdrop (cached gradient)
+      if (marqueeGradientRef.current) {
+        ctx.fillStyle = marqueeGradientRef.current;
+        ctx.fillRect(0, CANVAS_HEIGHT - 30, CANVAS_WIDTH, 30);
       }
-      // Glow text effect
+      // Glow text effect (no shadowBlur)
       ctx.globalAlpha = 0.85;
-      ctx.shadowColor = "#00CCFF";
-      ctx.shadowBlur = 12;
       ctx.fillStyle = "#AAEEFF";
       ctx.textAlign = "left";
       ctx.fillText(npText, nowPlayingMarqueeXRef.current, CANVAS_HEIGHT - 9);
@@ -2535,23 +2548,13 @@ const Game = () => {
       ctx.beginPath();
       ctx.rect(0, 18, CANVAS_WIDTH, 22);
       ctx.clip();
-      // Demoscene glow backdrop (gold)
-      const olGlowGrad = ctx.createLinearGradient(0, 18, 0, 40);
-      olGlowGrad.addColorStop(0, "rgba(255, 180, 0, 0)");
-      olGlowGrad.addColorStop(0.5, "rgba(255, 180, 0, 0.12)");
-      olGlowGrad.addColorStop(1, "rgba(255, 180, 0, 0)");
-      ctx.fillStyle = olGlowGrad;
-      ctx.fillRect(0, 18, CANVAS_WIDTH, 22);
-      // Scanlines overlay
-      ctx.globalAlpha = 0.07;
-      ctx.fillStyle = "#000000";
-      for (let i = 0; i < 11; i++) {
-        ctx.fillRect(0, 18 + i * 2, CANVAS_WIDTH, 1);
+      // Demoscene glow backdrop (cached gradient)
+      if (olMarqueeGradientRef.current) {
+        ctx.fillStyle = olMarqueeGradientRef.current;
+        ctx.fillRect(0, 18, CANVAS_WIDTH, 22);
       }
-      // Draw text with inline GIFs
+      // Draw text with inline GIFs (no shadowBlur)
       ctx.globalAlpha = 0.85;
-      ctx.shadowColor = "#FFAA00";
-      ctx.shadowBlur = 10;
       ctx.fillStyle = "#FFE066";
       ctx.textAlign = "left";
 
@@ -2587,31 +2590,17 @@ const Game = () => {
       ctx.restore();
     }
 
-    // ===== CRT / SCANLINE OVERLAY (lightweight) =====
+    // ===== CRT / SCANLINE OVERLAY (cached offscreen canvas) =====
     ctx.save();
-
-    // Scanlines — every 4px for performance
-    ctx.globalAlpha = 0.06;
-    ctx.fillStyle = "#000000";
-    for (let y = 0; y < CANVAS_HEIGHT; y += 4) {
-      ctx.fillRect(0, y, CANVAS_WIDTH, 1);
+    if (scanlineCanvasRef.current) {
+      ctx.globalAlpha = 0.06;
+      ctx.drawImage(scanlineCanvasRef.current, 0, 0);
     }
-
-    // Vignette — radial dark corners (lighter)
-    ctx.globalAlpha = 1;
-    const vignette = ctx.createRadialGradient(
-      CANVAS_WIDTH / 2,
-      CANVAS_HEIGHT / 2,
-      CANVAS_HEIGHT * 0.35,
-      CANVAS_WIDTH / 2,
-      CANVAS_HEIGHT / 2,
-      CANVAS_HEIGHT * 0.9,
-    );
-    vignette.addColorStop(0, "rgba(0,0,0,0)");
-    vignette.addColorStop(1, "rgba(0,0,0,0.35)");
-    ctx.fillStyle = vignette;
-    ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
-
+    if (vignetteGradientRef.current) {
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = vignetteGradientRef.current;
+      ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+    }
     ctx.restore();
   }, []);
 
