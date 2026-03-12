@@ -2227,12 +2227,10 @@ const Game = () => {
       ctx.save();
       const bColor = bullet.color || defaultColor;
       ctx.fillStyle = bColor;
-      ctx.shadowBlur = 12;
-      ctx.shadowColor = bColor;
       ctx.beginPath();
       ctx.arc(bullet.pos.x, bullet.pos.y, bullet.isUFO || bullet.isAlien ? 3 : 2, 0, Math.PI * 2);
       ctx.fill();
-      ctx.shadowBlur = 20;
+      // Soft glow circle (no shadowBlur)
       ctx.globalAlpha = 0.4;
       ctx.beginPath();
       ctx.arc(bullet.pos.x, bullet.pos.y, bullet.isUFO || bullet.isAlien ? 5 : 4, 0, Math.PI * 2);
