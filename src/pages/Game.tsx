@@ -2128,8 +2128,6 @@ const Game = () => {
         ctx.strokeStyle = "#AA6633";
         ctx.fillStyle = "#553311";
         ctx.lineWidth = 2;
-        ctx.shadowBlur = 10;
-        ctx.shadowColor = "#AA6633";
         ctx.beginPath();
         ctx.moveTo(12, 0);
         ctx.lineTo(-6, -8);
