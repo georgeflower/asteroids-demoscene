@@ -2202,8 +2202,6 @@ const Game = () => {
       ctx.globalAlpha = ft.opacity;
       ctx.font = `${ft.size}px 'Press Start 2P', monospace`;
       ctx.fillStyle = ft.color;
-      ctx.shadowBlur = 10;
-      ctx.shadowColor = ft.color;
       ctx.textAlign = "center";
       ctx.fillText(ft.text, ft.pos.x, ft.pos.y);
       ctx.restore();
