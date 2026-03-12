@@ -2319,8 +2319,6 @@ const Game = () => {
       ctx.translate(boss.pos.x, boss.pos.y);
 
       const bossColor = boss.hitFlash > 0 ? "#FFFFFF" : "#FF44CC";
-      ctx.shadowBlur = 30;
-      ctx.shadowColor = bossColor;
 
       const tentCount = boss.tentacles;
       for (let i = 0; i < tentCount; i++) {
