@@ -67,6 +67,15 @@ interface FloatingText {
   size: number;
 }
 
+interface EmojiPopup {
+  pos: Vector;
+  token: string; // GIF token key (e.g. ":necta:") or Unicode emoji char
+  size: number;
+  opacity: number;
+  lifetime: number;
+  maxLifetime: number;
+}
+
 interface Particle {
   pos: Vector;
   vel: Vector;
@@ -180,6 +189,7 @@ interface GameState {
   alienSpawnTimer: number;
   bossDefeated: boolean;
   pendingNextWave: boolean;
+  emojiPopups: EmojiPopup[];
 }
 
 interface DuelState {
@@ -219,6 +229,52 @@ const ASTEROID_POINTS = { large: 20, medium: 50, small: 100 };
 const UFO_POINTS = { large: 200, small: 1000 };
 const GAMEPAD_DEADZONE = 0.2;
 const MARQUEE_SPEED = 0.8; // pixels per frame (~48px/sec at 60fps)
+
+// All nectarine demoscene text emoticon tokens mapped to Unicode emoji characters.
+// These are rendered inline in the oneliner marquee and used for in-game popups.
+const EMOJI_TOKEN_MAP: Record<string, string> = {
+  ":)":       "😊",
+  ":-)":      "😊",
+  ":(":       "😢",
+  ":-(" :     "😢",
+  ";)":       "😉",
+  ";-)":      "😉",
+  ":p":       "😛",
+  ":P":       "😛",
+  ":-p":      "😛",
+  ":-P":      "😛",
+  "8)":       "😎",
+  "8-)":      "😎",
+  ":o":       "😮",
+  ":O":       "😮",
+  ">:)":      "😈",
+  "O:)":      "😇",
+  ":lol:":    "😂",
+  ":rofl:":   "🤣",
+  ":wave:":   "👋",
+  ":beer:":   "🍺",
+  ":heart:":  "❤",
+  ":fire:":   "🔥",
+  ":star:":   "⭐",
+  ":yay:":    "🎉",
+  ":wow:":    "😲",
+  ":sad:":    "😢",
+  ":angry:":  "😠",
+  ":love:":   "😍",
+  ":music:":  "🎵",
+  ":notes:":  "🎶",
+  ":cool:":   "😎",
+  ":scream:": "😱",
+  ":party:":  "🎊",
+  ":amiga:":  "💾",
+  ":scene:":  "🎵",
+  ":trophy:": "🏆",
+  ":rocket:": "🚀",
+  ":alien:":  "👾",
+  ":skull:":  "💀",
+  ":boom:":   "💥",
+  ":clap:":   "👏",
+};
 
 const P1_COLOR = "#00FFFF";
 const P2_COLOR = "#FF8844";
@@ -438,6 +494,20 @@ const Game = () => {
     }
   };
 
+  // Spawn a demoscene emoji popup (GIF token or Unicode emoji) at a canvas position.
+  const spawnEmojiPopup = (pos: Vector, token: string, size = 48) => {
+    const state = gameStateRef.current;
+    if (!state) return;
+    state.emojiPopups.push({
+      pos: { x: pos.x, y: pos.y },
+      token,
+      size,
+      opacity: 1,
+      lifetime: 150,
+      maxLifetime: 150,
+    });
+  };
+
   const spawnExplosionTo = (arr: Particle[], pos: Vector, color: string, count = 12) => {
     for (let i = 0; i < count; i++) {
       const angle = (i / count) * Math.PI * 2 + (Math.random() - 0.5) * 0.5;
@@ -647,6 +717,7 @@ const Game = () => {
       alienSpawnTimer: 600,
       bossDefeated: false,
       pendingNextWave: false,
+      emojiPopups: [],
     };
 
     duelStateRef.current = null;
@@ -879,6 +950,7 @@ const Game = () => {
       const theme = getTheme(state.wave);
       spawnFloatingText({ x: CANVAS_WIDTH / 2, y: CANVAS_HEIGHT / 2 - 40 }, `WAVE ${state.wave}`, theme.ship, 28);
       spawnFloatingText({ x: CANVAS_WIDTH / 2, y: CANVAS_HEIGHT / 2 + 10 }, "⚠ BOSS INCOMING ⚠", "#FF4444", 22);
+      spawnEmojiPopup({ x: CANVAS_WIDTH / 2, y: CANVAS_HEIGHT / 2 + 65 }, ":necta:", 52);
       // Boss wave started
       return;
     }
@@ -906,6 +978,8 @@ const Game = () => {
 
     const theme = getTheme(state.wave);
     spawnFloatingText({ x: CANVAS_WIDTH / 2, y: CANVAS_HEIGHT / 2 }, `WAVE ${state.wave}`, theme.ship, 28);
+    // Show a demoscene emoji popup for the new wave (d^^b = headphones)
+    spawnEmojiPopup({ x: CANVAS_WIDTH / 2, y: CANVAS_HEIGHT / 2 + 55 }, "d^^b", 44);
 
     if ((state.wave - 1) % 5 === 0 && state.wave > 1) {
       spawnFloatingText(
@@ -1704,6 +1778,14 @@ const Game = () => {
         };
         const label = powerUpLabels[powerUp.type];
         spawnFloatingText(powerUp.pos, label.text, label.color, 28);
+        // Demoscene emoji popup for power-up pickup
+        const powerUpEmoji: Record<string, string> = {
+          shield: ":star:",
+          rapidFire: ":fire:",
+          extraLife: ":heart:",
+          multiplier: ":trophy:",
+        };
+        spawnEmojiPopup({ x: powerUp.pos.x, y: powerUp.pos.y - 30 }, powerUpEmoji[powerUp.type] || "d^^b", 40);
 
         switch (powerUp.type) {
           case "shield":
@@ -1751,6 +1833,14 @@ const Game = () => {
       return ft.lifetime > 0;
     });
 
+    // Update emoji popups (float upward and fade out)
+    state.emojiPopups = state.emojiPopups.filter((ep) => {
+      ep.pos.y -= 0.4;
+      ep.lifetime--;
+      ep.opacity = ep.lifetime / ep.maxLifetime;
+      return ep.lifetime > 0;
+    });
+
     // Update particles
     state.particles = state.particles.filter((p) => {
       p.pos.x += p.vel.x;
@@ -1783,6 +1873,7 @@ const Game = () => {
             state.lives++;
             setDisplayLives(state.lives);
             spawnFloatingText(state.ship.pos, "EXTRA LIFE!", "#CC66FF", 22);
+            spawnEmojiPopup({ x: state.ship.pos.x, y: state.ship.pos.y - 50 }, ":heart:", 44);
           }
 
           if (asteroid.size === "large") {
@@ -1893,7 +1984,10 @@ const Game = () => {
             state.bossDefeated = true;
             state.pendingNextWave = true;
             addDebugLog("boss", `Boss defeated! Score: +${pts}`);
-            // Boss defeated
+            // Boss defeated — show nectawall celebration emoji
+            spawnEmojiPopup({ x: CANVAS_WIDTH / 2, y: CANVAS_HEIGHT / 2 }, ":nectawall:", 64);
+            spawnEmojiPopup({ x: CANVAS_WIDTH / 2 - 80, y: CANVAS_HEIGHT / 2 + 20 }, ":party:", 44);
+            spawnEmojiPopup({ x: CANVAS_WIDTH / 2 + 80, y: CANVAS_HEIGHT / 2 + 20 }, ":party:", 44);
 
             // Advance is deferred to next update tick to avoid same-frame state churn
           }
@@ -2013,6 +2107,7 @@ const Game = () => {
     aliens: Alien[],
     bgColor: string,
     asteroidColors: string[],
+    emojiPopups: EmojiPopup[] = [],
   ) => {
     // Clear
     ctx.fillStyle = bgColor;
@@ -2165,6 +2260,26 @@ const Game = () => {
       ctx.restore();
     });
 
+    // Demoscene emoji popups (GIF images or Unicode emoji characters)
+    emojiPopups.forEach((ep) => {
+      ctx.save();
+      ctx.globalAlpha = ep.opacity;
+      const gifImg = onelinerGifsRef.current[ep.token];
+      if (gifImg && gifImg.complete && gifImg.naturalWidth > 0) {
+        // Draw as GIF image, centred on position
+        ctx.drawImage(gifImg, ep.pos.x - ep.size / 2, ep.pos.y - ep.size / 2, ep.size, ep.size);
+      } else {
+        // Render as Unicode emoji or look up EMOJI_TOKEN_MAP
+        const emojiChar = EMOJI_TOKEN_MAP[ep.token] ?? ep.token;
+        ctx.font = `${ep.size}px serif`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(emojiChar, ep.pos.x, ep.pos.y);
+        ctx.textBaseline = "alphabetic";
+      }
+      ctx.restore();
+    });
+
     // CRT scanline overlay
     ctx.save();
     ctx.globalAlpha = 0.04;
@@ -2247,6 +2362,7 @@ const Game = () => {
       state.aliens,
       theme.bg,
       theme.asteroids,
+      state.emojiPopups,
     );
 
     // Ship
@@ -2501,7 +2617,12 @@ const Game = () => {
         olEntries.map((e) => `${e.flag ? e.flag + " " : ""}[${e.author}] ${e.message}`).join(separator) + "   ";
 
       // Measure total width including GIF replacements
-      const gifTokens = [":necta:", ":nectawall:", "d^^b", ":D"];
+      // All inline tokens: GIF-backed tokens + text emoticons from EMOJI_TOKEN_MAP.
+      // Sorted longest-first to ensure ":-(", ":-)" are matched before ":(", ":)".
+      const allTokens = [
+        ...Object.keys(onelinerGifsRef.current),
+        ...Object.keys(EMOJI_TOKEN_MAP),
+      ].sort((a, b) => b.length - a.length);
       const gifHeight = 14;
 
       // Calculate total width
@@ -2510,7 +2631,7 @@ const Game = () => {
       while (remaining.length > 0) {
         let earliestIdx = remaining.length;
         let earliestToken = "";
-        for (const token of gifTokens) {
+        for (const token of allTokens) {
           const idx = remaining.indexOf(token);
           if (idx !== -1 && idx < earliestIdx) {
             earliestIdx = idx;
@@ -2519,7 +2640,7 @@ const Game = () => {
         }
         if (earliestToken) {
           totalWidth += ctx.measureText(remaining.substring(0, earliestIdx)).width;
-          totalWidth += gifHeight; // GIF width = height (square)
+          totalWidth += gifHeight; // token slot width = gifHeight (square)
           remaining = remaining.substring(earliestIdx + earliestToken.length);
         } else {
           totalWidth += ctx.measureText(remaining).width;
@@ -2549,19 +2670,20 @@ const Game = () => {
       for (let i = 0; i < 11; i++) {
         ctx.fillRect(0, 18 + i * 2, CANVAS_WIDTH, 1);
       }
-      // Draw text with inline GIFs
+      // Draw text with inline tokens (GIF images and Unicode emoji)
       ctx.globalAlpha = 0.85;
       ctx.shadowColor = "#FFAA00";
       ctx.shadowBlur = 10;
       ctx.fillStyle = "#FFE066";
       ctx.textAlign = "left";
+      ctx.font = "11px 'Press Start 2P', monospace";
 
       let drawX = onelinerMarqueeXRef.current;
       remaining = olText;
       while (remaining.length > 0) {
         let earliestIdx = remaining.length;
         let earliestToken = "";
-        for (const token of gifTokens) {
+        for (const token of allTokens) {
           const idx = remaining.indexOf(token);
           if (idx !== -1 && idx < earliestIdx) {
             earliestIdx = idx;
@@ -2575,8 +2697,17 @@ const Game = () => {
             drawX += ctx.measureText(beforeText).width;
           }
           const gifImg = onelinerGifsRef.current[earliestToken];
-          if (gifImg && gifImg.complete) {
+          if (gifImg && gifImg.complete && gifImg.naturalWidth > 0) {
+            // Render as animated GIF image
             ctx.drawImage(gifImg, drawX, 22, gifHeight, gifHeight);
+          } else {
+            // Render as Unicode emoji character
+            const emojiChar = EMOJI_TOKEN_MAP[earliestToken] ?? earliestToken;
+            ctx.font = `${gifHeight}px serif`;
+            ctx.textBaseline = "top";
+            ctx.fillText(emojiChar, drawX, 22);
+            ctx.textBaseline = "alphabetic";
+            ctx.font = "11px 'Press Start 2P', monospace";
           }
           drawX += gifHeight;
           remaining = remaining.substring(earliestIdx + earliestToken.length);
