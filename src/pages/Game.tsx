@@ -2164,11 +2164,11 @@ const Game = () => {
       ctx.restore();
     });
 
-    // CRT scanline overlay
+    // CRT scanline overlay (lightweight)
     ctx.save();
-    ctx.globalAlpha = 0.04;
+    ctx.globalAlpha = 0.03;
     ctx.fillStyle = "#000000";
-    for (let y = 0; y < CANVAS_HEIGHT; y += 3) {
+    for (let y = 0; y < CANVAS_HEIGHT; y += 6) {
       ctx.fillRect(0, y, CANVAS_WIDTH, 1);
     }
     const gradient = ctx.createRadialGradient(
