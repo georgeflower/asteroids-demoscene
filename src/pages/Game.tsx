@@ -2295,8 +2295,6 @@ const Game = () => {
       const ufoColor = ufo.size === "large" ? theme.enemy : "#FF44FF";
       ctx.strokeStyle = ufoColor;
       ctx.lineWidth = 2;
-      ctx.shadowBlur = 18;
-      ctx.shadowColor = ufoColor;
       const radius = ufo.size === "large" ? 20 : 10;
       ctx.beginPath();
       ctx.ellipse(0, 0, radius, radius / 2, 0, 0, Math.PI * 2);
