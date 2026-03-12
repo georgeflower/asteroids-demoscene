@@ -3042,18 +3042,19 @@ const Game = () => {
 
       // Prevent default browser behavior for arrow keys and game control keys during gameplay
       if (
-        e.key === "ArrowUp" ||
-        e.key === "ArrowDown" ||
-        e.key === "ArrowLeft" ||
-        e.key === "ArrowRight" ||
-        e.key === "w" ||
-        e.key === "W" ||
-        e.key === "a" ||
-        e.key === "A" ||
-        e.key === "s" ||
-        e.key === "S" ||
-        e.key === "d" ||
-        e.key === "D"
+        !showGameOver &&
+        (e.key === "ArrowUp" ||
+          e.key === "ArrowDown" ||
+          e.key === "ArrowLeft" ||
+          e.key === "ArrowRight" ||
+          e.key === "w" ||
+          e.key === "W" ||
+          e.key === "a" ||
+          e.key === "A" ||
+          e.key === "s" ||
+          e.key === "S" ||
+          e.key === "d" ||
+          e.key === "D")
       ) {
         e.preventDefault();
       }
