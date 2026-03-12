@@ -228,7 +228,7 @@ const getTheme = (wave: number): ColorTheme => {
   return COLOR_THEMES[idx];
 };
 
-const getSpeedScale = (wave: number): number => 1 + wave * 0.05;
+const getSpeedScale = (wave: number): number => 1.1 + wave * 0.03;
 
 // Module-level counters written by gameLoop; read by FpsOverlay via polling.
 // Plain object (no React state) so there is zero overhead in Game itself.
