@@ -2490,23 +2490,13 @@ const Game = () => {
       ctx.beginPath();
       ctx.rect(0, CANVAS_HEIGHT - 30, CANVAS_WIDTH, 30);
       ctx.clip();
-      // Demoscene glow backdrop
-      const glowGrad = ctx.createLinearGradient(0, CANVAS_HEIGHT - 30, 0, CANVAS_HEIGHT);
-      glowGrad.addColorStop(0, "rgba(0, 150, 255, 0)");
-      glowGrad.addColorStop(0.5, "rgba(0, 150, 255, 0.15)");
-      glowGrad.addColorStop(1, "rgba(0, 150, 255, 0.05)");
-      ctx.fillStyle = glowGrad;
-      ctx.fillRect(0, CANVAS_HEIGHT - 30, CANVAS_WIDTH, 30);
-      // Scanlines overlay
-      ctx.globalAlpha = 0.07;
-      ctx.fillStyle = "#000000";
-      for (let i = 0; i < 15; i++) {
-        ctx.fillRect(0, CANVAS_HEIGHT - 30 + i * 2, CANVAS_WIDTH, 1);
+      // Demoscene glow backdrop (cached gradient)
+      if (marqueeGradientRef.current) {
+        ctx.fillStyle = marqueeGradientRef.current;
+        ctx.fillRect(0, CANVAS_HEIGHT - 30, CANVAS_WIDTH, 30);
       }
-      // Glow text effect
+      // Glow text effect (no shadowBlur)
       ctx.globalAlpha = 0.85;
-      ctx.shadowColor = "#00CCFF";
-      ctx.shadowBlur = 12;
       ctx.fillStyle = "#AAEEFF";
       ctx.textAlign = "left";
       ctx.fillText(npText, nowPlayingMarqueeXRef.current, CANVAS_HEIGHT - 9);
