@@ -3901,10 +3901,10 @@ const Game = () => {
       </div>
 
       <button
-        onClick={() => navigate("/")}
+        onClick={quitToMenu}
         className="mt-6 px-6 py-2 font-mono text-xs text-[hsl(var(--game-foreground))] opacity-50 hover:opacity-100 transition-opacity uppercase tracking-widest"
       >
-        home page
+        main menu
       </button>
     </div>
   );
