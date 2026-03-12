@@ -2036,7 +2036,7 @@ const Game = () => {
     if (!ship.invulnerable || Math.floor(Date.now() / 100) % 2 === 0) {
       ctx.strokeStyle = color;
       ctx.lineWidth = 2;
-      ctx.shadowBlur = 15;
+      ctx.shadowBlur = 8;
       ctx.shadowColor = color;
       ctx.beginPath();
       ctx.moveTo(SHIP_SIZE, 0);
@@ -2045,13 +2045,9 @@ const Game = () => {
       ctx.lineTo(-SHIP_SIZE, SHIP_SIZE / 2);
       ctx.closePath();
       ctx.stroke();
-      ctx.shadowBlur = 25;
-      ctx.globalAlpha = 0.3;
-      ctx.stroke();
-      ctx.globalAlpha = 1;
+      ctx.shadowBlur = 0;
     }
     ctx.restore();
-    // Draw label above ship
     if (label) {
       ctx.save();
       ctx.font = "7px 'Press Start 2P', monospace";
