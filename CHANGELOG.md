@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Fixed
+
+- **Arrow Key Scrolling**: Arrow keys (Up, Down, Left, Right) and WASD keys no longer scroll the browser page while the game canvas is focused, including during active gameplay and when the pause menu is open. Normal browser scrolling is restored when the game no longer has focus (for example, after clicking outside the canvas or switching tabs).
+
 ## 🚀 v0.1.4 — UI/UX Polish & HUD Improvements
 
 ## Summary Table
