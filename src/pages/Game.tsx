@@ -2156,8 +2156,6 @@ const Game = () => {
         ctx.strokeStyle = "#44FF44";
         ctx.fillStyle = "#115511";
         ctx.lineWidth = 2;
-        ctx.shadowBlur = 12;
-        ctx.shadowColor = "#44FF44";
         ctx.beginPath();
         ctx.arc(0, -8, 6, 0, Math.PI * 2);
         ctx.fill();
