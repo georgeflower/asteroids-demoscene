@@ -2693,11 +2693,9 @@ const Game = () => {
 
     draw();
 
-    // FPS tracking for debug overlay – writes to module-level counters (no setState)
-    if (DEBUG_ENABLED) {
-      _fps.frames++;
-      _fps.updates += updatesThisFrame;
-    }
+    // FPS tracking for overlay – writes to module-level counters (no setState)
+    _fps.frames++;
+    _fps.updates += updatesThisFrame;
 
     animationFrameRef.current = requestAnimationFrame(gameLoop);
   }, [update, updateDuel, draw, updateOnlineVisuals, multiplayer.sendInputs]);
