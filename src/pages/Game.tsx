@@ -316,6 +316,67 @@ const Game = () => {
   const nowPlayingMarqueeXRef = useRef<number>(CANVAS_WIDTH);
   const onelinerMarqueeXRef = useRef<number>(CANVAS_WIDTH);
 
+  // Cached offscreen canvases & gradients for performance
+  const scanlineCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const menuScanlineCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const vignetteGradientRef = useRef<CanvasGradient | null>(null);
+  const menuVignetteGradientRef = useRef<CanvasGradient | null>(null);
+  const marqueeGradientRef = useRef<CanvasGradient | null>(null);
+  const olMarqueeGradientRef = useRef<CanvasGradient | null>(null);
+  const cachedCanvasSize = useRef<{ w: number; h: number }>({ w: 0, h: 0 });
+
+  // Build or rebuild cached overlays when canvas size changes
+  const ensureCachedOverlays = useCallback((ctx: CanvasRenderingContext2D) => {
+    const w = CANVAS_WIDTH;
+    const h = CANVAS_HEIGHT;
+    if (cachedCanvasSize.current.w === w && cachedCanvasSize.current.h === h && scanlineCanvasRef.current) return;
+    cachedCanvasSize.current = { w, h };
+
+    // Main CRT scanline overlay (every 4px)
+    const sc = document.createElement("canvas");
+    sc.width = w;
+    sc.height = h;
+    const sctx = sc.getContext("2d")!;
+    sctx.fillStyle = "#000000";
+    for (let y = 0; y < h; y += 4) {
+      sctx.fillRect(0, y, w, 1);
+    }
+    scanlineCanvasRef.current = sc;
+
+    // Menu scanline overlay (every 6px)
+    const msc = document.createElement("canvas");
+    msc.width = w;
+    msc.height = h;
+    const msctx = msc.getContext("2d")!;
+    msctx.fillStyle = "#000000";
+    for (let y = 0; y < h; y += 6) {
+      msctx.fillRect(0, y, w, 1);
+    }
+    menuScanlineCanvasRef.current = msc;
+
+    // Main vignette gradient
+    vignetteGradientRef.current = ctx.createRadialGradient(w / 2, h / 2, h * 0.35, w / 2, h / 2, h * 0.9);
+    vignetteGradientRef.current.addColorStop(0, "rgba(0,0,0,0)");
+    vignetteGradientRef.current.addColorStop(1, "rgba(0,0,0,0.35)");
+
+    // Menu vignette gradient
+    menuVignetteGradientRef.current = ctx.createRadialGradient(w / 2, h / 2, h * 0.4, w / 2, h / 2, h * 0.8);
+    menuVignetteGradientRef.current.addColorStop(0, "rgba(0,0,0,0)");
+    menuVignetteGradientRef.current.addColorStop(1, "rgba(0,0,0,0.3)");
+
+    // Now-playing marquee gradient
+    marqueeGradientRef.current = ctx.createLinearGradient(0, h - 30, 0, h);
+    marqueeGradientRef.current.addColorStop(0, "rgba(0, 150, 255, 0)");
+    marqueeGradientRef.current.addColorStop(0.5, "rgba(0, 150, 255, 0.15)");
+    marqueeGradientRef.current.addColorStop(1, "rgba(0, 150, 255, 0.05)");
+
+    // Oneliner marquee gradient
+    olMarqueeGradientRef.current = ctx.createLinearGradient(0, 18, 0, 40);
+    olMarqueeGradientRef.current.addColorStop(0, "rgba(255, 180, 0, 0)");
+    olMarqueeGradientRef.current.addColorStop(0.5, "rgba(255, 180, 0, 0.12)");
+    olMarqueeGradientRef.current.addColorStop(1, "rgba(255, 180, 0, 0)");
+  }, []);
+
   // Debug system state (only active when DEBUG_ENABLED is true)
   const [debugLogs, setDebugLogs] = useState<DebugLogEntry[]>([]);
   const debugLogsRef = useRef<DebugLogEntry[]>([]);
