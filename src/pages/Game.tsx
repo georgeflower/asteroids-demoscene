@@ -518,7 +518,8 @@ const Game = () => {
       // Trainer mode: don't save scores
       if (DEBUG_ENABLED && trainerModeRef.current) {
         console.log("Trainer mode: score not saved");
-        return true; // Consider it successful for trainer mode
+        // Return true to close dialog and proceed - trainer mode is for practice only
+        return true;
       }
       
       if (!gameSessionTokenRef.current) {
@@ -558,6 +559,9 @@ const Game = () => {
           // Log duplicate score detection - UI could be enhanced with toast notification
           if (response.status === 409) {
             console.warn("Duplicate score detected:", result.error);
+            // Refresh leaderboard to show current standings
+            const board = await loadLeaderboard();
+            setLeaderboard(board);
             // For duplicate scores, consider it successful since the score is already there
             return true;
           }
