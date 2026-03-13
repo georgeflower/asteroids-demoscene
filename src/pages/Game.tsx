@@ -3276,15 +3276,16 @@ const Game = () => {
           // When paused, handle pause menu
           if (isPausedRef.current) {
             if (justUp || justDown) {
-              setPauseSelection((s) => (s === 0 ? 1 : 0));
+              setPauseSelection((s) => {
+                if (justUp) return (s - 1 + 3) % 3;
+                return (s + 1) % 3;
+              });
             }
             if (justA) {
               setPauseSelection((s) => {
                 if (s === 0) resumeGame();
-                else {
-                  resumeGame();
-                  quitToMenu();
-                }
+                else if (s === 1) { resumeGame(); setShowSettings(true); }
+                else { resumeGame(); quitToMenu(); }
                 return s;
               });
             }
