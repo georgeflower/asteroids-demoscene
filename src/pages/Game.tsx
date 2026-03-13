@@ -267,6 +267,19 @@ function FpsOverlay() {
   );
 }
 
+// Profanity filter - list of inappropriate initials that should be rejected
+const BANNED_INITIALS = new Set([
+  'ASS', 'FUK', 'FUC', 'FCK', 'SHT', 'DMN', 'HEL', 'DIE',
+  'KKK', 'SEX', 'XXX', 'WTF', 'FAG', 'GAY', 'DIK', 'COK',
+  'PIS', 'CUM', 'TIT', 'VAG', 'PUS', 'CNT', 'FCU', 'FKU',
+  'SHI', 'POO', 'PEE', 'BTH', 'BTC', 'WTH', 'OMG', 'JFC',
+  'GDM', 'SLT', 'HOR', 'BAD', 'EVL', 'HAT', 'DIE', 'KIL'
+]);
+
+function isInitialsAppropriate(initials: string): boolean {
+  return !BANNED_INITIALS.has(initials.toUpperCase());
+}
+
 const Game = () => {
   const navigate = useNavigate();
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -284,6 +297,7 @@ const Game = () => {
   const [showLeaderboard, setShowLeaderboard] = useState(false);
   const [enteringInitials, setEnteringInitials] = useState(false);
   const [initials, setInitials] = useState("");
+  const [initialsError, setInitialsError] = useState("");
   const [leaderboard, setLeaderboard] = useState<{ initials: string; score: number; date: string }[]>([]);
   const [hallOfFame, setHallOfFame] = useState<{ initials: string; score: number; date: string }[]>([]);
   const [oldLeaderboard, setOldLeaderboard] = useState<{ initials: string; score: number; date: string }[]>([]);
@@ -534,6 +548,12 @@ const Game = () => {
         
         if (!response.ok) {
           console.error("Failed to save score:", result.error || "Unknown error");
+          // Handle inappropriate initials error
+          if (response.status === 400 && result.error === 'Please choose different initials') {
+            setInitialsError(result.error);
+            setEnteringInitials(true); // Keep the initials entry form open
+            return;
+          }
           // Log duplicate score detection - UI could be enhanced with toast notification
           if (response.status === 409) {
             console.warn("Duplicate score detected:", result.error);
@@ -816,6 +836,7 @@ const Game = () => {
     setShowGameOver(false);
     setEnteringInitials(false);
     setInitials("");
+    setInitialsError("");
     setShowLeaderboard(false);
     setShowLifeLost(false);
     showLifeLostRef.current = false;
@@ -3813,14 +3834,27 @@ const Game = () => {
             {enteringInitials && (
               <div className="mb-4 flex flex-col items-center gap-2">
                 <div className="text-lg font-mono text-[hsl(var(--game-glow))]">NEW HIGH SCORE! ENTER INITIALS:</div>
+                {initialsError && (
+                  <div className="text-sm font-mono text-[hsl(var(--game-danger))] animate-pulse">
+                    {initialsError}
+                  </div>
+                )}
                 <div className="flex gap-2 items-center">
                   <input
                     type="text"
                     maxLength={3}
                     value={initials}
-                    onChange={(e) => setInitials(e.target.value.toUpperCase().replace(/[^A-Z]/g, ""))}
+                    onChange={(e) => {
+                      const newInitials = e.target.value.toUpperCase().replace(/[^A-Z]/g, "");
+                      setInitials(newInitials);
+                      setInitialsError(""); // Clear error on change
+                      // Provide immediate feedback for inappropriate initials
+                      if (newInitials.length > 0 && !isInitialsAppropriate(newInitials)) {
+                        setInitialsError("Please choose different initials");
+                      }
+                    }}
                     onKeyDown={(e) => {
-                      if (e.key === "Enter" && initials.length > 0) {
+                      if (e.key === "Enter" && initials.length > 0 && !initialsError) {
                         saveToLeaderboard(initials, displayScore);
                         setEnteringInitials(false);
                       }
@@ -3832,12 +3866,13 @@ const Game = () => {
                   />
                   <Button
                     onClick={() => {
-                      if (initials.length > 0) {
+                      if (initials.length > 0 && !initialsError) {
                         saveToLeaderboard(initials, displayScore);
                         setEnteringInitials(false);
                       }
                     }}
-                    className="bg-[hsl(var(--game-foreground))] text-[hsl(var(--game-background))] hover:bg-[hsl(var(--game-glow))] font-mono"
+                    disabled={initials.length === 0 || !!initialsError}
+                    className="bg-[hsl(var(--game-foreground))] text-[hsl(var(--game-background))] hover:bg-[hsl(var(--game-glow))] font-mono disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     OK
                   </Button>

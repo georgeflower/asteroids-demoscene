@@ -39,6 +39,19 @@ const MIN_SUBMISSION_INTERVAL = 5000; // 5 seconds between submissions
 // Score validation
 const MAX_VALID_SCORE = 99999999; // Maximum score that can be submitted
 
+// Profanity filter - list of inappropriate initials that should be rejected
+const BANNED_INITIALS = new Set([
+  'ASS', 'FUK', 'FUC', 'FCK', 'SHT', 'DMN', 'HEL', 'DIE',
+  'KKK', 'SEX', 'XXX', 'WTF', 'FAG', 'GAY', 'DIK', 'COK',
+  'PIS', 'CUM', 'TIT', 'VAG', 'PUS', 'CNT', 'FCU', 'FKU',
+  'SHI', 'POO', 'PEE', 'BTH', 'BTC', 'WTH', 'OMG', 'JFC',
+  'GDM', 'SLT', 'HOR', 'BAD', 'EVL', 'HAT', 'DIE', 'KIL'
+]);
+
+function isInitialsAppropriate(initials: string): boolean {
+  return !BANNED_INITIALS.has(initials.toUpperCase());
+}
+
 function generateSessionToken(): string {
   return crypto.randomUUID();
 }
@@ -151,6 +164,14 @@ Deno.serve(async (req) => {
       if (!initialsRegex.test(submission.initials)) {
         return new Response(
           JSON.stringify({ error: 'Invalid initials format' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      
+      // Check for inappropriate initials
+      if (!isInitialsAppropriate(submission.initials)) {
+        return new Response(
+          JSON.stringify({ error: 'Please choose different initials' }),
           { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
