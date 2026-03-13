@@ -13,6 +13,7 @@ Features:
 - In-game changelog viewer (monospace overlay)
 - Optimised canvas rendering for stable 60 FPS
 - Delta-time game loop for consistent speed across all hardware
+- Secure highscore submission with server-side validation (see SECURITY.md)
 
 Thanks to Nectarine Demoscene Radio for the music!
 Streaming demoscene & chiptune tracks 24/7
