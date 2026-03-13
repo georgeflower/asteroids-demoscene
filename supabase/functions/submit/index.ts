@@ -24,26 +24,25 @@ interface GameSession {
 }
 
 // In-memory store for game sessions
-// LIMITATION: This will reset on function cold starts (~15-30 minutes of inactivity).
-// MITIGATION: Sessions are auto-recreated when a valid UUID token is submitted after a cold start,
-// allowing legitimate score submissions to succeed. For production with high traffic,
-// consider implementing persistent storage:
-// - Use a Supabase table with TTL/cleanup job
-// - Use Redis for distributed caching
-// - Use Deno KV for edge-native key-value storage
 const gameSessions = new Map<string, GameSession>();
 
 const MAX_SUBMISSIONS_PER_SESSION = 10;
 const SESSION_TIMEOUT = 3600000;
 const MIN_SUBMISSION_INTERVAL = 5000;
 const MAX_VALID_SCORE = 99999999;
+// Max ~200 points per second of actual play time (server-verified)
+const MAX_SCORE_PER_SECOND = 200;
+// Max ~20000 points per level
+const MAX_SCORE_PER_LEVEL = 20000;
+// Minimum play time in seconds before a score can be submitted
+const MIN_PLAY_TIME_SECONDS = 10;
 
 const BANNED_INITIALS = new Set([
   'ASS', 'FUK', 'FUC', 'FCK', 'SHT', 'DMN', 'HEL', 'DIE',
   'KKK', 'SEX', 'XXX', 'WTF', 'FAG', 'GAY', 'DIK', 'COK',
   'PIS', 'CUM', 'TIT', 'VAG', 'PUS', 'CNT', 'FCU', 'FKU',
   'SHI', 'POO', 'PEE', 'BTH', 'BTC', 'WTH', 'OMG', 'JFC',
-  'GDM', 'SLT', 'HOR', 'BAD', 'EVL', 'HAT', 'KIL'
+  'GDM', 'SLT', 'HOR', 'BAD', 'EVL', 'HAT', 'KIL', 'BUT'
 ]);
 
 function isInitialsAppropriate(initials: string): boolean {
@@ -57,17 +56,13 @@ function generateSessionToken(): string {
 function validateSession(token: string, score: number): { valid: boolean; error?: string; session?: GameSession } {
   let session = gameSessions.get(token);
   
-  // If session not found, check if token is a valid UUID and auto-recreate it
-  // This handles cold starts where the in-memory Map is cleared
   if (!session) {
-    // Validate token is a proper UUID format (version 4)
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
     if (!uuidRegex.test(token)) {
       return { valid: false, error: 'Invalid game session token' };
     }
     
-    // Auto-recreate session to handle cold starts gracefully
-    // This allows legitimate submissions to succeed even after function restarts
+    // Auto-recreate session for cold starts
     console.log('Session not found in memory, auto-recreating for token:', token);
     session = {
       token,
@@ -79,7 +74,6 @@ function validateSession(token: string, score: number): { valid: boolean; error?
     gameSessions.set(token, session);
   }
   
-  // Check session timeout
   if (Date.now() - session.startTime > SESSION_TIMEOUT) {
     gameSessions.delete(token);
     return { valid: false, error: 'Game session expired' };
@@ -95,6 +89,32 @@ function validateSession(token: string, score: number): { valid: boolean; error?
     return { valid: false, error: 'Invalid score range' };
   }
   return { valid: true, session };
+}
+
+// Validate score plausibility using SERVER-SIDE elapsed time
+function validateScorePlausibility(score: number, serverTimePlayedSeconds: number, level?: number): { valid: boolean; error?: string } {
+  // Must have played for minimum duration
+  if (serverTimePlayedSeconds < MIN_PLAY_TIME_SECONDS) {
+    return { valid: false, error: 'Game duration too short' };
+  }
+  
+  // Score vs server-verified time (unforgeable)
+  const maxScoreForTime = serverTimePlayedSeconds * MAX_SCORE_PER_SECOND;
+  if (score > maxScoreForTime) {
+    console.log(`Score plausibility fail: score=${score}, time=${serverTimePlayedSeconds}s, max=${maxScoreForTime}`);
+    return { valid: false, error: 'Score too high for game duration' };
+  }
+
+  if (level !== undefined && level !== null) {
+    if (level < 1 || level > 100) return { valid: false, error: 'Invalid level value' };
+    const maxScoreForLevel = level * MAX_SCORE_PER_LEVEL;
+    if (score > maxScoreForLevel) {
+      console.log(`Score plausibility fail: score=${score}, level=${level}, max=${maxScoreForLevel}`);
+      return { valid: false, error: 'Score too high for reported level' };
+    }
+  }
+
+  return { valid: true };
 }
 
 async function checkDuplicateScore(
@@ -115,24 +135,6 @@ async function checkDuplicateScore(
     return false;
   }
   return data && data.length > 0;
-}
-
-// Validate that score is plausible given level and time played
-function validateScorePlausibility(score: number, level?: number, timePlayedSeconds?: number): { valid: boolean; error?: string } {
-  if (level !== undefined) {
-    if (level < 1 || level > 100) return { valid: false, error: 'Invalid level value' };
-    // A very high score on level 1 is suspicious
-    const maxScoreForLevel = level * 50000;
-    if (score > maxScoreForLevel) return { valid: false, error: 'Score too high for reported level' };
-  }
-  if (timePlayedSeconds !== undefined) {
-    if (timePlayedSeconds < 5) return { valid: false, error: 'Game duration too short' };
-    if (timePlayedSeconds > 36000) return { valid: false, error: 'Invalid game duration' };
-    // Max ~1000 points per second is generous
-    const maxScoreForTime = timePlayedSeconds * 1000;
-    if (score > maxScoreForTime) return { valid: false, error: 'Score too high for game duration' };
-  }
-  return { valid: true };
 }
 
 Deno.serve(async (req) => {
@@ -196,8 +198,13 @@ Deno.serve(async (req) => {
         );
       }
 
-      // Validate score plausibility against level and time
-      const plausibility = validateScorePlausibility(submission.score, submission.level, submission.timePlayedSeconds);
+      const session = sessionValidation.session!;
+
+      // Calculate elapsed time SERVER-SIDE (unforgeable)
+      const serverTimePlayedSeconds = Math.floor((Date.now() - session.startTime) / 1000);
+      
+      // Validate score plausibility using server-calculated time
+      const plausibility = validateScorePlausibility(submission.score, serverTimePlayedSeconds, submission.level);
       if (!plausibility.valid) {
         return new Response(
           JSON.stringify({ error: plausibility.error }),
@@ -215,8 +222,6 @@ Deno.serve(async (req) => {
         );
       }
 
-      const session = sessionValidation.session!;
-
       const isDuplicate = await checkDuplicateScore(supabaseAdmin, submission.initials, submission.score);
       if (isDuplicate) {
         return new Response(
@@ -229,28 +234,18 @@ Deno.serve(async (req) => {
       session.lastScore = submission.score;
       session.lastSubmissionTime = Date.now();
 
+      // Insert score using server-calculated time
       const { data: insertedScore, error } = await supabaseAdmin
         .from('current_high_scores')
         .insert({
           initials: submission.initials,
           score: submission.score,
           level: submission.level ?? 1,
-          time_played_seconds: submission.timePlayedSeconds ?? 0,
+          time_played_seconds: serverTimePlayedSeconds,
           source: source,
         })
         .select('id')
         .single();
-
-      if (!error && insertedScore) {
-        // Store session metadata in separate non-public audit table
-        await supabaseAdmin
-          .from('score_audit_log')
-          .insert({
-            score_id: insertedScore.id,
-            session_token: submission.gameSessionToken,
-            submission_method: 'edge_function',
-          });
-      }
 
       if (error) {
         console.error('Database error:', error);
@@ -258,6 +253,22 @@ Deno.serve(async (req) => {
           JSON.stringify({ error: 'Failed to save score' }),
           { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
+      }
+
+      // Immediately insert audit log (trigger will clean up if this fails)
+      if (insertedScore) {
+        const { error: auditError } = await supabaseAdmin
+          .from('score_audit_log')
+          .insert({
+            score_id: insertedScore.id,
+            session_token: submission.gameSessionToken,
+            submission_method: 'edge_function',
+          });
+        
+        if (auditError) {
+          console.error('Audit log error:', auditError);
+          // Score will be cleaned up by the deferred trigger
+        }
       }
 
       return new Response(
