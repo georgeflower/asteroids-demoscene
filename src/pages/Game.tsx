@@ -763,9 +763,13 @@ const Game = () => {
     };
   };
 
-  const createPowerUp = (x: number, y: number): PowerUp | null => {
+  const createPowerUp = (x: number, y: number, wave: number = 1, extraLivesThisWave: number = 0): PowerUp | null => {
     if (Math.random() > 0.15) return null;
-    const types: PowerUp["type"][] = ["shield", "rapidFire", "extraLife", "multiplier"];
+    let types: PowerUp["type"][] = ["shield", "rapidFire", "extraLife", "multiplier"];
+    const maxExtraLives = wave <= 3 ? 1 : wave <= 6 ? 2 : 3;
+    if (extraLivesThisWave >= maxExtraLives) {
+      types = types.filter(t => t !== "extraLife");
+    }
     const type = types[Math.floor(Math.random() * types.length)];
     return {
       pos: { x, y },
@@ -1900,10 +1904,14 @@ const Game = () => {
       powerUp.lifetime--;
 
       if (checkCollision(powerUp.pos, 15, state.ship.pos, SHIP_SIZE)) {
+        const maxExtraLivesCap = state.wave <= 3 ? 1 : state.wave <= 6 ? 2 : 3;
+        const extraLifeCapped = powerUp.type === "extraLife" && state.extraLivesThisWave >= maxExtraLivesCap;
         const powerUpLabels: Record<string, { text: string; color: string }> = {
           shield: { text: "SHIELD!", color: "#7FFF7F" },
           rapidFire: { text: "RAPID FIRE!", color: "#FF6666" },
-          extraLife: { text: "+1 LIFE!", color: "#CC66FF" },
+          extraLife: extraLifeCapped
+            ? { text: "MAX EXTRA LIVES!", color: "#888888" }
+            : { text: "+1 LIFE!", color: "#CC66FF" },
           multiplier: { text: "2x SCORE!", color: "#FFFF66" },
         };
         const label = powerUpLabels[powerUp.type];
@@ -2010,7 +2018,7 @@ const Game = () => {
             soundEffects.smallExplode();
           }
 
-          const powerUp = createPowerUp(asteroid.pos.x, asteroid.pos.y);
+          const powerUp = createPowerUp(asteroid.pos.x, asteroid.pos.y, state.wave, state.extraLivesThisWave);
           if (powerUp) state.powerUps.push(powerUp);
           return false;
         }
@@ -2035,7 +2043,7 @@ const Game = () => {
           soundEffects.explode();
           spawnFloatingText(ufo.pos, `+${pts}`, "#FFFF66", 18);
           spawnExplosion(ufo.pos, "#FFFF66", 15);
-          const powerUp = createPowerUp(ufo.pos.x, ufo.pos.y);
+          const powerUp = createPowerUp(ufo.pos.x, ufo.pos.y, state.wave, state.extraLivesThisWave);
           if (powerUp) state.powerUps.push(powerUp);
           return false;
         }
@@ -2061,7 +2069,7 @@ const Game = () => {
             const color = alien.type === "brown" ? "#AA6633" : "#44FF44";
             spawnFloatingText(alien.pos, `+${pts}`, color, 16);
             spawnExplosion(alien.pos, color, 12);
-            const powerUp = createPowerUp(alien.pos.x, alien.pos.y);
+            const powerUp = createPowerUp(alien.pos.x, alien.pos.y, state.wave, state.extraLivesThisWave);
             if (powerUp) state.powerUps.push(powerUp);
             return false;
           } else {
@@ -2093,12 +2101,16 @@ const Game = () => {
             spawnExplosion(state.boss!.pos, "#FFFF44", 20);
             soundEffects.explode();
 
-            const types: PowerUp["type"][] = ["shield", "rapidFire", "extraLife", "multiplier"];
+            let bossDropTypes: PowerUp["type"][] = ["shield", "rapidFire", "extraLife", "multiplier"];
+            const bossMaxExtra = state.wave <= 3 ? 1 : state.wave <= 6 ? 2 : 3;
+            if (state.extraLivesThisWave >= bossMaxExtra) {
+              bossDropTypes = bossDropTypes.filter(t => t !== "extraLife");
+            }
             state.powerUps.push({
               pos: { ...state.boss!.pos },
               vel: { x: Math.random() - 0.5, y: Math.random() - 0.5 },
               rotation: 0,
-              type: types[Math.floor(Math.random() * types.length)],
+              type: bossDropTypes[Math.floor(Math.random() * bossDropTypes.length)],
               lifetime: 600,
             });
 
