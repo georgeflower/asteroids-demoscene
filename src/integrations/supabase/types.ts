@@ -19,19 +19,34 @@ export type Database = {
           created_at: string
           id: string
           initials: string
+          level: number | null
           score: number
+          session_token: string | null
+          source: string | null
+          submission_method: string | null
+          time_played_seconds: number | null
         }
         Insert: {
           created_at?: string
           id?: string
           initials: string
+          level?: number | null
           score: number
+          session_token?: string | null
+          source?: string | null
+          submission_method?: string | null
+          time_played_seconds?: number | null
         }
         Update: {
           created_at?: string
           id?: string
           initials?: string
+          level?: number | null
           score?: number
+          session_token?: string | null
+          source?: string | null
+          submission_method?: string | null
+          time_played_seconds?: number | null
         }
         Relationships: []
       }
