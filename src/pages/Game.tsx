@@ -3579,8 +3579,8 @@ const Game = () => {
         )}
 
         <div className="text-[hsl(var(--game-foreground))] font-mono text-xs space-y-1 opacity-60 text-center">
-          <div>SOLO: Arrow Keys + Space + Ctrl | Gamepad supported</div>
-          <div>DUEL: P1 Arrows+Space | P2 WASD+E | Gamepads 1 & 2</div>
+          <div>SOLO: {displayKeyName(controlBindingsRef.current.p1.left)}{displayKeyName(controlBindingsRef.current.p1.right)}{displayKeyName(controlBindingsRef.current.p1.thrust)} + {displayKeyName(controlBindingsRef.current.p1.fire)} + {displayKeyName(controlBindingsRef.current.p1.hyperspace)} | Gamepad supported</div>
+          <div>DUEL: P1 {displayKeyName(controlBindingsRef.current.p1.left)}{displayKeyName(controlBindingsRef.current.p1.right)}{displayKeyName(controlBindingsRef.current.p1.thrust)}+{displayKeyName(controlBindingsRef.current.p1.fire)} | P2 {displayKeyName(controlBindingsRef.current.p2.left)}{displayKeyName(controlBindingsRef.current.p2.right)}{displayKeyName(controlBindingsRef.current.p2.thrust)}+{displayKeyName(controlBindingsRef.current.p2.fire)} | Gamepads 1 & 2</div>
           <div>ONLINE: Create or join a room to duel remotely</div>
         </div>
 
