@@ -284,6 +284,9 @@ const Game = () => {
   const [enteringInitials, setEnteringInitials] = useState(false);
   const [initials, setInitials] = useState("");
   const [leaderboard, setLeaderboard] = useState<{ initials: string; score: number; date: string }[]>([]);
+  const [hallOfFame, setHallOfFame] = useState<{ initials: string; score: number; date: string }[]>([]);
+  const [oldLeaderboard, setOldLeaderboard] = useState<{ initials: string; score: number; date: string }[]>([]);
+  const [showOldLeaderboard, setShowOldLeaderboard] = useState(false);
   const [showLifeLost, setShowLifeLost] = useState(false);
   const showLifeLostRef = useRef(false);
   const [isTouchDevice, setIsTouchDevice] = useState(false);
@@ -420,10 +423,42 @@ const Game = () => {
 
   const loadLeaderboard = useCallback(async () => {
     const { data, error } = await supabase
-      .from("high_scores")
+      .from("current_high_scores")
       .select("initials, score, created_at")
       .order("score", { ascending: false })
       .limit(10);
+    if (!error && data) {
+      return data.map((row) => ({
+        initials: row.initials,
+        score: row.score,
+        date: new Date(row.created_at).toLocaleDateString(),
+      }));
+    }
+    return [];
+  }, []);
+
+  const loadHallOfFame = useCallback(async () => {
+    const { data, error } = await supabase
+      .from("high_scores")
+      .select("initials, score, created_at")
+      .order("score", { ascending: false })
+      .limit(3);
+    if (!error && data) {
+      return data.map((row) => ({
+        initials: row.initials,
+        score: row.score,
+        date: new Date(row.created_at).toLocaleDateString(),
+      }));
+    }
+    return [];
+  }, []);
+
+  const loadOldLeaderboard = useCallback(async () => {
+    const { data, error } = await supabase
+      .from("high_scores")
+      .select("initials, score, created_at")
+      .order("score", { ascending: false })
+      .limit(30);
     if (!error && data) {
       return data.map((row) => ({
         initials: row.initials,
@@ -441,7 +476,7 @@ const Game = () => {
         console.log("Trainer mode: score not saved");
         return;
       }
-      const { error } = await supabase.from("high_scores").insert({ initials: playerInitials.toUpperCase(), score });
+      const { error } = await supabase.from("current_high_scores").insert({ initials: playerInitials.toUpperCase(), score });
       if (error) {
         console.error("Failed to save score online");
         return;
@@ -461,7 +496,8 @@ const Game = () => {
 
   useEffect(() => {
     loadLeaderboard().then(setLeaderboard);
-  }, [loadLeaderboard]);
+    loadHallOfFame().then(setHallOfFame);
+  }, [loadLeaderboard, loadHallOfFame]);
 
   const createStars = (): Star[] => {
     const stars: Star[] = [];
@@ -3253,9 +3289,9 @@ const Game = () => {
           </Button>
         </div>
 
-        {/* Top 3 High Scores */}
+        {/* Top 3 High Scores (current) */}
         {leaderboard.length > 0 && (
-          <div className="mb-8 w-72">
+          <div className="mb-4 w-72">
             <div
               className="text-sm font-mono text-[hsl(var(--game-glow))] text-center mb-2 tracking-wider"
               style={{ textShadow: "0 0 10px hsl(var(--game-glow))" }}
@@ -3286,10 +3322,68 @@ const Game = () => {
             >
               VIEW ALL SCORES ▸
             </button>
+            <button
+              onClick={() => {
+                loadOldLeaderboard().then(setOldLeaderboard);
+                setShowOldLeaderboard(true);
+              }}
+              className="w-full font-mono text-[10px] text-[hsl(var(--game-foreground))] opacity-50 hover:opacity-100 transition-opacity uppercase tracking-widest text-center py-1"
+            >
+              OLD HIGHSCORES ▸
+            </button>
           </div>
         )}
 
-        {/* Full leaderboard overlay */}
+        {/* Hall of Fame (top 3 from old/archive high_scores) */}
+        {hallOfFame.length > 0 && (
+          <div className="mb-8 w-72">
+            <div
+              className="text-sm font-mono text-[#FFD700] text-center mb-2 tracking-wider"
+              style={{ textShadow: "0 0 10px #FFD700" }}
+            >
+              ★ HALL OF FAME ★
+            </div>
+            <div className="border border-[#FFD700]/30 p-2">
+              {hallOfFame.map((entry, i) => {
+                const initialsDisplay = entry.initials.padEnd(3, " ");
+                let link: string | null = null;
+                if (entry.initials.toUpperCase() === "LW") link = "https://scenestream.net/demovibes/user/LittleWhite/";
+                if (entry.initials.toUpperCase() === "MBD") link = "https://scenestream.net/demovibes/user/mirrorbird/";
+                return (
+                  <div
+                    key={i}
+                    className="flex justify-between font-mono text-sm py-0.5 text-[hsl(var(--game-foreground))]"
+                  >
+                    <span
+                      className={i === 0 ? "text-[#FFD700]" : i === 1 ? "text-[#C0C0C0]" : "text-[#CD7F32]"}
+                      style={{ whiteSpace: "pre" }}
+                    >
+                      {(i + 1).toString().padStart(2, " ")}.{" "}
+                      {link ? (
+                        <a
+                          href={link}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="underline hover:opacity-80 transition-opacity"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          {initialsDisplay}
+                        </a>
+                      ) : (
+                        initialsDisplay
+                      )}
+                    </span>
+                    <span className={i === 0 ? "text-[#FFD700]" : i === 1 ? "text-[#C0C0C0]" : "text-[#CD7F32]"}>
+                      {entry.score.toString().padStart(8, "0")}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Full leaderboard overlay (current scores) */}
         {showFullLeaderboard && (
           <div
             className="fixed inset-0 z-50 flex items-center justify-center bg-black/85"
@@ -3318,6 +3412,61 @@ const Game = () => {
               ))}
               <button
                 onClick={() => setShowFullLeaderboard(false)}
+                className="w-full mt-4 font-mono text-xs text-[hsl(var(--game-foreground))] opacity-60 hover:opacity-100 transition-opacity uppercase tracking-widest text-center py-2 border border-[hsl(var(--game-foreground))]/30"
+              >
+                CLOSE
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Old highscores overlay */}
+        {showOldLeaderboard && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/85"
+            onClick={() => setShowOldLeaderboard(false)}
+          >
+            <div
+              className="bg-[hsl(var(--game-background))] border-2 border-[hsl(var(--game-foreground))]/40 p-6 max-w-sm w-full max-h-[80vh] overflow-auto"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div
+                className="text-lg font-mono text-[#FFD700] text-center mb-4 tracking-wider"
+                style={{ textShadow: "0 0 10px #FFD700" }}
+              >
+                ★ OLD HIGHSCORES ★
+              </div>
+              {oldLeaderboard.map((entry, i) => {
+                let link: string | null = null;
+                if (entry.initials.toUpperCase() === "LW") link = "https://scenestream.net/demovibes/user/LittleWhite/";
+                if (entry.initials.toUpperCase() === "MBD") link = "https://scenestream.net/demovibes/user/mirrorbird/";
+                return (
+                  <div
+                    key={i}
+                    className="flex justify-between font-mono text-sm py-0.5 text-[hsl(var(--game-foreground))]"
+                  >
+                    <span style={{ whiteSpace: "pre" }}>
+                      {(i + 1).toString().padStart(2, " ")}.{" "}
+                      {link ? (
+                        <a
+                          href={link}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="underline hover:opacity-80 transition-opacity"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          {entry.initials.padEnd(3, " ")}
+                        </a>
+                      ) : (
+                        entry.initials.padEnd(3, " ")
+                      )}
+                    </span>
+                    <span>{entry.score.toString().padStart(8, "0")}</span>
+                  </div>
+                );
+              })}
+              <button
+                onClick={() => setShowOldLeaderboard(false)}
                 className="w-full mt-4 font-mono text-xs text-[hsl(var(--game-foreground))] opacity-60 hover:opacity-100 transition-opacity uppercase tracking-widest text-center py-2 border border-[hsl(var(--game-foreground))]/30"
               >
                 CLOSE

@@ -14,6 +14,27 @@ export type Database = {
   }
   public: {
     Tables: {
+      current_high_scores: {
+        Row: {
+          created_at: string
+          id: string
+          initials: string
+          score: number
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          initials: string
+          score: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          initials?: string
+          score?: number
+        }
+        Relationships: []
+      }
       high_scores: {
         Row: {
           created_at: string
