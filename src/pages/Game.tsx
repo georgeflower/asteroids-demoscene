@@ -744,6 +744,7 @@ const Game = () => {
       alienSpawnTimer: 600,
       bossDefeated: false,
       pendingNextWave: false,
+      extraLivesThisWave: 0,
     };
 
     duelStateRef.current = null;
