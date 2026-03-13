@@ -79,8 +79,7 @@ function validateSession(token: string, score: number): { valid: boolean; error?
     gameSessions.set(token, session);
   }
   
-  // Check session timeout (session is already defined above)
-  if (!session) return { valid: false, error: 'Invalid game session token' };
+  // Check session timeout
   if (Date.now() - session.startTime > SESSION_TIMEOUT) {
     gameSessions.delete(token);
     return { valid: false, error: 'Game session expired' };
