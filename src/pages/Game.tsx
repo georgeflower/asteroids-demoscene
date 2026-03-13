@@ -1403,17 +1403,18 @@ const Game = () => {
     const gp0 = readGamepad(0);
     const gp1 = readGamepad(1);
 
-    // P1: Arrow keys or gamepad 0
-    const p1Left = keys["ArrowLeft"] || gp0.left;
-    const p1Right = keys["ArrowRight"] || gp0.right;
-    const p1Up = keys["ArrowUp"] || gp0.up;
-    const p1Fire = keys[" "] || gp0.fire;
+    // P1: Custom keys or gamepad 0
+    const b = controlBindingsRef.current;
+    const p1Left = keys[b.p1.left] || gp0.left;
+    const p1Right = keys[b.p1.right] || gp0.right;
+    const p1Up = keys[b.p1.thrust] || gp0.up;
+    const p1Fire = keys[b.p1.fire] || gp0.fire;
 
-    // P2: WASD or gamepad 1
-    const p2Left = keys["a"] || keys["A"] || gp1.left;
-    const p2Right = keys["d"] || keys["D"] || gp1.right;
-    const p2Up = keys["w"] || keys["W"] || gp1.up;
-    const p2Fire = keys["e"] || keys["E"] || gp1.fire;
+    // P2: Custom keys or gamepad 1
+    const p2Left = keys[b.p2.left] || keys[b.p2.left.toUpperCase()] || gp1.left;
+    const p2Right = keys[b.p2.right] || keys[b.p2.right.toUpperCase()] || gp1.right;
+    const p2Up = keys[b.p2.thrust] || keys[b.p2.thrust.toUpperCase()] || gp1.up;
+    const p2Fire = keys[b.p2.fire] || keys[b.p2.fire.toUpperCase()] || gp1.fire;
 
     // Handle respawn timers
     for (let p = 0; p < 2; p++) {
