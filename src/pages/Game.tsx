@@ -801,11 +801,11 @@ const Game = () => {
       if (gp.buttons[14]?.pressed) result.left = true;
       if (gp.buttons[15]?.pressed) result.right = true;
       if (gp.buttons[12]?.pressed) result.up = true;
-      // Fire = button 0 (A/X), Hyperspace = button 1 (B/Circle)
-      if (gp.buttons[0]?.pressed) result.fire = true;
-      if (gp.buttons[1]?.pressed) result.hyperspace = true;
-      // X button (button 2) = also thrust
-      if (gp.buttons[2]?.pressed) result.up = true;
+      // Fire, Hyperspace, Thrust (alt) - use gamepad bindings
+      const gb = controlBindingsRef.current.gamepad;
+      if (gp.buttons[gb.fire]?.pressed) result.fire = true;
+      if (gp.buttons[gb.hyperspace]?.pressed) result.hyperspace = true;
+      if (gp.buttons[gb.thrust]?.pressed) result.up = true;
     } catch {
       /* no gamepad API */
     }
