@@ -23,7 +23,7 @@ supabase login
 supabase link --project-ref <your-project-ref>
 
 # Deploy the Edge Function
-supabase functions deploy submit-score
+supabase functions deploy submit
 ```
 
 ### 2. Set Environment Variables
@@ -36,7 +36,7 @@ supabase secrets set VITE_APP_URL=https://asteroids-demoscene.lovable.app
 ```
 
 Or via Supabase Dashboard:
-1. Go to Edge Functions → submit-score → Settings
+1. Go to Edge Functions → submit → Settings
 2. Add environment variable: `VITE_APP_URL` = `https://asteroids-demoscene.lovable.app`
 
 ### 3. Run Database Migration
@@ -60,7 +60,7 @@ Test the Edge Function endpoints:
 
 ```bash
 # Test session creation
-curl -X POST https://<your-project-ref>.supabase.co/functions/v1/submit-score/start-session \
+curl -X POST https://<your-project-ref>.supabase.co/functions/v1/submit/start-session \
   -H "Authorization: Bearer <your-anon-key>" \
   -H "Content-Type: application/json"
 
@@ -89,10 +89,10 @@ VITE_SUPABASE_PUBLISHABLE_KEY=<your-anon-key>
 
 ```bash
 # View real-time logs
-supabase functions logs submit-score --tail
+supabase functions logs submit --tail
 
 # Or via Dashboard:
-# Edge Functions → submit-score → Logs
+# Edge Functions → submit → Logs
 ```
 
 ## Verification Checklist

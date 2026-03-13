@@ -59,8 +59,8 @@ Game Client (Browser)
 
 ### Implementation Details
 
-#### Edge Function: `submit-score`
-Located in `/supabase/functions/submit-score/index.ts`
+#### Edge Function: `submit`
+Located in `/supabase/functions/submit/index.ts`
 
 **Endpoints:**
 - `POST /start-session` - Creates a new game session and returns a token
