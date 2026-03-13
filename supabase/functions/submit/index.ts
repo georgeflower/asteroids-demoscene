@@ -98,7 +98,7 @@ function validateSession(token: string, score: number): { valid: boolean; error?
 }
 
 async function checkDuplicateScore(
-  supabaseAdmin: ReturnType<typeof createClient>,
+  supabaseAdmin: any,
   initials: string,
   score: number
 ): Promise<boolean> {
