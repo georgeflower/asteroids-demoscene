@@ -851,6 +851,7 @@ const Game = () => {
     checkVersion();
     // Start a new game session for secure score submission
     startGameSession();
+    gameStartTimeRef.current = Date.now();
     // Game started
     // Focus canvas for input capture
     setTimeout(() => {
