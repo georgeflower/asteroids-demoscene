@@ -1672,10 +1672,10 @@ const Game = () => {
     const theme = getTheme(state.wave);
     const gp0 = readGamepad(0);
 
-    // Update ship — keyboard OR gamepad
-    const p1Left = keysRef.current["ArrowLeft"] || gp0.left;
-    const p1Right = keysRef.current["ArrowRight"] || gp0.right;
-    const p1Up = keysRef.current["ArrowUp"] || gp0.up;
+    const b = controlBindingsRef.current;
+    const p1Left = keysRef.current[b.p1.left] || gp0.left;
+    const p1Right = keysRef.current[b.p1.right] || gp0.right;
+    const p1Up = keysRef.current[b.p1.thrust] || gp0.up;
 
     if (p1Left) state.ship.rotation -= state.ship.rotationSpeed;
     if (p1Right) state.ship.rotation += state.ship.rotationSpeed;
