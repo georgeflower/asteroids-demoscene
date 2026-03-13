@@ -4018,6 +4018,18 @@ const Game = () => {
           </div>
         )}
 
+        {/* Settings overlay (from pause menu) */}
+        {showSettings && (
+          <ControlSettings
+            bindings={controlBindingsRef.current}
+            onSave={(newBindings) => {
+              controlBindingsRef.current = newBindings;
+              setShowSettings(false);
+            }}
+            onClose={() => setShowSettings(false)}
+          />
+        )}
+
         {/* Duel quit button */}
         {(gameMode === "duel" || gameMode === "online") && !isPaused && (
           <div className="absolute top-2 right-2">
