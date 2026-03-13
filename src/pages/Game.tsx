@@ -3989,17 +3989,27 @@ const Game = () => {
                 {pauseSelection === 0 ? "▸ " : "  "}RESUME
               </Button>
               <Button
+                onClick={() => { resumeGame(); setShowSettings(true); }}
+                className={`text-xl px-10 py-5 font-mono tracking-wider transition-all ${
+                  pauseSelection === 1
+                    ? "bg-[hsl(var(--game-foreground))] text-[hsl(var(--game-background))] shadow-[0_0_20px_hsl(var(--game-foreground))]"
+                    : "bg-[hsl(var(--game-foreground))]/20 text-[hsl(var(--game-foreground))] border border-[hsl(var(--game-foreground))]/40"
+                }`}
+              >
+                {pauseSelection === 1 ? "▸ " : "  "}SETTINGS
+              </Button>
+              <Button
                 onClick={() => {
                   resumeGame();
                   quitToMenu();
                 }}
                 className={`text-xl px-10 py-5 font-mono tracking-wider transition-all ${
-                  pauseSelection === 1
+                  pauseSelection === 2
                     ? "bg-[hsl(var(--game-danger))] text-[hsl(var(--game-background))] shadow-[0_0_20px_hsl(var(--game-danger))]"
                     : "bg-[hsl(var(--game-foreground))]/10 text-[hsl(var(--game-foreground))]/60 border border-[hsl(var(--game-foreground))]/20"
                 }`}
               >
-                {pauseSelection === 1 ? "▸ " : "  "}QUIT TO MENU
+                {pauseSelection === 2 ? "▸ " : "  "}QUIT TO MENU
               </Button>
             </div>
             <div className="text-[hsl(var(--game-foreground))] font-mono text-xs opacity-40">
