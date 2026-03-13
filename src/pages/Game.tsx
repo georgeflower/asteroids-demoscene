@@ -3289,16 +3289,17 @@ const Game = () => {
             }
           } else if (gameModeRef.current === "menu") {
             if (justUp) {
-              setMenuSelection((s) => (s - 1 + 3) % 3);
+              setMenuSelection((s) => (s - 1 + 4) % 4);
             }
             if (justDown) {
-              setMenuSelection((s) => (s + 1) % 3);
+              setMenuSelection((s) => (s + 1) % 4);
             }
             if (justA) {
               setMenuSelection((s) => {
                 if (s === 0) initGame();
                 else if (s === 1) initDuel();
-                else setGameMode("online_lobby");
+                else if (s === 2) setGameMode("online_lobby");
+                else setShowSettings(true);
                 return s;
               });
             }
