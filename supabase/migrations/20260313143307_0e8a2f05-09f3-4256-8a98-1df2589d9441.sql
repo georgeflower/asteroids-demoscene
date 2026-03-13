@@ -1,0 +1,1 @@
+DROP POLICY IF EXISTS "Insert current high scores with validation" ON public.current_high_scores;
