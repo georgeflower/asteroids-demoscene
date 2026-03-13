@@ -2069,7 +2069,7 @@ const Game = () => {
             const color = alien.type === "brown" ? "#AA6633" : "#44FF44";
             spawnFloatingText(alien.pos, `+${pts}`, color, 16);
             spawnExplosion(alien.pos, color, 12);
-            const powerUp = createPowerUp(alien.pos.x, alien.pos.y);
+            const powerUp = createPowerUp(alien.pos.x, alien.pos.y, state.wave, state.extraLivesThisWave);
             if (powerUp) state.powerUps.push(powerUp);
             return false;
           } else {
