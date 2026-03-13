@@ -2924,6 +2924,7 @@ const Game = () => {
       ":nectawall:": "/images/nectawall.gif",
       "d^^b": "/images/headphones.gif",
       ":D": "/images/D.gif",
+      ":he-man:": "/images/he-man.gif",
     };
     const imgs: Record<string, HTMLImageElement> = {};
     for (const [key, src] of Object.entries(gifMap)) {
