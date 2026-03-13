@@ -36,11 +36,14 @@ const MAX_SUBMISSIONS_PER_SESSION = 10;
 const SESSION_TIMEOUT = 3600000; // 1 hour
 const MIN_SUBMISSION_INTERVAL = 5000; // 5 seconds between submissions
 
+// Score validation
+const MAX_VALID_SCORE = 99999999; // Maximum score that can be submitted
+
 function generateSessionToken(): string {
   return crypto.randomUUID();
 }
 
-function validateSession(token: string, score: number): { valid: boolean; error?: string } {
+function validateSession(token: string, score: number): { valid: boolean; error?: string; session?: GameSession } {
   const session = gameSessions.get(token);
   
   if (!session) {
@@ -66,11 +69,11 @@ function validateSession(token: string, score: number): { valid: boolean; error?
   
   // Check score progression (score should be >= last score, allowing for game over and restart)
   // Allow score to be 0 or higher, but flag suspicious patterns
-  if (score < 0 || score > 99999999) {
+  if (score < 0 || score > MAX_VALID_SCORE) {
     return { valid: false, error: 'Invalid score range' };
   }
   
-  return { valid: true };
+  return { valid: true, session };
 }
 
 async function checkDuplicateScore(
@@ -159,6 +162,9 @@ Deno.serve(async (req) => {
         );
       }
       
+      // Get the validated session object
+      const session = sessionValidation.session!;
+      
       // Check for duplicate scores
       const isDuplicate = await checkDuplicateScore(
         supabaseAdmin,
@@ -174,7 +180,6 @@ Deno.serve(async (req) => {
       }
       
       // Update session tracking
-      const session = gameSessions.get(submission.gameSessionToken)!;
       session.submissionCount++;
       session.lastScore = submission.score;
       session.lastSubmissionTime = Date.now();
