@@ -3547,8 +3547,8 @@ const Game = () => {
                     </span>
                     <span>{entry.score.toString().padStart(8, "0")}</span>
                   </div>
-                );
-              })}
+                  </div>
+                ))}
               <button
                 onClick={() => setShowOldLeaderboard(false)}
                 className="w-full mt-4 font-mono text-xs text-[hsl(var(--game-foreground))] opacity-60 hover:opacity-100 transition-opacity uppercase tracking-widest text-center py-2 border border-[hsl(var(--game-foreground))]/30"
