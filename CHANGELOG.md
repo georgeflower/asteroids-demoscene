@@ -4,10 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## [0.1.7] - 2026-03-13
 
-### Fixed
+### Added
 
-- **Pause Menu Settings**: Settings overlay now opens correctly from the pause menu; previously it was only rendered in the main menu branch
-- **Pause State Preserved**: Opening settings from the pause menu no longer unpauses the game in the background
+- **Rebindable Controls**: Key bindings for both players can now be customized via the Settings overlay; bindings persist in localStorage
+- **Pause Menu Settings**: Settings overlay now accessible from the pause menu (previously only available from the main menu)
 
 ## [0.1.6] - 2026-03-13
 
