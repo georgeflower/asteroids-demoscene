@@ -3547,7 +3547,6 @@ const Game = () => {
                     </span>
                     <span>{entry.score.toString().padStart(8, "0")}</span>
                   </div>
-                  </div>
                 ))}
               <button
                 onClick={() => setShowOldLeaderboard(false)}
