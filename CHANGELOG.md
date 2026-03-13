@@ -2,6 +2,26 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.5] - 2026-03-13
+
+### Performance
+
+- **Shadow Rendering**: Eliminated ~85 `shadowBlur` calls per frame, reducing to only 2 (ship only). Removed double-stroke glow passes from all game objects
+- **CRT Scanlines**: Pre-rendered scanline pattern to offscreen canvas; single `drawImage` call replaces ~150 individual `fillRect` calls per frame
+- **Gradient Caching**: Vignette, marquee, and backdrop gradients now created once (on resize) and reused each frame instead of being reallocated 60×/sec
+- **Marquee Scanline Cleanup**: Removed redundant scanline sub-loops from Now Playing and oneliner sections
+
+### Added
+
+- **Hall of Fame**: Top 3 all-time scores displayed on the main menu from the archived highscore table, with clickable links for LW (LittleWhite) and MBD (mirrorbird) to their SceneStream profiles
+- **Old Highscores**: Scrollable overlay showing the top 30 archived scores, accessible via "OLD HIGHSCORES ▸" link on the main menu
+- **Highscore Reset**: New active scoreboard (`current_high_scores`) for fresh competition; previous scores preserved in the archive
+
+### Changed
+
+- **Top Scores**: Main menu "TOP SCORES" and "VIEW ALL SCORES" now display scores from the new active table
+- **Score Saving**: New scores are saved to the fresh scoreboard
+
 ## [Unreleased]
 
 ### Fixed
