@@ -21,9 +21,7 @@ export type Database = {
           initials: string
           level: number | null
           score: number
-          session_token: string | null
           source: string | null
-          submission_method: string | null
           time_played_seconds: number | null
         }
         Insert: {
@@ -32,9 +30,7 @@ export type Database = {
           initials: string
           level?: number | null
           score: number
-          session_token?: string | null
           source?: string | null
-          submission_method?: string | null
           time_played_seconds?: number | null
         }
         Update: {
@@ -43,9 +39,7 @@ export type Database = {
           initials?: string
           level?: number | null
           score?: number
-          session_token?: string | null
           source?: string | null
-          submission_method?: string | null
           time_played_seconds?: number | null
         }
         Relationships: []
@@ -70,6 +64,38 @@ export type Database = {
           score?: number
         }
         Relationships: []
+      }
+      score_audit_log: {
+        Row: {
+          created_at: string
+          id: string
+          score_id: string
+          session_token: string | null
+          submission_method: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          score_id: string
+          session_token?: string | null
+          submission_method?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          score_id?: string
+          session_token?: string | null
+          submission_method?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "score_audit_log_score_id_fkey"
+            columns: ["score_id"]
+            isOneToOne: false
+            referencedRelation: "current_high_scores"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {
