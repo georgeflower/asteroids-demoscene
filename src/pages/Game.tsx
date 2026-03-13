@@ -2018,7 +2018,7 @@ const Game = () => {
             soundEffects.smallExplode();
           }
 
-          const powerUp = createPowerUp(asteroid.pos.x, asteroid.pos.y);
+          const powerUp = createPowerUp(asteroid.pos.x, asteroid.pos.y, state.wave, state.extraLivesThisWave);
           if (powerUp) state.powerUps.push(powerUp);
           return false;
         }
