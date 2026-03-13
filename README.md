@@ -10,6 +10,7 @@ Features:
 - Old Highscores archive (top 30, scrollable)
 - Fresh active scoreboard for new competition
 - Optimised canvas rendering for stable 60 FPS
+- Delta-time game loop for consistent speed across all hardware
 
 Thanks to Nectarine Demoscene Radio for the music!
 Streaming demoscene & chiptune tracks 24/7
