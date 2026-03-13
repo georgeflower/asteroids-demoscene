@@ -960,6 +960,7 @@ const Game = () => {
     const state = gameStateRef.current;
 
     state.wave++;
+    state.extraLivesThisWave = 0;
     addDebugLog("wave", `Wave ${state.wave} started`);
     const isBossWave = state.wave % 5 === 0;
 
