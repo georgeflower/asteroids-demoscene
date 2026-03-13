@@ -45,7 +45,7 @@ const BANNED_INITIALS = new Set([
   'KKK', 'SEX', 'XXX', 'WTF', 'FAG', 'GAY', 'DIK', 'COK',
   'PIS', 'CUM', 'TIT', 'VAG', 'PUS', 'CNT', 'FCU', 'FKU',
   'SHI', 'POO', 'PEE', 'BTH', 'BTC', 'WTH', 'OMG', 'JFC',
-  'GDM', 'SLT', 'HOR', 'BAD', 'EVL', 'HAT', 'DIE', 'KIL'
+  'GDM', 'SLT', 'HOR', 'BAD', 'EVL', 'HAT', 'KIL'
 ]);
 
 function isInitialsAppropriate(initials: string): boolean {

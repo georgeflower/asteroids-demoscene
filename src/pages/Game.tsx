@@ -273,7 +273,7 @@ const BANNED_INITIALS = new Set([
   'KKK', 'SEX', 'XXX', 'WTF', 'FAG', 'GAY', 'DIK', 'COK',
   'PIS', 'CUM', 'TIT', 'VAG', 'PUS', 'CNT', 'FCU', 'FKU',
   'SHI', 'POO', 'PEE', 'BTH', 'BTC', 'WTH', 'OMG', 'JFC',
-  'GDM', 'SLT', 'HOR', 'BAD', 'EVL', 'HAT', 'DIE', 'KIL'
+  'GDM', 'SLT', 'HOR', 'BAD', 'EVL', 'HAT', 'KIL'
 ]);
 
 function isInitialsAppropriate(initials: string): boolean {
@@ -3854,9 +3854,16 @@ const Game = () => {
                       }
                     }}
                     onKeyDown={(e) => {
-                      if (e.key === "Enter" && initials.length > 0 && !initialsError) {
-                        saveToLeaderboard(initials, displayScore);
-                        setEnteringInitials(false);
+                      if (e.key === "Enter" && initials.length > 0) {
+                        // Re-validate before submission
+                        if (!isInitialsAppropriate(initials)) {
+                          setInitialsError("Please choose different initials");
+                          return;
+                        }
+                        if (!initialsError) {
+                          saveToLeaderboard(initials, displayScore);
+                          setEnteringInitials(false);
+                        }
                       }
                       e.stopPropagation();
                     }}
@@ -3866,9 +3873,16 @@ const Game = () => {
                   />
                   <Button
                     onClick={() => {
-                      if (initials.length > 0 && !initialsError) {
-                        saveToLeaderboard(initials, displayScore);
-                        setEnteringInitials(false);
+                      if (initials.length > 0) {
+                        // Re-validate before submission
+                        if (!isInitialsAppropriate(initials)) {
+                          setInitialsError("Please choose different initials");
+                          return;
+                        }
+                        if (!initialsError) {
+                          saveToLeaderboard(initials, displayScore);
+                          setEnteringInitials(false);
+                        }
                       }
                     }}
                     disabled={initials.length === 0 || !!initialsError}
