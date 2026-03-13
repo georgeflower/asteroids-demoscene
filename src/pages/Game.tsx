@@ -3855,12 +3855,10 @@ const Game = () => {
                     }}
                     onKeyDown={(e) => {
                       if (e.key === "Enter" && initials.length > 0) {
-                        // Re-validate before submission
+                        // Validate before submission
                         if (!isInitialsAppropriate(initials)) {
                           setInitialsError("Please choose different initials");
-                          return;
-                        }
-                        if (!initialsError) {
+                        } else {
                           saveToLeaderboard(initials, displayScore);
                           setEnteringInitials(false);
                         }
@@ -3874,12 +3872,10 @@ const Game = () => {
                   <Button
                     onClick={() => {
                       if (initials.length > 0) {
-                        // Re-validate before submission
+                        // Validate before submission
                         if (!isInitialsAppropriate(initials)) {
                           setInitialsError("Please choose different initials");
-                          return;
-                        }
-                        if (!initialsError) {
+                        } else {
                           saveToLeaderboard(initials, displayScore);
                           setEnteringInitials(false);
                         }
