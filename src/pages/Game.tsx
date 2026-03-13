@@ -3157,16 +3157,17 @@ const Game = () => {
           e.key === "S"
         ) {
           e.preventDefault();
-          setPauseSelection((s) => (s === 0 ? 1 : 0));
+          setPauseSelection((s) => {
+            if (e.key === "ArrowUp" || e.key === "w" || e.key === "W") return (s - 1 + 3) % 3;
+            return (s + 1) % 3;
+          });
         }
         if (e.key === " " || e.key === "Enter") {
           e.preventDefault();
           setPauseSelection((s) => {
             if (s === 0) resumeGame();
-            else {
-              resumeGame();
-              quitToMenu();
-            }
+            else if (s === 1) { resumeGame(); setShowSettings(true); }
+            else { resumeGame(); quitToMenu(); }
             return s;
           });
         }
@@ -3275,30 +3276,32 @@ const Game = () => {
           // When paused, handle pause menu
           if (isPausedRef.current) {
             if (justUp || justDown) {
-              setPauseSelection((s) => (s === 0 ? 1 : 0));
+              setPauseSelection((s) => {
+                if (justUp) return (s - 1 + 3) % 3;
+                return (s + 1) % 3;
+              });
             }
             if (justA) {
               setPauseSelection((s) => {
                 if (s === 0) resumeGame();
-                else {
-                  resumeGame();
-                  quitToMenu();
-                }
+                else if (s === 1) { resumeGame(); setShowSettings(true); }
+                else { resumeGame(); quitToMenu(); }
                 return s;
               });
             }
           } else if (gameModeRef.current === "menu") {
             if (justUp) {
-              setMenuSelection((s) => (s - 1 + 3) % 3);
+              setMenuSelection((s) => (s - 1 + 4) % 4);
             }
             if (justDown) {
-              setMenuSelection((s) => (s + 1) % 3);
+              setMenuSelection((s) => (s + 1) % 4);
             }
             if (justA) {
               setMenuSelection((s) => {
                 if (s === 0) initGame();
                 else if (s === 1) initDuel();
-                else setGameMode("online_lobby");
+                else if (s === 2) setGameMode("online_lobby");
+                else setShowSettings(true);
                 return s;
               });
             }
@@ -3418,13 +3421,17 @@ const Game = () => {
           >
             {menuSelection === 2 ? "▸ " : "  "}ONLINE
           </Button>
+          <Button
+            onClick={() => setShowSettings(true)}
+            className={`text-2xl px-12 py-6 font-mono tracking-wider border-2 transition-all ${
+              menuSelection === 3
+                ? "bg-[hsl(var(--game-foreground))] text-[hsl(var(--game-background))] shadow-[0_0_20px_hsl(var(--game-foreground))]"
+                : "bg-[hsl(var(--game-foreground))]/20 text-[hsl(var(--game-foreground))] border-2 border-[hsl(var(--game-foreground))]/40"
+            }`}
+          >
+            {menuSelection === 3 ? "▸ " : "  "}SETTINGS
+          </Button>
         </div>
-        <button
-          onClick={() => setShowSettings(true)}
-          className="font-mono text-xs px-4 py-2 mt-2 border border-[hsl(var(--game-foreground))]/40 text-[hsl(var(--game-foreground))] opacity-60 hover:opacity-100 transition-opacity uppercase tracking-widest"
-        >
-          ⚙ SETTINGS
-        </button>
 
         {/* Top 3 High Scores (current) */}
         {leaderboard.length > 0 && (
@@ -3982,17 +3989,27 @@ const Game = () => {
                 {pauseSelection === 0 ? "▸ " : "  "}RESUME
               </Button>
               <Button
+                onClick={() => { resumeGame(); setShowSettings(true); }}
+                className={`text-xl px-10 py-5 font-mono tracking-wider transition-all ${
+                  pauseSelection === 1
+                    ? "bg-[hsl(var(--game-foreground))] text-[hsl(var(--game-background))] shadow-[0_0_20px_hsl(var(--game-foreground))]"
+                    : "bg-[hsl(var(--game-foreground))]/20 text-[hsl(var(--game-foreground))] border border-[hsl(var(--game-foreground))]/40"
+                }`}
+              >
+                {pauseSelection === 1 ? "▸ " : "  "}SETTINGS
+              </Button>
+              <Button
                 onClick={() => {
                   resumeGame();
                   quitToMenu();
                 }}
                 className={`text-xl px-10 py-5 font-mono tracking-wider transition-all ${
-                  pauseSelection === 1
+                  pauseSelection === 2
                     ? "bg-[hsl(var(--game-danger))] text-[hsl(var(--game-background))] shadow-[0_0_20px_hsl(var(--game-danger))]"
                     : "bg-[hsl(var(--game-foreground))]/10 text-[hsl(var(--game-foreground))]/60 border border-[hsl(var(--game-foreground))]/20"
                 }`}
               >
-                {pauseSelection === 1 ? "▸ " : "  "}QUIT TO MENU
+                {pauseSelection === 2 ? "▸ " : "  "}QUIT TO MENU
               </Button>
             </div>
             <div className="text-[hsl(var(--game-foreground))] font-mono text-xs opacity-40">
