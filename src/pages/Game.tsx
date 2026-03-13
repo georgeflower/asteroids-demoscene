@@ -423,10 +423,42 @@ const Game = () => {
 
   const loadLeaderboard = useCallback(async () => {
     const { data, error } = await supabase
-      .from("high_scores")
+      .from("current_high_scores")
       .select("initials, score, created_at")
       .order("score", { ascending: false })
       .limit(10);
+    if (!error && data) {
+      return data.map((row) => ({
+        initials: row.initials,
+        score: row.score,
+        date: new Date(row.created_at).toLocaleDateString(),
+      }));
+    }
+    return [];
+  }, []);
+
+  const loadHallOfFame = useCallback(async () => {
+    const { data, error } = await supabase
+      .from("high_scores")
+      .select("initials, score, created_at")
+      .order("score", { ascending: false })
+      .limit(3);
+    if (!error && data) {
+      return data.map((row) => ({
+        initials: row.initials,
+        score: row.score,
+        date: new Date(row.created_at).toLocaleDateString(),
+      }));
+    }
+    return [];
+  }, []);
+
+  const loadOldLeaderboard = useCallback(async () => {
+    const { data, error } = await supabase
+      .from("high_scores")
+      .select("initials, score, created_at")
+      .order("score", { ascending: false })
+      .limit(30);
     if (!error && data) {
       return data.map((row) => ({
         initials: row.initials,
@@ -444,7 +476,7 @@ const Game = () => {
         console.log("Trainer mode: score not saved");
         return;
       }
-      const { error } = await supabase.from("high_scores").insert({ initials: playerInitials.toUpperCase(), score });
+      const { error } = await supabase.from("current_high_scores").insert({ initials: playerInitials.toUpperCase(), score });
       if (error) {
         console.error("Failed to save score online");
         return;
@@ -464,7 +496,8 @@ const Game = () => {
 
   useEffect(() => {
     loadLeaderboard().then(setLeaderboard);
-  }, [loadLeaderboard]);
+    loadHallOfFame().then(setHallOfFame);
+  }, [loadLeaderboard, loadHallOfFame]);
 
   const createStars = (): Star[] => {
     const stars: Star[] = [];
