@@ -39,6 +39,24 @@ The highscore submission system has been secured to prevent unauthorized score s
 - All score insertions go through authenticated Edge Function
 - Uses service role key for secure database operations
 
+#### 7. HMAC Signature Verification
+- Every score submission is signed with an HMAC-SHA256 digest
+- The digest covers: `sessionToken`, `score`, `initials`, `level`, and `timestamp`
+- The shared secret is stored in environment variable `VITE_SCORE_HMAC_SECRET`
+- Server re-computes the expected digest and rejects submissions with mismatches
+- Comparison uses constant-time equality to prevent timing attacks
+- Submissions without a signature are rejected with HTTP 403
+
+#### 8. Client-Side Integrity Checks
+- Native timing functions (`performance.now`, `Date.now`, `JSON.stringify`) are checked for tampering before submission
+- Detects common cheating patterns where browser built-ins are monkey-patched
+- Submissions fail early if the environment appears modified
+
+#### 9. Production Build Obfuscation
+- Production builds use Terser with `drop_console` and `drop_debugger`
+- Top-level symbol mangling reduces readability of the compiled bundle
+- Console log stripping removes diagnostic hints from production code
+
 ### Architecture
 
 ```
@@ -72,7 +90,8 @@ Located in `/supabase/functions/submit/index.ts`
   "initials": "ABC",
   "score": 12345,
   "gameSessionToken": "uuid-token",
-  "timestamp": 1234567890
+  "timestamp": 1234567890,
+  "signature": "hmac-sha256-hex-digest"
 }
 ```
 
@@ -86,7 +105,7 @@ Located in `/supabase/functions/submit/index.ts`
 
 **Error Responses:**
 - `400` - Invalid request format or missing fields
-- `403` - Invalid session token or session expired
+- `403` - Invalid session token, session expired, or invalid HMAC signature
 - `409` - Duplicate score detected
 - `500` - Server error
 
@@ -103,8 +122,30 @@ Modified `/src/pages/Game.tsx`:
 
 - Added `gameSessionTokenRef` to track active session
 - Added `startGameSession()` to obtain session token
-- Modified `saveToLeaderboard()` to use Edge Function
+- Modified `saveToLeaderboard()` to use Edge Function with HMAC signature
+- Added `checkIntegrity()` call before submission to detect tampering
 - Session starts automatically when game begins
+
+#### Security Utilities
+Created `/src/utils/security.ts`:
+
+- `generateSignature()` – computes HMAC-SHA256 using the Web Crypto API
+- `obfuscateValue()` / `deobfuscateValue()` – XOR-based numeric encoding
+- `checkIntegrity()` – detects monkey-patched native timing/JSON functions
+
+#### Environment Variables
+The following environment variables must be set:
+
+| Variable | Description |
+|---|---|
+| `VITE_SUPABASE_URL` | Supabase project URL |
+| `VITE_SUPABASE_PUBLISHABLE_KEY` | Supabase anon/public key |
+| `VITE_SCORE_HMAC_SECRET` | 64-character hex secret for HMAC signing |
+
+For production deployments, set `VITE_SCORE_HMAC_SECRET` as a Supabase Edge Function secret:
+```bash
+supabase secrets set VITE_SCORE_HMAC_SECRET=<your-64-char-hex-secret>
+```
 
 ### Security Considerations
 
@@ -121,6 +162,8 @@ The Edge Function uses an in-memory Map to store game sessions, which is cleared
 ✅ Automated bot submissions  
 ✅ Duplicate score spam  
 ✅ Score range exploitation  
+✅ Forged score submissions (HMAC verification)  
+✅ Monkey-patched timing functions (integrity check)
 
 #### What This Does NOT Protect Against
 ⚠️ Memory editing/game hacking (client-side validation can be bypassed)  

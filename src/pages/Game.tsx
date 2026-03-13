@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import hyperspaceIcon from "@/assets/hyperspace.png";
 import { soundEffects } from "@/utils/soundEffects";
 import { haptics } from "@/utils/haptics";
+import { generateSignature, checkIntegrity } from "@/utils/security";
 import { useMultiplayer } from "@/hooks/useMultiplayer";
 import OnlineLobby from "@/components/OnlineLobby";
 import CRTBootOverlay from "@/components/CRTBootOverlay";
@@ -533,8 +534,28 @@ const Game = () => {
         return false;
       }
 
+      // Integrity check: reject submission if native timing functions are overridden
+      if (!checkIntegrity()) {
+        console.error("Integrity check failed");
+        setInitialsError("Unable to save score. Please try again.");
+        return false;
+      }
+
       const timePlayedSeconds = Math.floor((Date.now() - gameStartTimeRef.current) / 1000);
       const currentWave = gameStateRef.current?.wave ?? 1;
+      const timestamp = Date.now();
+      const initials = playerInitials.toUpperCase();
+
+      // Generate HMAC signature for server-side verification
+      const hmacSecret = import.meta.env.VITE_SCORE_HMAC_SECRET ?? '';
+      const signature = await generateSignature(
+        gameSessionTokenRef.current,
+        score,
+        initials,
+        currentWave,
+        timestamp,
+        hmacSecret
+      );
 
       try {
         const response = await fetch(
@@ -546,13 +567,14 @@ const Game = () => {
               'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
             },
             body: JSON.stringify({
-              initials: playerInitials.toUpperCase(),
+              initials,
               score,
               gameSessionToken: gameSessionTokenRef.current,
-              timestamp: Date.now(),
+              timestamp,
               level: currentWave,
               timePlayedSeconds,
               source: 'game_client',
+              signature,
             }),
           }
         );

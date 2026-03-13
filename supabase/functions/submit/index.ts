@@ -13,6 +13,7 @@ interface ScoreSubmission {
   level?: number;
   timePlayedSeconds?: number;
   source?: string;
+  signature?: string;
 }
 
 interface GameSession {
@@ -51,6 +52,40 @@ function isInitialsAppropriate(initials: string): boolean {
 
 function generateSessionToken(): string {
   return crypto.randomUUID();
+}
+
+/** Generate an HMAC-SHA256 hex digest for score submission data. */
+async function computeHmac(
+  sessionToken: string,
+  score: number,
+  initials: string,
+  level: number,
+  timestamp: number,
+  secret: string,
+): Promise<string> {
+  const encoder = new TextEncoder();
+  const message = `${sessionToken}:${score}:${initials}:${level}:${timestamp}`;
+  const key = await crypto.subtle.importKey(
+    'raw',
+    encoder.encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign'],
+  );
+  const sig = await crypto.subtle.sign('HMAC', key, encoder.encode(message));
+  return Array.from(new Uint8Array(sig))
+    .map(b => b.toString(16).padStart(2, '0'))
+    .join('');
+}
+
+/** Constant-time string comparison to prevent timing attacks. */
+function safeCompare(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) {
+    diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  }
+  return diff === 0;
 }
 
 function validateSession(token: string, score: number): { valid: boolean; error?: string; session?: GameSession } {
@@ -118,7 +153,7 @@ function validateScorePlausibility(score: number, serverTimePlayedSeconds: numbe
 }
 
 async function checkDuplicateScore(
-  supabaseAdmin: any,
+  supabaseAdmin: ReturnType<typeof createClient>,
   initials: string,
   score: number
 ): Promise<boolean> {
@@ -174,6 +209,39 @@ Deno.serve(async (req) => {
           { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
+
+      // --- HMAC signature verification ---
+      const hmacSecret = Deno.env.get('VITE_SCORE_HMAC_SECRET') ?? '';
+      if (!hmacSecret) {
+        console.error('HMAC secret not configured');
+        return new Response(
+          JSON.stringify({ error: 'Server misconfiguration' }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      if (!submission.signature) {
+        console.warn('Signature verification failed: missing signature');
+        return new Response(
+          JSON.stringify({ error: 'Invalid request signature' }),
+          { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      const expectedSig = await computeHmac(
+        submission.gameSessionToken,
+        submission.score,
+        submission.initials,
+        submission.level ?? 1,
+        submission.timestamp,
+        hmacSecret,
+      );
+      if (!safeCompare(submission.signature, expectedSig)) {
+        console.warn('Signature verification failed: signature mismatch');
+        return new Response(
+          JSON.stringify({ error: 'Invalid request signature' }),
+          { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      // --- end HMAC verification ---
 
       const initialsRegex = /^[A-Z]{1,3}$/;
       if (!initialsRegex.test(submission.initials)) {
@@ -289,3 +357,4 @@ Deno.serve(async (req) => {
     );
   }
 });
+
