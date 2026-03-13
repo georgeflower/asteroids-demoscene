@@ -3284,7 +3284,7 @@ const Game = () => {
             if (justA) {
               setPauseSelection((s) => {
                 if (s === 0) resumeGame();
-                else if (s === 1) { resumeGame(); setShowSettings(true); }
+                else if (s === 1) { setShowSettings(true); }
                 else { resumeGame(); quitToMenu(); }
                 return s;
               });
