@@ -8,6 +8,8 @@ import { haptics } from "@/utils/haptics";
 import { useMultiplayer } from "@/hooks/useMultiplayer";
 import OnlineLobby from "@/components/OnlineLobby";
 import CRTBootOverlay from "@/components/CRTBootOverlay";
+import ControlSettings from "@/components/ControlSettings";
+import { loadBindings, displayKeyName, type ControlBindings } from "@/hooks/useControlSettings";
 import type { DuelNetState } from "@/types/multiplayer";
 import { DEBUG_ENABLED, DEBUG_CATEGORIES, type DebugCategory, type DebugLogEntry } from "@/constants/debug";
 
