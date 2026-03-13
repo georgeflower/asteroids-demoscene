@@ -3461,11 +3461,8 @@ const Game = () => {
               ★ HALL OF FAME ★
             </div>
             <div className="border border-[#FFD700]/30 p-2">
-              {hallOfFame.map((entry, i) => {
+               {hallOfFame.filter(e => !BANNED_INITIALS.has(e.initials.toUpperCase())).slice(0, 3).map((entry, i) => {
                 const initialsDisplay = entry.initials.padEnd(3, " ");
-                let link: string | null = null;
-                if (entry.initials.toUpperCase() === "LW") link = "https://scenestream.net/demovibes/user/LittleWhite/";
-                if (entry.initials.toUpperCase() === "MBD") link = "https://scenestream.net/demovibes/user/mirrorbird/";
                 return (
                   <div
                     key={i}
@@ -3475,20 +3472,7 @@ const Game = () => {
                       className={i === 0 ? "text-[#FFD700]" : i === 1 ? "text-[#C0C0C0]" : "text-[#CD7F32]"}
                       style={{ whiteSpace: "pre" }}
                     >
-                      {(i + 1).toString().padStart(2, " ")}.{" "}
-                      {link ? (
-                        <a
-                          href={link}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="underline hover:opacity-80 transition-opacity"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          {initialsDisplay}
-                        </a>
-                      ) : (
-                        initialsDisplay
-                      )}
+                      {(i + 1).toString().padStart(2, " ")}. {initialsDisplay}
                     </span>
                     <span className={i === 0 ? "text-[#FFD700]" : i === 1 ? "text-[#C0C0C0]" : "text-[#CD7F32]"}>
                       {entry.score.toString().padStart(8, "0")}
@@ -3553,35 +3537,17 @@ const Game = () => {
               >
                 ★ OLD HIGHSCORES ★
               </div>
-              {oldLeaderboard.map((entry, i) => {
-                let link: string | null = null;
-                if (entry.initials.toUpperCase() === "LW") link = "https://scenestream.net/demovibes/user/LittleWhite/";
-                if (entry.initials.toUpperCase() === "MBD") link = "https://scenestream.net/demovibes/user/mirrorbird/";
-                return (
+               {oldLeaderboard.filter(e => !BANNED_INITIALS.has(e.initials.toUpperCase())).map((entry, i) => (
                   <div
                     key={i}
                     className="flex justify-between font-mono text-sm py-0.5 text-[hsl(var(--game-foreground))]"
                   >
                     <span style={{ whiteSpace: "pre" }}>
-                      {(i + 1).toString().padStart(2, " ")}.{" "}
-                      {link ? (
-                        <a
-                          href={link}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="underline hover:opacity-80 transition-opacity"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          {entry.initials.padEnd(3, " ")}
-                        </a>
-                      ) : (
-                        entry.initials.padEnd(3, " ")
-                      )}
+                      {(i + 1).toString().padStart(2, " ")}. {entry.initials.padEnd(3, " ")}
                     </span>
                     <span>{entry.score.toString().padStart(8, "0")}</span>
                   </div>
-                );
-              })}
+                ))}
               <button
                 onClick={() => setShowOldLeaderboard(false)}
                 className="w-full mt-4 font-mono text-xs text-[hsl(var(--game-foreground))] opacity-60 hover:opacity-100 transition-opacity uppercase tracking-widest text-center py-2 border border-[hsl(var(--game-foreground))]/30"
