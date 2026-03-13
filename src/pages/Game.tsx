@@ -180,6 +180,7 @@ interface GameState {
   alienSpawnTimer: number;
   bossDefeated: boolean;
   pendingNextWave: boolean;
+  extraLivesThisWave: number;
 }
 
 interface DuelState {
@@ -228,7 +229,7 @@ const getTheme = (wave: number): ColorTheme => {
   return COLOR_THEMES[idx];
 };
 
-const getSpeedScale = (wave: number): number => 1.1 + wave * 0.03;
+const getSpeedScale = (wave: number): number => 1.0 + (wave - 1) * 0.05;
 
 // Module-level counters written by gameLoop; read by FpsOverlay via polling.
 // Plain object (no React state) so there is zero overhead in Game itself.
@@ -743,6 +744,7 @@ const Game = () => {
       alienSpawnTimer: 600,
       bossDefeated: false,
       pendingNextWave: false,
+      extraLivesThisWave: 0,
     };
 
     duelStateRef.current = null;
@@ -959,6 +961,7 @@ const Game = () => {
     const state = gameStateRef.current;
 
     state.wave++;
+    state.extraLivesThisWave = 0;
     addDebugLog("wave", `Wave ${state.wave} started`);
     const isBossWave = state.wave % 5 === 0;
 
@@ -1876,9 +1879,13 @@ const Game = () => {
           spawnExplosion(asteroid.pos, aColor, asteroid.size === "large" ? 15 : asteroid.size === "medium" ? 10 : 6);
 
           if (Math.floor((state.score - pts) / 10000) < Math.floor(state.score / 10000)) {
-            state.lives++;
-            setDisplayLives(state.lives);
-            spawnFloatingText(state.ship.pos, "EXTRA LIFE!", "#CC66FF", 22);
+            const maxExtraLives = state.wave <= 3 ? 1 : state.wave <= 6 ? 2 : 3;
+            if (state.extraLivesThisWave < maxExtraLives) {
+              state.extraLivesThisWave++;
+              state.lives++;
+              setDisplayLives(state.lives);
+              spawnFloatingText(state.ship.pos, "EXTRA LIFE!", "#CC66FF", 22);
+            }
           }
 
           if (asteroid.size === "large") {
