@@ -3627,7 +3627,14 @@ const Game = () => {
                 📋 CHANGELOG
               </div>
               <pre className="font-mono text-[11px] text-[hsl(var(--game-foreground))] whitespace-pre-wrap leading-relaxed opacity-90">
-{`[0.1.6] - 2026-03-13
+{`[0.1.7] - 2026-03-13
+
+  Fixed
+  - Settings overlay now accessible from the pause menu
+    (previously only worked from the main menu)
+  - Opening settings from pause no longer unpauses the game
+
+[0.1.6] - 2026-03-13
 
   Gameplay
   - Extra Life Cap: Max extra lives per level capped at

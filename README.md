@@ -1,4 +1,4 @@
-ASTEROIDS v0.1.6
+ASTEROIDS v0.1.7
 A Retro Vector Graphics Arcade Game
 
 SOLO: Arrow Keys + Space + Ctrl for Hyperspace | Gamepad supported
