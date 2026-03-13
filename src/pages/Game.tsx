@@ -3418,13 +3418,17 @@ const Game = () => {
           >
             {menuSelection === 2 ? "▸ " : "  "}ONLINE
           </Button>
+          <Button
+            onClick={() => setShowSettings(true)}
+            className={`text-2xl px-12 py-6 font-mono tracking-wider border-2 transition-all ${
+              menuSelection === 3
+                ? "bg-[hsl(var(--game-foreground))] text-[hsl(var(--game-background))] shadow-[0_0_20px_hsl(var(--game-foreground))]"
+                : "bg-[hsl(var(--game-foreground))]/20 text-[hsl(var(--game-foreground))] border-2 border-[hsl(var(--game-foreground))]/40"
+            }`}
+          >
+            {menuSelection === 3 ? "▸ " : "  "}SETTINGS
+          </Button>
         </div>
-        <button
-          onClick={() => setShowSettings(true)}
-          className="font-mono text-xs px-4 py-2 mt-2 border border-[hsl(var(--game-foreground))]/40 text-[hsl(var(--game-foreground))] opacity-60 hover:opacity-100 transition-opacity uppercase tracking-widest"
-        >
-          ⚙ SETTINGS
-        </button>
 
         {/* Top 3 High Scores (current) */}
         {leaderboard.length > 0 && (
