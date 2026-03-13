@@ -3853,13 +3853,13 @@ const Game = () => {
                         setInitialsError("Please choose different initials");
                       }
                     }}
-                    onKeyDown={(e) => {
+                    onKeyDown={async (e) => {
                       if (e.key === "Enter" && initials.length > 0) {
                         // Validate before submission
                         if (!isInitialsAppropriate(initials)) {
                           setInitialsError("Please choose different initials");
                         } else {
-                          saveToLeaderboard(initials, displayScore);
+                          await saveToLeaderboard(initials, displayScore);
                           setEnteringInitials(false);
                         }
                       }
@@ -3870,13 +3870,13 @@ const Game = () => {
                     placeholder="___"
                   />
                   <Button
-                    onClick={() => {
+                    onClick={async () => {
                       if (initials.length > 0) {
                         // Validate before submission
                         if (!isInitialsAppropriate(initials)) {
                           setInitialsError("Please choose different initials");
                         } else {
-                          saveToLeaderboard(initials, displayScore);
+                          await saveToLeaderboard(initials, displayScore);
                           setEnteringInitials(false);
                         }
                       }
