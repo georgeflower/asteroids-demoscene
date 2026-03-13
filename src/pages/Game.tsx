@@ -534,9 +534,9 @@ const Game = () => {
         
         if (!response.ok) {
           console.error("Failed to save score:", result.error || "Unknown error");
-          // Show user-friendly error message for duplicate scores
+          // Log duplicate score detection - UI could be enhanced with toast notification
           if (response.status === 409) {
-            alert("This score was already submitted recently. Please try again later.");
+            console.warn("Duplicate score detected:", result.error);
           }
           return;
         }

@@ -1,7 +1,9 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
 
+// CORS configuration - restrict to your application domain in production
+// For development/testing, you can use '*' but for production, set VITE_APP_URL environment variable
 const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Origin': Deno.env.get('VITE_APP_URL') || '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
@@ -17,18 +19,22 @@ interface GameSession {
   startTime: number;
   lastScore: number;
   submissionCount: number;
+  lastSubmissionTime: number;
 }
 
-// In-memory store for game sessions (resets on function cold start)
-// In production, consider using Redis or similar for persistence
+// In-memory store for game sessions
+// LIMITATION: This will reset on function cold starts (~15-30 minutes of inactivity)
+// causing users to lose their session mid-game. For production with high traffic,
+// consider implementing persistent storage:
+// - Use a Supabase table with TTL/cleanup job
+// - Use Redis for distributed caching
+// - Use Deno KV for edge-native key-value storage
 const gameSessions = new Map<string, GameSession>();
 
-// Rate limiting: max submissions per session
+// Rate limiting configuration
 const MAX_SUBMISSIONS_PER_SESSION = 10;
 const SESSION_TIMEOUT = 3600000; // 1 hour
-
-// Minimum time between submissions from same session
-const MIN_SUBMISSION_INTERVAL = 5000; // 5 seconds
+const MIN_SUBMISSION_INTERVAL = 5000; // 5 seconds between submissions
 
 function generateSessionToken(): string {
   return crypto.randomUUID();
@@ -45,6 +51,12 @@ function validateSession(token: string, score: number): { valid: boolean; error?
   if (Date.now() - session.startTime > SESSION_TIMEOUT) {
     gameSessions.delete(token);
     return { valid: false, error: 'Game session expired' };
+  }
+  
+  // Check minimum interval between submissions
+  const timeSinceLastSubmission = Date.now() - session.lastSubmissionTime;
+  if (session.submissionCount > 0 && timeSinceLastSubmission < MIN_SUBMISSION_INTERVAL) {
+    return { valid: false, error: 'Please wait before submitting another score' };
   }
   
   // Check submission count
@@ -108,6 +120,7 @@ Deno.serve(async (req) => {
         startTime: Date.now(),
         lastScore: 0,
         submissionCount: 0,
+        lastSubmissionTime: 0,
       });
       
       return new Response(
@@ -164,6 +177,7 @@ Deno.serve(async (req) => {
       const session = gameSessions.get(submission.gameSessionToken)!;
       session.submissionCount++;
       session.lastScore = submission.score;
+      session.lastSubmissionTime = Date.now();
       
       // Insert score using admin client
       const { error } = await supabaseAdmin
