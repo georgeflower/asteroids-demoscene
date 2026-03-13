@@ -229,17 +229,28 @@ Deno.serve(async (req) => {
       session.lastScore = submission.score;
       session.lastSubmissionTime = Date.now();
 
-      const { error } = await supabaseAdmin
+      const { data: insertedScore, error } = await supabaseAdmin
         .from('current_high_scores')
         .insert({
           initials: submission.initials,
           score: submission.score,
-          session_token: submission.gameSessionToken,
-          submission_method: 'edge_function',
           level: submission.level ?? 1,
           time_played_seconds: submission.timePlayedSeconds ?? 0,
           source: source,
-        });
+        })
+        .select('id')
+        .single();
+
+      if (!error && insertedScore) {
+        // Store session metadata in separate non-public audit table
+        await supabaseAdmin
+          .from('score_audit_log')
+          .insert({
+            score_id: insertedScore.id,
+            session_token: submission.gameSessionToken,
+            submission_method: 'edge_function',
+          });
+      }
 
       if (error) {
         console.error('Database error:', error);
