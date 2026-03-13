@@ -2666,7 +2666,7 @@ const Game = () => {
         olEntries.map((e) => `${e.flag ? e.flag + " " : ""}[${e.author}] ${e.message}`).join(separator) + "   ";
 
       // Measure total width including GIF replacements
-      const gifTokens = [":necta:", ":nectawall:", "d^^b", ":D"];
+      const gifTokens = [":necta:", ":nectawall:", "d^^b", ":D", ":he-man:"];
       const gifHeight = 14;
 
       // Calculate total width
@@ -2924,6 +2924,7 @@ const Game = () => {
       ":nectawall:": "/images/nectawall.gif",
       "d^^b": "/images/headphones.gif",
       ":D": "/images/D.gif",
+      ":he-man:": "/images/he-man.gif",
     };
     const imgs: Record<string, HTMLImageElement> = {};
     for (const [key, src] of Object.entries(gifMap)) {
