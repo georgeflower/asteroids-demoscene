@@ -3989,7 +3989,7 @@ const Game = () => {
                 {pauseSelection === 0 ? "▸ " : "  "}RESUME
               </Button>
               <Button
-                onClick={() => { resumeGame(); setShowSettings(true); }}
+                onClick={() => setShowSettings(true)}
                 className={`text-xl px-10 py-5 font-mono tracking-wider transition-all ${
                   pauseSelection === 1
                     ? "bg-[hsl(var(--game-foreground))] text-[hsl(var(--game-background))] shadow-[0_0_20px_hsl(var(--game-foreground))]"
