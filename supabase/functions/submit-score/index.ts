@@ -23,8 +23,9 @@ interface GameSession {
 }
 
 // In-memory store for game sessions
-// LIMITATION: This will reset on function cold starts (~15-30 minutes of inactivity)
-// causing users to lose their session mid-game. For production with high traffic,
+// LIMITATION: This will reset on function cold starts (~15-30 minutes of inactivity).
+// MITIGATION: Sessions are auto-recreated when a valid UUID token is submitted after a cold start,
+// allowing legitimate score submissions to succeed. For production with high traffic,
 // consider implementing persistent storage:
 // - Use a Supabase table with TTL/cleanup job
 // - Use Redis for distributed caching
@@ -57,10 +58,28 @@ function generateSessionToken(): string {
 }
 
 function validateSession(token: string, score: number): { valid: boolean; error?: string; session?: GameSession } {
-  const session = gameSessions.get(token);
+  let session = gameSessions.get(token);
   
+  // If session not found, check if token is a valid UUID and auto-recreate it
+  // This handles cold starts where the in-memory Map is cleared
   if (!session) {
-    return { valid: false, error: 'Invalid game session token' };
+    // Validate token is a proper UUID format (version 4)
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(token)) {
+      return { valid: false, error: 'Invalid game session token' };
+    }
+    
+    // Auto-recreate session to handle cold starts gracefully
+    // This allows legitimate submissions to succeed even after function restarts
+    console.log('Session not found in memory, auto-recreating for token:', token);
+    session = {
+      token,
+      startTime: Date.now(),
+      lastScore: 0,
+      submissionCount: 0,
+      lastSubmissionTime: 0,
+    };
+    gameSessions.set(token, session);
   }
   
   // Check session timeout
