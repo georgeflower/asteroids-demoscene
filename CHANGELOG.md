@@ -10,6 +10,7 @@ All notable changes to this project will be documented in this file.
 - **CRT Scanlines**: Pre-rendered scanline pattern to offscreen canvas; single `drawImage` call replaces ~150 individual `fillRect` calls per frame
 - **Gradient Caching**: Vignette, marquee, and backdrop gradients now created once (on resize) and reused each frame instead of being reallocated 60×/sec
 - **Marquee Scanline Cleanup**: Removed redundant scanline sub-loops from Now Playing and oneliner sections
+- **Delta-Time Game Loop**: Implemented fixed-timestep update loop with delta-time accumulation, 60 FPS render cap with 1 ms jitter tolerance, and a 250 ms cap to prevent spiral-of-death after tab switches or pauses — ensures consistent game speed regardless of frame rate
 
 ### Added
 
