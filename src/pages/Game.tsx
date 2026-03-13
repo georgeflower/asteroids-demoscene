@@ -523,6 +523,7 @@ const Game = () => {
       
       if (!gameSessionTokenRef.current) {
         console.error("No game session token available");
+        setInitialsError("Unable to save score. Please try again.");
         return false;
       }
 
@@ -557,7 +558,11 @@ const Game = () => {
           // Log duplicate score detection - UI could be enhanced with toast notification
           if (response.status === 409) {
             console.warn("Duplicate score detected:", result.error);
+            // For duplicate scores, consider it successful since the score is already there
+            return true;
           }
+          // Generic error message for other failures
+          setInitialsError("Failed to save score. Please try again.");
           return false;
         }
         
@@ -566,6 +571,7 @@ const Game = () => {
         return true;
       } catch (error) {
         console.error("Error saving score:", error);
+        setInitialsError("Network error. Please try again.");
         return false;
       }
     },
