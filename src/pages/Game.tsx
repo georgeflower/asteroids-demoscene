@@ -514,16 +514,16 @@ const Game = () => {
   }, []);
 
   const saveToLeaderboard = useCallback(
-    async (playerInitials: string, score: number) => {
+    async (playerInitials: string, score: number): Promise<boolean> => {
       // Trainer mode: don't save scores
       if (DEBUG_ENABLED && trainerModeRef.current) {
         console.log("Trainer mode: score not saved");
-        return;
+        return true; // Consider it successful for trainer mode
       }
       
       if (!gameSessionTokenRef.current) {
         console.error("No game session token available");
-        return;
+        return false;
       }
 
       try {
@@ -552,19 +552,21 @@ const Game = () => {
           if (response.status === 400 && result.error === 'Please choose different initials') {
             setInitialsError(result.error);
             setEnteringInitials(true); // Keep the initials entry form open
-            return;
+            return false;
           }
           // Log duplicate score detection - UI could be enhanced with toast notification
           if (response.status === 409) {
             console.warn("Duplicate score detected:", result.error);
           }
-          return;
+          return false;
         }
         
         const board = await loadLeaderboard();
         setLeaderboard(board);
+        return true;
       } catch (error) {
         console.error("Error saving score:", error);
+        return false;
       }
     },
     [loadLeaderboard],
@@ -3859,8 +3861,10 @@ const Game = () => {
                         if (!isInitialsAppropriate(initials)) {
                           setInitialsError("Please choose different initials");
                         } else {
-                          await saveToLeaderboard(initials, displayScore);
-                          setEnteringInitials(false);
+                          const success = await saveToLeaderboard(initials, displayScore);
+                          if (success) {
+                            setEnteringInitials(false);
+                          }
                         }
                       }
                       e.stopPropagation();
@@ -3876,8 +3880,10 @@ const Game = () => {
                         if (!isInitialsAppropriate(initials)) {
                           setInitialsError("Please choose different initials");
                         } else {
-                          await saveToLeaderboard(initials, displayScore);
-                          setEnteringInitials(false);
+                          const success = await saveToLeaderboard(initials, displayScore);
+                          if (success) {
+                            setEnteringInitials(false);
+                          }
                         }
                       }
                     }}
