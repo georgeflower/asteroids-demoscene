@@ -2101,12 +2101,16 @@ const Game = () => {
             spawnExplosion(state.boss!.pos, "#FFFF44", 20);
             soundEffects.explode();
 
-            const types: PowerUp["type"][] = ["shield", "rapidFire", "extraLife", "multiplier"];
+            let bossDropTypes: PowerUp["type"][] = ["shield", "rapidFire", "extraLife", "multiplier"];
+            const bossMaxExtra = state.wave <= 3 ? 1 : state.wave <= 6 ? 2 : 3;
+            if (state.extraLivesThisWave >= bossMaxExtra) {
+              bossDropTypes = bossDropTypes.filter(t => t !== "extraLife");
+            }
             state.powerUps.push({
               pos: { ...state.boss!.pos },
               vel: { x: Math.random() - 0.5, y: Math.random() - 0.5 },
               rotation: 0,
-              type: types[Math.floor(Math.random() * types.length)],
+              type: bossDropTypes[Math.floor(Math.random() * bossDropTypes.length)],
               lifetime: 600,
             });
 
