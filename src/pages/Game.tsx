@@ -3157,16 +3157,17 @@ const Game = () => {
           e.key === "S"
         ) {
           e.preventDefault();
-          setPauseSelection((s) => (s === 0 ? 1 : 0));
+          setPauseSelection((s) => {
+            if (e.key === "ArrowUp" || e.key === "w" || e.key === "W") return (s - 1 + 3) % 3;
+            return (s + 1) % 3;
+          });
         }
         if (e.key === " " || e.key === "Enter") {
           e.preventDefault();
           setPauseSelection((s) => {
             if (s === 0) resumeGame();
-            else {
-              resumeGame();
-              quitToMenu();
-            }
+            else if (s === 1) { resumeGame(); setShowSettings(true); }
+            else { resumeGame(); quitToMenu(); }
             return s;
           });
         }
