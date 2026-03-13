@@ -2043,7 +2043,7 @@ const Game = () => {
           soundEffects.explode();
           spawnFloatingText(ufo.pos, `+${pts}`, "#FFFF66", 18);
           spawnExplosion(ufo.pos, "#FFFF66", 15);
-          const powerUp = createPowerUp(ufo.pos.x, ufo.pos.y);
+          const powerUp = createPowerUp(ufo.pos.x, ufo.pos.y, state.wave, state.extraLivesThisWave);
           if (powerUp) state.powerUps.push(powerUp);
           return false;
         }
