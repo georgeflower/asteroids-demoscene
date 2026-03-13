@@ -306,6 +306,7 @@ const Game = () => {
   const [showLifeLost, setShowLifeLost] = useState(false);
   const showLifeLostRef = useRef(false);
   const gameSessionTokenRef = useRef<string | null>(null);
+  const gameStartTimeRef = useRef<number>(Date.now());
   const [isTouchDevice, setIsTouchDevice] = useState(false);
   const [nowPlaying, setNowPlaying] = useState<{ artist: string; title: string } | null>(null);
   const nowPlayingRef = useRef<{ artist: string; title: string } | null>(null);
