@@ -291,6 +291,7 @@ const Game = () => {
   const [showChangelog, setShowChangelog] = useState(false);
   const [showLifeLost, setShowLifeLost] = useState(false);
   const showLifeLostRef = useRef(false);
+  const gameSessionTokenRef = useRef<string | null>(null);
   const [isTouchDevice, setIsTouchDevice] = useState(false);
   const [nowPlaying, setNowPlaying] = useState<{ artist: string; title: string } | null>(null);
   const nowPlayingRef = useRef<{ artist: string; title: string } | null>(null);
@@ -471,6 +472,33 @@ const Game = () => {
     return [];
   }, []);
 
+  const startGameSession = useCallback(async () => {
+    try {
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/submit-score/start-session`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          },
+        }
+      );
+      
+      if (!response.ok) {
+        console.error("Failed to start game session");
+        return null;
+      }
+      
+      const data = await response.json();
+      gameSessionTokenRef.current = data.sessionToken;
+      return data.sessionToken;
+    } catch (error) {
+      console.error("Error starting game session:", error);
+      return null;
+    }
+  }, []);
+
   const saveToLeaderboard = useCallback(
     async (playerInitials: string, score: number) => {
       // Trainer mode: don't save scores
@@ -478,13 +506,46 @@ const Game = () => {
         console.log("Trainer mode: score not saved");
         return;
       }
-      const { error } = await supabase.from("current_high_scores").insert({ initials: playerInitials.toUpperCase(), score });
-      if (error) {
-        console.error("Failed to save score online");
+      
+      if (!gameSessionTokenRef.current) {
+        console.error("No game session token available");
         return;
       }
-      const board = await loadLeaderboard();
-      setLeaderboard(board);
+
+      try {
+        const response = await fetch(
+          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/submit-score/submit`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+            },
+            body: JSON.stringify({
+              initials: playerInitials.toUpperCase(),
+              score,
+              gameSessionToken: gameSessionTokenRef.current,
+              timestamp: Date.now(),
+            }),
+          }
+        );
+
+        const result = await response.json();
+        
+        if (!response.ok) {
+          console.error("Failed to save score:", result.error || "Unknown error");
+          // Show user-friendly error message for duplicate scores
+          if (response.status === 409) {
+            alert("This score was already submitted recently. Please try again later.");
+          }
+          return;
+        }
+        
+        const board = await loadLeaderboard();
+        setLeaderboard(board);
+      } catch (error) {
+        console.error("Error saving score:", error);
+      }
     },
     [loadLeaderboard],
   );
@@ -760,12 +821,14 @@ const Game = () => {
     showLifeLostRef.current = false;
     setGameMode("solo");
     checkVersion();
+    // Start a new game session for secure score submission
+    startGameSession();
     // Game started
     // Focus canvas for input capture
     setTimeout(() => {
       canvasRef.current?.focus();
     }, 50);
-  }, []);
+  }, [startGameSession]);
 
   const initDuel = useCallback(() => {
     const asteroids: Asteroid[] = [];
