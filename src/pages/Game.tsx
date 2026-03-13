@@ -2666,7 +2666,7 @@ const Game = () => {
         olEntries.map((e) => `${e.flag ? e.flag + " " : ""}[${e.author}] ${e.message}`).join(separator) + "   ";
 
       // Measure total width including GIF replacements
-      const gifTokens = [":necta:", ":nectawall:", "d^^b", ":D"];
+      const gifTokens = [":necta:", ":nectawall:", "d^^b", ":D", ":he-man:"];
       const gifHeight = 14;
 
       // Calculate total width
