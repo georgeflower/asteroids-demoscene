@@ -305,6 +305,8 @@ const Game = () => {
   const [oldLeaderboard, setOldLeaderboard] = useState<{ initials: string; score: number; date: string }[]>([]);
   const [showOldLeaderboard, setShowOldLeaderboard] = useState(false);
   const [showChangelog, setShowChangelog] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const controlBindingsRef = useRef<ControlBindings>(loadBindings());
   const [showLifeLost, setShowLifeLost] = useState(false);
   const showLifeLostRef = useRef(false);
   const gameSessionTokenRef = useRef<string | null>(null);
