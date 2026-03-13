@@ -3537,30 +3537,13 @@ const Game = () => {
               >
                 ★ OLD HIGHSCORES ★
               </div>
-              {oldLeaderboard.map((entry, i) => {
-                let link: string | null = null;
-                if (entry.initials.toUpperCase() === "LW") link = "https://scenestream.net/demovibes/user/LittleWhite/";
-                if (entry.initials.toUpperCase() === "MBD") link = "https://scenestream.net/demovibes/user/mirrorbird/";
-                return (
+               {oldLeaderboard.filter(e => !BANNED_INITIALS.has(e.initials.toUpperCase())).map((entry, i) => (
                   <div
                     key={i}
                     className="flex justify-between font-mono text-sm py-0.5 text-[hsl(var(--game-foreground))]"
                   >
                     <span style={{ whiteSpace: "pre" }}>
-                      {(i + 1).toString().padStart(2, " ")}.{" "}
-                      {link ? (
-                        <a
-                          href={link}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="underline hover:opacity-80 transition-opacity"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          {entry.initials.padEnd(3, " ")}
-                        </a>
-                      ) : (
-                        entry.initials.padEnd(3, " ")
-                      )}
+                      {(i + 1).toString().padStart(2, " ")}. {entry.initials.padEnd(3, " ")}
                     </span>
                     <span>{entry.score.toString().padStart(8, "0")}</span>
                   </div>
