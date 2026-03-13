@@ -3166,7 +3166,7 @@ const Game = () => {
           e.preventDefault();
           setPauseSelection((s) => {
             if (s === 0) resumeGame();
-            else if (s === 1) { resumeGame(); setShowSettings(true); }
+            else if (s === 1) { setShowSettings(true); }
             else { resumeGame(); quitToMenu(); }
             return s;
           });
@@ -3284,7 +3284,7 @@ const Game = () => {
             if (justA) {
               setPauseSelection((s) => {
                 if (s === 0) resumeGame();
-                else if (s === 1) { resumeGame(); setShowSettings(true); }
+                else if (s === 1) { setShowSettings(true); }
                 else { resumeGame(); quitToMenu(); }
                 return s;
               });
@@ -3989,7 +3989,7 @@ const Game = () => {
                 {pauseSelection === 0 ? "▸ " : "  "}RESUME
               </Button>
               <Button
-                onClick={() => { resumeGame(); setShowSettings(true); }}
+                onClick={() => setShowSettings(true)}
                 className={`text-xl px-10 py-5 font-mono tracking-wider transition-all ${
                   pauseSelection === 1
                     ? "bg-[hsl(var(--game-foreground))] text-[hsl(var(--game-background))] shadow-[0_0_20px_hsl(var(--game-foreground))]"
