@@ -57,6 +57,8 @@ function validateSession(token: string, score: number): { valid: boolean; error?
   }
   
   // Check minimum interval between submissions
+  // Only enforce interval after first submission (submissionCount > 0)
+  // First submission is allowed immediately (lastSubmissionTime starts at 0)
   const timeSinceLastSubmission = Date.now() - session.lastSubmissionTime;
   if (session.submissionCount > 0 && timeSinceLastSubmission < MIN_SUBMISSION_INTERVAL) {
     return { valid: false, error: 'Please wait before submitting another score' };
