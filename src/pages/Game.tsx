@@ -527,6 +527,9 @@ const Game = () => {
         return;
       }
 
+      const timePlayedSeconds = Math.floor((Date.now() - gameStartTimeRef.current) / 1000);
+      const currentWave = gameStateRef.current?.wave ?? 1;
+
       try {
         const response = await fetch(
           `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/submit-score/submit`,
@@ -541,6 +544,9 @@ const Game = () => {
               score,
               gameSessionToken: gameSessionTokenRef.current,
               timestamp: Date.now(),
+              level: currentWave,
+              timePlayedSeconds,
+              source: 'game_client',
             }),
           }
         );
