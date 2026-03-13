@@ -3490,15 +3490,100 @@ const Game = () => {
         </div>
 
         <div className="mt-4">
-          <a
-            href="https://github.com/georgeflower/asteroids-demoscene/blob/main/CHANGELOG.md"
-            target="_blank"
-            rel="noopener noreferrer"
+          <button
+            onClick={() => setShowChangelog(true)}
             className="text-[hsl(var(--game-foreground))] font-mono text-[10px] opacity-50 hover:opacity-100 transition-opacity uppercase tracking-widest"
           >
             📋 CHANGELOG
-          </a>
+          </button>
         </div>
+
+        {/* Changelog overlay */}
+        {showChangelog && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/90"
+            onClick={() => setShowChangelog(false)}
+          >
+            <div
+              className="bg-black border border-[hsl(var(--game-foreground))]/40 rounded p-6 max-w-2xl w-[90vw] max-h-[80vh] overflow-y-auto"
+              onClick={(e) => e.stopPropagation()}
+              style={{ scrollbarWidth: "thin", scrollbarColor: "#444 #111" }}
+            >
+              <div className="text-center font-mono text-lg text-[#FFD700] mb-4" style={{ textShadow: "0 0 10px #FFD700" }}>
+                📋 CHANGELOG
+              </div>
+              <pre className="font-mono text-[11px] text-[hsl(var(--game-foreground))] whitespace-pre-wrap leading-relaxed opacity-90">
+{`[0.1.6] - 2026-03-13
+
+  Gameplay
+  - Extra Life Cap: Max extra lives per level capped at
+    1 (waves 1-3), 2 (waves 4-6), 3 (waves 7+)
+  - Difficulty Scaling: Speed now starts at 100% on wave 1
+    with +5% per level (was 110% base + 3%/wave)
+
+[0.1.5] - 2026-03-13
+
+  Performance
+  - Eliminated ~85 shadowBlur calls/frame (down to 2)
+  - CRT scanlines pre-rendered to offscreen canvas
+  - Gradient caching for vignette, marquee, backdrop
+  - Delta-time game loop: fixed-timestep accumulation,
+    60 FPS cap, 250ms spiral-of-death prevention
+
+  Added
+  - Hall of Fame: top 3 all-time scores on main menu
+  - Old Highscores: scrollable top 30 archive overlay
+  - Highscore Reset: fresh active scoreboard
+
+[0.1.4]
+
+  - Hyperspace charge indicator (circular SVG)
+  - Controls condensed to single-line row
+  - Marquee GIF replacements & country flags
+  - Version moved to HUD next to WAVE
+  - autoPlayMusic defaults to false
+
+[0.1.3] - 2026-03-11
+
+  Fixed
+  - 11 ESLint errors (type safety, ES module compliance)
+  - High score rank alignment with CSS whitespace
+
+[0.1.2] - 2026-03-10
+
+  Fixed
+  - Shield power-up activation during spawn invulnerability
+  - Music player auto-resume between game modes
+  - Pause music state checkbox sync
+
+[0.1.1] - 2026-03-10
+
+  Changed
+  - Hyperspace key: H → Left/Right Ctrl
+  - Hyperspace teleports to safe location
+  - Added 10-second hyperspace cooldown
+  - Removed random 10% death chance from hyperspace
+
+[0.1.0] - Initial Release
+
+  - Solo mode with wave-based progression
+  - Duel mode for local 2-player gameplay
+  - Online multiplayer mode
+  - Color themes rotating every 5 waves
+  - Keyboard and gamepad support
+  - Power-ups, boss fights, UFOs, aliens
+  - Leaderboard system & CRT effects
+  - Nectarine Demoscene Radio integration`}
+              </pre>
+              <button
+                onClick={() => setShowChangelog(false)}
+                className="w-full mt-4 font-mono text-xs text-[hsl(var(--game-foreground))] opacity-60 hover:opacity-100 transition-opacity uppercase tracking-widest text-center py-2 border border-[hsl(var(--game-foreground))]/30"
+              >
+                ◂ BACK TO MENU
+              </button>
+            </div>
+          </div>
+        )}
 
         <div className="mt-8 flex flex-col gap-2 max-w-md">
           <a

@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.6] - 2026-03-13
+
+### Gameplay
+
+- **Extra Life Cap**: Maximum extra lives earned per level now capped — 1 per level on waves 1-3, 2 per level on waves 4-6, 3 per level from wave 7 onward
+- **Difficulty Scaling**: Speed now starts at 100% on wave 1 and increases by 5% per level (previously 110% base with 3% per wave)
+
+### Added
+
+- **In-Game Changelog**: Changelog now opens as an in-game overlay with monospace font instead of linking to GitHub; closeable with a "Back to Menu" button
+
 ## [0.1.5] - 2026-03-13
 
 ### Performance
@@ -65,8 +76,8 @@ All notable changes to this project will be documented in this file.
 
 ## **Branding Updates**
 
-- “NECTARINE DEMOSCENE RADIO” now links to **scenestream.net**
-- Removed “Thanks to…” text below the title
+- "NECTARINE DEMOSCENE RADIO" now links to **scenestream.net**
+- Removed "Thanks to…" text below the title
 
 ## **HUD & Version Display**
 
