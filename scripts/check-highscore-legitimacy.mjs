@@ -74,6 +74,18 @@ async function checkHighscoreLegitimacy(scoreId) {
     .single();
   
   if (error) {
+    // Check if error is due to missing columns (migration not applied)
+    if (error.message && (error.message.includes('session_token') || error.message.includes('submission_method'))) {
+      console.error('❌ Error: Database migration not applied yet');
+      console.error('');
+      console.error('The tracking columns (session_token, submission_method) do not exist.');
+      console.error('Please apply the migration first:');
+      console.error('  supabase db push');
+      console.error('');
+      console.error('Or manually run the SQL from:');
+      console.error('  /supabase/migrations/20260313125000_add_submission_tracking.sql');
+      process.exit(1);
+    }
     console.error('❌ Error querying database:', error.message);
     process.exit(1);
   }

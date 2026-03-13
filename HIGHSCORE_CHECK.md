@@ -4,12 +4,32 @@
 
 Check if the highscore with ID `54936b71-eb3b-4295-bc4a-0b25a68d022d` (initials: LW, score: 345690) was submitted by a real game session or manually.
 
-## Current Status
+## Answer
+
+### Current Status (Before Deployment)
 
 **Before this PR is deployed**, the tracking system doesn't exist, so:
 - ❓ **Cannot be verified** - The database doesn't have the necessary metadata columns yet
+- All scores in the database are unverified and unverifiable
 
-**After this PR is deployed**, you can verify using one of the methods below.
+### After Deployment
+
+**After this PR is deployed** (migration applied + Edge Function updated):
+
+1. **For the specific score in question**:
+   - Will be marked as `submission_method = 'legacy'`
+   - Will have `session_token = NULL`
+   - **Status**: ⚠️  **LEGACY SUBMISSION** (unverifiable)
+   
+2. **Why it's unverifiable**:
+   - The score already exists in the database
+   - No session token was stored at the time of submission (feature didn't exist)
+   - Cannot retroactively determine if it was from a real game session or manual insertion
+
+3. **Recommendation**:
+   - If you need to verify this specific score, check database insertion logs or audit logs
+   - Consider removing it if legitimacy is critical
+   - Going forward, all new scores will be verifiable with this system
 
 ---
 
@@ -40,10 +60,49 @@ FROM current_high_scores
 WHERE id = '54936b71-eb3b-4295-bc4a-0b25a68d022d';
 ```
 
+**Expected Result:**
+```
+id: 54936b71-eb3b-4295-bc4a-0b25a68d022d
+initials: LW
+score: 345690
+created_at: [some timestamp]
+session_token: NULL
+submission_method: legacy
+legitimacy_status: ⚠️  LEGACY - Predates tracking system
+```
+
 ### Method 2: Node.js Script
 
 ```bash
 node scripts/check-highscore-legitimacy.mjs 54936b71-eb3b-4295-bc4a-0b25a68d022d
+```
+
+**Expected Output:**
+```
+🔍 Checking highscore legitimacy...
+
+Score ID: 54936b71-eb3b-4295-bc4a-0b25a68d022d
+
+📊 Highscore Details:
+──────────────────────────────────────────────────
+  ID:          54936b71-eb3b-4295-bc4a-0b25a68d022d
+  Initials:    LW
+  Score:       345,690
+  Created:     [timestamp]
+  Session Token: (none)
+  Method:      legacy
+──────────────────────────────────────────────────
+
+🔎 Legitimacy Assessment:
+──────────────────────────────────────────────────
+⚠️  LEGACY SUBMISSION
+   This score existed before the session token system was
+   implemented. Cannot verify if it was from a real game session.
+
+   This could be:
+   • A legitimate score from before the security update
+   • A manually inserted score from the early days
+──────────────────────────────────────────────────
 ```
 
 ### Method 3: Deno Script
@@ -51,20 +110,6 @@ node scripts/check-highscore-legitimacy.mjs 54936b71-eb3b-4295-bc4a-0b25a68d022d
 ```bash
 deno run --allow-env --allow-net scripts/check-highscore-legitimacy.ts 54936b71-eb3b-4295-bc4a-0b25a68d022d
 ```
-
----
-
-## Expected Result
-
-Since the score `54936b71-eb3b-4295-bc4a-0b25a68d022d` already exists in the database:
-
-### After Deployment:
-- **submission_method**: `legacy`
-- **session_token**: `NULL`
-- **Status**: ⚠️  **LEGACY SUBMISSION**
-
-**Interpretation:**
-> This score existed before the session tracking system was implemented. We cannot definitively verify whether it was submitted through a real game session or manually inserted. It will be marked as "legacy".
 
 ---
 
@@ -76,30 +121,32 @@ After this PR is deployed, all **new** highscore submissions will include:
 2. **submission_method** - Set to `edge_function` for normal game submissions
 
 You can verify any future score by:
-- Checking if `submission_method = 'edge_function'` ✅ = Real game
-- Checking if `submission_method = 'manual'` 🔴 = Admin inserted
-- Checking if session_token is present and valid
+- ✅ `submission_method = 'edge_function'` + session_token present = **Real game**
+- 🔴 `submission_method = 'manual'` = **Admin inserted**
+- ⚠️  `submission_method = 'legacy'` = **Predates tracking** (unverifiable)
 
 ---
 
-## Summary
+## Solution Provided
 
 **Problem**: Check if highscore `54936b71-eb3b-4295-bc4a-0b25a68d022d` was legitimate
 
-**Answer**: 
+**Answer for this specific score**: 
 - **Current State**: Cannot verify (tracking system not deployed)
 - **After Deployment**: Will be marked as "legacy" - unverifiable because it predates the tracking system
-- **For Future**: All new scores will be trackable and verifiable
+- **Recommendation**: Check database audit logs if available, or remove if legitimacy is critical
 
-**Solution Provided**:
-1. Database migration to add `session_token` and `submission_method` columns
-2. Updated Edge Function to store session tokens with submissions
-3. Admin scripts (Node.js and Deno) to check any score
-4. SQL query for direct database verification
-5. Documentation in SECURITY.md and scripts/README.md
+**Solution for all future scores**:
+1. ✅ Database migration adds `session_token` and `submission_method` columns
+2. ✅ Edge Function updated to store session tokens with submissions  
+3. ✅ Admin scripts (Node.js and Deno) to check any score
+4. ✅ SQL query for direct database verification
+5. ✅ Documentation in SECURITY.md and scripts/README.md
 
-**Deployment Required**:
+**Deployment Steps**:
 ```bash
-supabase db push  # Apply migration
-supabase functions deploy submit-score  # Deploy updated function
+supabase db push                          # Apply migration
+supabase functions deploy submit-score    # Deploy updated function
+node scripts/check-highscore-legitimacy.mjs 54936b71-eb3b-4295-bc4a-0b25a68d022d  # Check the score
 ```
+
