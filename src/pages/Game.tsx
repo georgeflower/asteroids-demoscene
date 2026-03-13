@@ -8,6 +8,8 @@ import { haptics } from "@/utils/haptics";
 import { useMultiplayer } from "@/hooks/useMultiplayer";
 import OnlineLobby from "@/components/OnlineLobby";
 import CRTBootOverlay from "@/components/CRTBootOverlay";
+import ControlSettings from "@/components/ControlSettings";
+import { loadBindings, displayKeyName, type ControlBindings } from "@/hooks/useControlSettings";
 import type { DuelNetState } from "@/types/multiplayer";
 import { DEBUG_ENABLED, DEBUG_CATEGORIES, type DebugCategory, type DebugLogEntry } from "@/constants/debug";
 
@@ -303,6 +305,8 @@ const Game = () => {
   const [oldLeaderboard, setOldLeaderboard] = useState<{ initials: string; score: number; date: string }[]>([]);
   const [showOldLeaderboard, setShowOldLeaderboard] = useState(false);
   const [showChangelog, setShowChangelog] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const controlBindingsRef = useRef<ControlBindings>(loadBindings());
   const [showLifeLost, setShowLifeLost] = useState(false);
   const showLifeLostRef = useRef(false);
   const gameSessionTokenRef = useRef<string | null>(null);
@@ -797,11 +801,11 @@ const Game = () => {
       if (gp.buttons[14]?.pressed) result.left = true;
       if (gp.buttons[15]?.pressed) result.right = true;
       if (gp.buttons[12]?.pressed) result.up = true;
-      // Fire = button 0 (A/X), Hyperspace = button 1 (B/Circle)
-      if (gp.buttons[0]?.pressed) result.fire = true;
-      if (gp.buttons[1]?.pressed) result.hyperspace = true;
-      // X button (button 2) = also thrust
-      if (gp.buttons[2]?.pressed) result.up = true;
+      // Fire, Hyperspace, Thrust (alt) - use gamepad bindings
+      const gb = controlBindingsRef.current.gamepad;
+      if (gp.buttons[gb.fire]?.pressed) result.fire = true;
+      if (gp.buttons[gb.hyperspace]?.pressed) result.hyperspace = true;
+      if (gp.buttons[gb.thrust]?.pressed) result.up = true;
     } catch {
       /* no gamepad API */
     }
@@ -1399,17 +1403,18 @@ const Game = () => {
     const gp0 = readGamepad(0);
     const gp1 = readGamepad(1);
 
-    // P1: Arrow keys or gamepad 0
-    const p1Left = keys["ArrowLeft"] || gp0.left;
-    const p1Right = keys["ArrowRight"] || gp0.right;
-    const p1Up = keys["ArrowUp"] || gp0.up;
-    const p1Fire = keys[" "] || gp0.fire;
+    // P1: Custom keys or gamepad 0
+    const b = controlBindingsRef.current;
+    const p1Left = keys[b.p1.left] || gp0.left;
+    const p1Right = keys[b.p1.right] || gp0.right;
+    const p1Up = keys[b.p1.thrust] || gp0.up;
+    const p1Fire = keys[b.p1.fire] || gp0.fire;
 
-    // P2: WASD or gamepad 1
-    const p2Left = keys["a"] || keys["A"] || gp1.left;
-    const p2Right = keys["d"] || keys["D"] || gp1.right;
-    const p2Up = keys["w"] || keys["W"] || gp1.up;
-    const p2Fire = keys["e"] || keys["E"] || gp1.fire;
+    // P2: Custom keys or gamepad 1
+    const p2Left = keys[b.p2.left] || keys[b.p2.left.toUpperCase()] || gp1.left;
+    const p2Right = keys[b.p2.right] || keys[b.p2.right.toUpperCase()] || gp1.right;
+    const p2Up = keys[b.p2.thrust] || keys[b.p2.thrust.toUpperCase()] || gp1.up;
+    const p2Fire = keys[b.p2.fire] || keys[b.p2.fire.toUpperCase()] || gp1.fire;
 
     // Handle respawn timers
     for (let p = 0; p < 2; p++) {
@@ -1667,10 +1672,10 @@ const Game = () => {
     const theme = getTheme(state.wave);
     const gp0 = readGamepad(0);
 
-    // Update ship — keyboard OR gamepad
-    const p1Left = keysRef.current["ArrowLeft"] || gp0.left;
-    const p1Right = keysRef.current["ArrowRight"] || gp0.right;
-    const p1Up = keysRef.current["ArrowUp"] || gp0.up;
+    const b = controlBindingsRef.current;
+    const p1Left = keysRef.current[b.p1.left] || gp0.left;
+    const p1Right = keysRef.current[b.p1.right] || gp0.right;
+    const p1Up = keysRef.current[b.p1.thrust] || gp0.up;
 
     if (p1Left) state.ship.rotation -= state.ship.rotationSpeed;
     if (p1Right) state.ship.rotation += state.ship.rotationSpeed;
@@ -2790,13 +2795,14 @@ const Game = () => {
       if (isHostRef.current && workerRef.current) {
         const keys = keysRef.current;
         const gp0 = readGamepad(0);
+        const b = controlBindingsRef.current;
         workerRef.current.postMessage({
           type: "inputs",
           p1: {
-            left: keys["ArrowLeft"] || gp0.left,
-            right: keys["ArrowRight"] || gp0.right,
-            up: keys["ArrowUp"] || gp0.up,
-            fire: keys[" "] || gp0.fire,
+            left: keys[b.p1.left] || gp0.left,
+            right: keys[b.p1.right] || gp0.right,
+            up: keys[b.p1.thrust] || gp0.up,
+            fire: keys[b.p1.fire] || gp0.fire,
           },
           p2: multiplayer.remoteInputRef.current,
         });
@@ -2804,11 +2810,12 @@ const Game = () => {
       if (!isHostRef.current && isConnectedRef.current) {
         const keys = keysRef.current;
         const gp0 = readGamepad(0);
+        const b = controlBindingsRef.current;
         multiplayer.sendInputs({
-          left: keys["ArrowLeft"] || gp0.left,
-          right: keys["ArrowRight"] || gp0.right,
-          up: keys["ArrowUp"] || gp0.up,
-          fire: keys[" "] || gp0.fire,
+          left: keys[b.p1.left] || gp0.left,
+          right: keys[b.p1.right] || gp0.right,
+          up: keys[b.p1.thrust] || gp0.up,
+          fire: keys[b.p1.fire] || gp0.fire,
         });
       }
       updateOnlineVisuals();
@@ -3175,40 +3182,34 @@ const Game = () => {
         return;
       }
 
-      // Prevent default browser behavior for arrow keys and game control keys during gameplay
-      if (
-        !showGameOver &&
-        (e.key === "ArrowUp" ||
-          e.key === "ArrowDown" ||
-          e.key === "ArrowLeft" ||
-          e.key === "ArrowRight" ||
-          e.key === "w" ||
-          e.key === "W" ||
-          e.key === "a" ||
-          e.key === "A" ||
-          e.key === "s" ||
-          e.key === "S" ||
-          e.key === "d" ||
-          e.key === "D")
-      ) {
+      // Prevent default browser behavior for game control keys during gameplay
+      const b = controlBindingsRef.current;
+      const allGameKeys = new Set([
+        b.p1.left, b.p1.right, b.p1.thrust, b.p1.fire, b.p1.hyperspace,
+        b.p2.left, b.p2.right, b.p2.thrust, b.p2.fire, b.p2.hyperspace,
+        b.p2.left.toUpperCase(), b.p2.right.toUpperCase(), b.p2.thrust.toUpperCase(),
+        b.p2.fire.toUpperCase(), b.p2.hyperspace.toUpperCase(),
+        "ArrowDown", // always prevent
+      ]);
+      if (!showGameOver && allGameKeys.has(e.key)) {
         e.preventDefault();
       }
 
       keysRef.current[e.key] = true;
       if (gameModeRef.current === "solo") {
-        if (e.key === " ") {
+        if (e.key === b.p1.fire) {
           e.preventDefault();
           shootBullet();
         }
-        if (e.key === "h" || e.key === "H" || e.key === "Control") {
+        if (e.key === b.p1.hyperspace || e.key === "h" || e.key === "H") {
           e.preventDefault();
           hyperspace();
         }
       } else if (gameModeRef.current === "duel" || gameModeRef.current === "online") {
-        if (e.key === " ") {
+        if (e.key === b.p1.fire) {
           e.preventDefault();
         }
-        if (e.key === "e" || e.key === "E") {
+        if (e.key === b.p2.fire || e.key === b.p2.fire.toUpperCase()) {
           e.preventDefault();
         }
       }
@@ -3418,6 +3419,12 @@ const Game = () => {
             {menuSelection === 2 ? "▸ " : "  "}ONLINE
           </Button>
         </div>
+        <button
+          onClick={() => setShowSettings(true)}
+          className="font-mono text-xs px-4 py-2 mt-2 border border-[hsl(var(--game-foreground))]/40 text-[hsl(var(--game-foreground))] opacity-60 hover:opacity-100 transition-opacity uppercase tracking-widest"
+        >
+          ⚙ SETTINGS
+        </button>
 
         {/* Top 3 High Scores (current) */}
         {leaderboard.length > 0 && (
@@ -3572,8 +3579,8 @@ const Game = () => {
         )}
 
         <div className="text-[hsl(var(--game-foreground))] font-mono text-xs space-y-1 opacity-60 text-center">
-          <div>SOLO: Arrow Keys + Space + Ctrl | Gamepad supported</div>
-          <div>DUEL: P1 Arrows+Space | P2 WASD+E | Gamepads 1 & 2</div>
+          <div>SOLO: {displayKeyName(controlBindingsRef.current.p1.left)}{displayKeyName(controlBindingsRef.current.p1.right)}{displayKeyName(controlBindingsRef.current.p1.thrust)} + {displayKeyName(controlBindingsRef.current.p1.fire)} + {displayKeyName(controlBindingsRef.current.p1.hyperspace)} | Gamepad supported</div>
+          <div>DUEL: P1 {displayKeyName(controlBindingsRef.current.p1.left)}{displayKeyName(controlBindingsRef.current.p1.right)}{displayKeyName(controlBindingsRef.current.p1.thrust)}+{displayKeyName(controlBindingsRef.current.p1.fire)} | P2 {displayKeyName(controlBindingsRef.current.p2.left)}{displayKeyName(controlBindingsRef.current.p2.right)}{displayKeyName(controlBindingsRef.current.p2.thrust)}+{displayKeyName(controlBindingsRef.current.p2.fire)} | Gamepads 1 & 2</div>
           <div>ONLINE: Create or join a room to duel remotely</div>
         </div>
 
@@ -3585,6 +3592,18 @@ const Game = () => {
             📋 CHANGELOG
           </button>
         </div>
+
+        {/* Settings overlay */}
+        {showSettings && (
+          <ControlSettings
+            bindings={controlBindingsRef.current}
+            onSave={(newBindings) => {
+              controlBindingsRef.current = newBindings;
+              setShowSettings(false);
+            }}
+            onClose={() => setShowSettings(false)}
+          />
+        )}
 
         {/* Changelog overlay */}
         {showChangelog && (
