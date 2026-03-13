@@ -153,7 +153,48 @@ If you discover a security vulnerability in the highscore system or any other pa
 3. Provide detailed information about the vulnerability
 4. Allow time for a fix before public disclosure
 
+### Verifying Highscore Legitimacy
+
+#### Admin Utility Script
+
+A utility script is available to check whether a specific highscore was submitted through a legitimate game session.
+
+**Location:** `/scripts/check-highscore-legitimacy.ts`
+
+**Usage:**
+```bash
+deno run --allow-env --allow-net scripts/check-highscore-legitimacy.ts <score_id>
+```
+
+**Example:**
+```bash
+deno run --allow-env --allow-net scripts/check-highscore-legitimacy.ts 54936b71-eb3b-4295-bc4a-0b25a68d022d
+```
+
+The script will display:
+- Full highscore details
+- Session token (if available)
+- Submission method (edge_function, manual, or legacy)
+- Clear legitimacy assessment
+
+#### Submission Tracking
+
+Starting with the 2026-03-13 update, all highscore submissions include:
+- **session_token**: The unique token from the game session
+- **submission_method**: How the score was submitted
+  - `edge_function`: Normal game submission with session validation
+  - `manual`: Manually inserted by administrator
+  - `legacy`: Existed before tracking was implemented
+
+Scores without these metadata fields are considered legacy and cannot be verified.
+
 ### Changelog
+
+#### 2026-03-13: Submission Tracking Added
+- Added `session_token` and `submission_method` columns to database
+- Updated Edge Function to store session tokens with submissions
+- Created admin utility script for verifying highscore legitimacy
+- Marked pre-existing scores as 'legacy'
 
 #### 2026-03-13: Initial Security Implementation
 - Implemented Edge Function for secure score submission

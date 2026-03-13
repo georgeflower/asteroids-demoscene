@@ -213,6 +213,8 @@ Deno.serve(async (req) => {
         .insert({
           initials: submission.initials,
           score: submission.score,
+          session_token: submission.gameSessionToken,
+          submission_method: 'edge_function',
         });
       
       if (error) {
