@@ -3182,40 +3182,34 @@ const Game = () => {
         return;
       }
 
-      // Prevent default browser behavior for arrow keys and game control keys during gameplay
-      if (
-        !showGameOver &&
-        (e.key === "ArrowUp" ||
-          e.key === "ArrowDown" ||
-          e.key === "ArrowLeft" ||
-          e.key === "ArrowRight" ||
-          e.key === "w" ||
-          e.key === "W" ||
-          e.key === "a" ||
-          e.key === "A" ||
-          e.key === "s" ||
-          e.key === "S" ||
-          e.key === "d" ||
-          e.key === "D")
-      ) {
+      // Prevent default browser behavior for game control keys during gameplay
+      const b = controlBindingsRef.current;
+      const allGameKeys = new Set([
+        b.p1.left, b.p1.right, b.p1.thrust, b.p1.fire, b.p1.hyperspace,
+        b.p2.left, b.p2.right, b.p2.thrust, b.p2.fire, b.p2.hyperspace,
+        b.p2.left.toUpperCase(), b.p2.right.toUpperCase(), b.p2.thrust.toUpperCase(),
+        b.p2.fire.toUpperCase(), b.p2.hyperspace.toUpperCase(),
+        "ArrowDown", // always prevent
+      ]);
+      if (!showGameOver && allGameKeys.has(e.key)) {
         e.preventDefault();
       }
 
       keysRef.current[e.key] = true;
       if (gameModeRef.current === "solo") {
-        if (e.key === " ") {
+        if (e.key === b.p1.fire) {
           e.preventDefault();
           shootBullet();
         }
-        if (e.key === "h" || e.key === "H" || e.key === "Control") {
+        if (e.key === b.p1.hyperspace || e.key === "h" || e.key === "H") {
           e.preventDefault();
           hyperspace();
         }
       } else if (gameModeRef.current === "duel" || gameModeRef.current === "online") {
-        if (e.key === " ") {
+        if (e.key === b.p1.fire) {
           e.preventDefault();
         }
-        if (e.key === "e" || e.key === "E") {
+        if (e.key === b.p2.fire || e.key === b.p2.fire.toUpperCase()) {
           e.preventDefault();
         }
       }
