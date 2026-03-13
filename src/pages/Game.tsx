@@ -213,7 +213,7 @@ const FRAME_MIN_TIME = FIXED_TIMESTEP; // 60 FPS render cap (tied to fixed times
 // accidentally skipping a frame due to sub-millisecond precision drift.
 const FRAME_TIME_TOLERANCE = 1;
 
-const GAME_VERSION = "0.1.6";
+const GAME_VERSION = "0.1.7";
 const SHIP_SIZE = 10;
 const BULLET_SPEED = 7;
 const BULLET_LIFETIME = 60;
@@ -3627,7 +3627,14 @@ const Game = () => {
                 📋 CHANGELOG
               </div>
               <pre className="font-mono text-[11px] text-[hsl(var(--game-foreground))] whitespace-pre-wrap leading-relaxed opacity-90">
-{`[0.1.6] - 2026-03-13
+{`[0.1.7] - 2026-03-13
+
+  Fixed
+  - Settings overlay now accessible from the pause menu
+    (previously only worked from the main menu)
+  - Opening settings from pause no longer unpauses the game
+
+[0.1.6] - 2026-03-13
 
   Gameplay
   - Extra Life Cap: Max extra lives per level capped at
