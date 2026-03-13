@@ -3593,6 +3593,18 @@ const Game = () => {
           </button>
         </div>
 
+        {/* Settings overlay */}
+        {showSettings && (
+          <ControlSettings
+            bindings={controlBindingsRef.current}
+            onSave={(newBindings) => {
+              controlBindingsRef.current = newBindings;
+              setShowSettings(false);
+            }}
+            onClose={() => setShowSettings(false)}
+          />
+        )}
+
         {/* Changelog overlay */}
         {showChangelog && (
           <div
