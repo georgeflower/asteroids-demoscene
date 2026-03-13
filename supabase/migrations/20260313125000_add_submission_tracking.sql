@@ -3,7 +3,7 @@
 
 ALTER TABLE public.current_high_scores
   ADD COLUMN session_token uuid,
-  ADD COLUMN submission_method text DEFAULT 'edge_function' CHECK (submission_method IN ('edge_function', 'manual', 'legacy'));
+  ADD COLUMN submission_method text CHECK (submission_method IN ('edge_function', 'manual', 'legacy'));
 
 -- Add index for faster lookups by session token
 CREATE INDEX idx_current_high_scores_session_token ON public.current_high_scores(session_token);
@@ -15,4 +15,4 @@ COMMENT ON COLUMN public.current_high_scores.submission_method IS 'Method used t
 -- Mark existing scores as legacy since they don't have session tokens
 UPDATE public.current_high_scores
 SET submission_method = 'legacy'
-WHERE submission_method IS NULL OR session_token IS NULL;
+WHERE session_token IS NULL;
