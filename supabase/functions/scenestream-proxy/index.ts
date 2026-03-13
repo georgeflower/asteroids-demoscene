@@ -3,6 +3,11 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 };
 
+const ALLOWED_ENDPOINTS = [
+  '/demovibes/xml/queue/',
+  '/demovibes/xml/oneliner/',
+];
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -11,7 +16,7 @@ Deno.serve(async (req) => {
   try {
     const { endpoint } = await req.json();
 
-    if (!endpoint || !endpoint.startsWith('/') || endpoint.includes('..')) {
+    if (!endpoint || typeof endpoint !== 'string' || !ALLOWED_ENDPOINTS.includes(endpoint)) {
       return new Response(
         JSON.stringify({ error: 'Invalid endpoint' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -31,7 +36,7 @@ Deno.serve(async (req) => {
     });
   } catch (error) {
     console.error('Proxy error:', error);
-    return new Response(JSON.stringify({ error: (error as Error).message }), {
+    return new Response(JSON.stringify({ error: 'Internal proxy error' }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
