@@ -3419,6 +3419,12 @@ const Game = () => {
             {menuSelection === 2 ? "▸ " : "  "}ONLINE
           </Button>
         </div>
+        <button
+          onClick={() => setShowSettings(true)}
+          className="font-mono text-xs px-4 py-2 mt-2 border border-[hsl(var(--game-foreground))]/40 text-[hsl(var(--game-foreground))] opacity-60 hover:opacity-100 transition-opacity uppercase tracking-widest"
+        >
+          ⚙ SETTINGS
+        </button>
 
         {/* Top 3 High Scores (current) */}
         {leaderboard.length > 0 && (
