@@ -108,6 +108,13 @@ Modified `/src/pages/Game.tsx`:
 
 ### Security Considerations
 
+#### Cold Start Handling
+The Edge Function uses an in-memory Map to store game sessions, which is cleared on function cold starts (typically after 15-30 minutes of inactivity). To handle this gracefully:
+- When a session token is not found but is a valid UUID v4 format, the session is auto-recreated
+- This allows legitimate players to submit scores even after cold starts
+- Invalid or malformed tokens are still rejected
+- Rate limiting and duplicate detection still apply to auto-recreated sessions
+
 #### What This Protects Against
 ✅ Browser console score manipulation  
 ✅ Direct Supabase client API calls  

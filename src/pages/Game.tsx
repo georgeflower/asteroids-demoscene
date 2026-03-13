@@ -515,16 +515,18 @@ const Game = () => {
   }, []);
 
   const saveToLeaderboard = useCallback(
-    async (playerInitials: string, score: number) => {
+    async (playerInitials: string, score: number): Promise<boolean> => {
       // Trainer mode: don't save scores
       if (DEBUG_ENABLED && trainerModeRef.current) {
         console.log("Trainer mode: score not saved");
-        return;
+        // Return true to close dialog and proceed - trainer mode is for practice only
+        return true;
       }
       
       if (!gameSessionTokenRef.current) {
         console.error("No game session token available");
-        return;
+        setInitialsError("Unable to save score. Please try again.");
+        return false;
       }
 
       const timePlayedSeconds = Math.floor((Date.now() - gameStartTimeRef.current) / 1000);
@@ -559,19 +561,29 @@ const Game = () => {
           if (response.status === 400 && result.error === 'Please choose different initials') {
             setInitialsError(result.error);
             setEnteringInitials(true); // Keep the initials entry form open
-            return;
+            return false;
           }
           // Log duplicate score detection - UI could be enhanced with toast notification
           if (response.status === 409) {
             console.warn("Duplicate score detected:", result.error);
+            // Refresh leaderboard to show current standings
+            const board = await loadLeaderboard();
+            setLeaderboard(board);
+            // For duplicate scores, consider it successful since the score is already there
+            return true;
           }
-          return;
+          // Generic error message for other failures
+          setInitialsError("Failed to save score. Please try again.");
+          return false;
         }
         
         const board = await loadLeaderboard();
         setLeaderboard(board);
+        return true;
       } catch (error) {
         console.error("Error saving score:", error);
+        setInitialsError("Network error. Please try again.");
+        return false;
       }
     },
     [loadLeaderboard],
@@ -3861,14 +3873,16 @@ const Game = () => {
                         setInitialsError("Please choose different initials");
                       }
                     }}
-                    onKeyDown={(e) => {
+                    onKeyDown={async (e) => {
                       if (e.key === "Enter" && initials.length > 0) {
                         // Validate before submission
                         if (!isInitialsAppropriate(initials)) {
                           setInitialsError("Please choose different initials");
                         } else {
-                          saveToLeaderboard(initials, displayScore);
-                          setEnteringInitials(false);
+                          const success = await saveToLeaderboard(initials, displayScore);
+                          if (success) {
+                            setEnteringInitials(false);
+                          }
                         }
                       }
                       e.stopPropagation();
@@ -3878,14 +3892,16 @@ const Game = () => {
                     placeholder="___"
                   />
                   <Button
-                    onClick={() => {
+                    onClick={async () => {
                       if (initials.length > 0) {
                         // Validate before submission
                         if (!isInitialsAppropriate(initials)) {
                           setInitialsError("Please choose different initials");
                         } else {
-                          saveToLeaderboard(initials, displayScore);
-                          setEnteringInitials(false);
+                          const success = await saveToLeaderboard(initials, displayScore);
+                          if (success) {
+                            setEnteringInitials(false);
+                          }
                         }
                       }
                     }}
