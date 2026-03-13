@@ -306,6 +306,7 @@ const Game = () => {
   const [showLifeLost, setShowLifeLost] = useState(false);
   const showLifeLostRef = useRef(false);
   const gameSessionTokenRef = useRef<string | null>(null);
+  const gameStartTimeRef = useRef<number>(Date.now());
   const [isTouchDevice, setIsTouchDevice] = useState(false);
   const [nowPlaying, setNowPlaying] = useState<{ artist: string; title: string } | null>(null);
   const nowPlayingRef = useRef<{ artist: string; title: string } | null>(null);
@@ -528,6 +529,9 @@ const Game = () => {
         return false;
       }
 
+      const timePlayedSeconds = Math.floor((Date.now() - gameStartTimeRef.current) / 1000);
+      const currentWave = gameStateRef.current?.wave ?? 1;
+
       try {
         const response = await fetch(
           `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/submit-score/submit`,
@@ -542,6 +546,9 @@ const Game = () => {
               score,
               gameSessionToken: gameSessionTokenRef.current,
               timestamp: Date.now(),
+              level: currentWave,
+              timePlayedSeconds,
+              source: 'game_client',
             }),
           }
         );
@@ -856,6 +863,7 @@ const Game = () => {
     checkVersion();
     // Start a new game session for secure score submission
     startGameSession();
+    gameStartTimeRef.current = Date.now();
     // Game started
     // Focus canvas for input capture
     setTimeout(() => {
