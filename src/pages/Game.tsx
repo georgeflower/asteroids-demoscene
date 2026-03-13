@@ -288,6 +288,7 @@ const Game = () => {
   const [hallOfFame, setHallOfFame] = useState<{ initials: string; score: number; date: string }[]>([]);
   const [oldLeaderboard, setOldLeaderboard] = useState<{ initials: string; score: number; date: string }[]>([]);
   const [showOldLeaderboard, setShowOldLeaderboard] = useState(false);
+  const [showChangelog, setShowChangelog] = useState(false);
   const [showLifeLost, setShowLifeLost] = useState(false);
   const showLifeLostRef = useRef(false);
   const [isTouchDevice, setIsTouchDevice] = useState(false);
