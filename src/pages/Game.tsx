@@ -765,7 +765,11 @@ const Game = () => {
 
   const createPowerUp = (x: number, y: number): PowerUp | null => {
     if (Math.random() > 0.15) return null;
-    const types: PowerUp["type"][] = ["shield", "rapidFire", "extraLife", "multiplier"];
+    let types: PowerUp["type"][] = ["shield", "rapidFire", "extraLife", "multiplier"];
+    const maxExtraLives = state.wave <= 3 ? 1 : state.wave <= 6 ? 2 : 3;
+    if (state.extraLivesThisWave >= maxExtraLives) {
+      types = types.filter(t => t !== "extraLife");
+    }
     const type = types[Math.floor(Math.random() * types.length)];
     return {
       pos: { x, y },
