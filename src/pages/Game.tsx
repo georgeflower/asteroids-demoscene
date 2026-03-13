@@ -490,7 +490,7 @@ const Game = () => {
   const startGameSession = useCallback(async () => {
     try {
       const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/submit-score/start-session`,
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/submit/start-session`,
         {
           method: 'POST',
           headers: {
@@ -534,7 +534,7 @@ const Game = () => {
 
       try {
         const response = await fetch(
-          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/submit-score/submit`,
+          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/submit/submit`,
           {
             method: 'POST',
             headers: {

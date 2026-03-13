@@ -145,8 +145,8 @@ You can verify any future score by:
 
 **Deployment Steps**:
 ```bash
-supabase db push                          # Apply migration
-supabase functions deploy submit-score    # Deploy updated function
+supabase db push                       # Apply migration
+supabase functions deploy submit       # Deploy updated function
 node scripts/check-highscore-legitimacy.mjs 54936b71-eb3b-4295-bc4a-0b25a68d022d  # Check the score
 ```
 
