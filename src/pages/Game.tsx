@@ -1904,10 +1904,14 @@ const Game = () => {
       powerUp.lifetime--;
 
       if (checkCollision(powerUp.pos, 15, state.ship.pos, SHIP_SIZE)) {
+        const maxExtraLivesCap = state.wave <= 3 ? 1 : state.wave <= 6 ? 2 : 3;
+        const extraLifeCapped = powerUp.type === "extraLife" && state.extraLivesThisWave >= maxExtraLivesCap;
         const powerUpLabels: Record<string, { text: string; color: string }> = {
           shield: { text: "SHIELD!", color: "#7FFF7F" },
           rapidFire: { text: "RAPID FIRE!", color: "#FF6666" },
-          extraLife: { text: "+1 LIFE!", color: "#CC66FF" },
+          extraLife: extraLifeCapped
+            ? { text: "MAX EXTRA LIVES!", color: "#888888" }
+            : { text: "+1 LIFE!", color: "#CC66FF" },
           multiplier: { text: "2x SCORE!", color: "#FFFF66" },
         };
         const label = powerUpLabels[powerUp.type];
