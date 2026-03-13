@@ -2795,13 +2795,14 @@ const Game = () => {
       if (isHostRef.current && workerRef.current) {
         const keys = keysRef.current;
         const gp0 = readGamepad(0);
+        const b = controlBindingsRef.current;
         workerRef.current.postMessage({
           type: "inputs",
           p1: {
-            left: keys["ArrowLeft"] || gp0.left,
-            right: keys["ArrowRight"] || gp0.right,
-            up: keys["ArrowUp"] || gp0.up,
-            fire: keys[" "] || gp0.fire,
+            left: keys[b.p1.left] || gp0.left,
+            right: keys[b.p1.right] || gp0.right,
+            up: keys[b.p1.thrust] || gp0.up,
+            fire: keys[b.p1.fire] || gp0.fire,
           },
           p2: multiplayer.remoteInputRef.current,
         });
