@@ -28,7 +28,13 @@ The highscore submission system has been secured to prevent unauthorized score s
 - Validates initials format: 1-3 uppercase letters only
 - Rejects malformed or suspicious submissions
 
-#### 5. Secure Database Access
+#### 5. Profanity Filter
+- Blocks inappropriate initials from being submitted
+- Client-side validation provides immediate feedback
+- Server-side enforcement prevents bypassing client checks
+- Maintains a curated list of banned initials
+
+#### 6. Secure Database Access
 - Direct INSERT permission revoked from public users
 - All score insertions go through authenticated Edge Function
 - Uses service role key for secure database operations
