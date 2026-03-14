@@ -784,7 +784,7 @@ const Game = () => {
         vel: { x: dir * 0.5, y: 0 },
         rotation: 0, type, hp: 2, moveTimer: 0,
         shootTimer: 60 + Math.random() * 40, zigzagPhase: 0,
-        invisTimer: 0, isInvisible: false, burstCount: 0, teleportCooldown: 90 + Math.random() * 60,
+        invisTimer: 0, isInvisible: false, burstCount: 0, teleportCooldown: 90 + Math.random() * 60, chargeTimer: 0,
       };
     }
     if (type === "purpleSwarm") {
