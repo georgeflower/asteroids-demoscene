@@ -21,6 +21,7 @@ interface GameSession {
   lastScore: number;
   submissionCount: number;
   lastSubmissionTime: number;
+  recreated?: boolean;
 }
 
 // In-memory store for game sessions
