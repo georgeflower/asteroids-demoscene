@@ -71,6 +71,7 @@ function validateSession(token: string, score: number): { valid: boolean; error?
       lastScore: 0,
       submissionCount: 0,
       lastSubmissionTime: 0,
+      recreated: true,
     };
     gameSessions.set(token, session);
   }
