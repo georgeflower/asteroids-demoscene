@@ -2030,13 +2030,26 @@ const Game = () => {
           }
 
           if (alien.teleportCooldown! <= 0) {
-            alien.pos.x = 50 + Math.random() * (CANVAS_WIDTH - 100);
-            alien.pos.y = 50 + Math.random() * (CANVAS_HEIGHT - 100);
+            if (!alien.chargeTimer || alien.chargeTimer <= 0) {
+              // Start charge-up before teleport
+              alien.chargeTimer = 30; // 0.5 sec charge
+              soundEffects.warpCharge();
+            }
+          }
+          // Process charge timer
+          if (alien.chargeTimer && alien.chargeTimer > 0) {
+            alien.chargeTimer--;
             alien.vel.x = 0;
             alien.vel.y = 0;
-            alien.teleportCooldown = 200 + Math.random() * 120;
-            // Spawn teleport particles
-            spawnExplosion(alien.pos, "#4488FF", 6);
+            if (alien.chargeTimer <= 0) {
+              // Execute teleport
+              alien.pos.x = 50 + Math.random() * (CANVAS_WIDTH - 100);
+              alien.pos.y = 50 + Math.random() * (CANVAS_HEIGHT - 100);
+              alien.vel.x = 0;
+              alien.vel.y = 0;
+              alien.teleportCooldown = 200 + Math.random() * 120;
+              spawnExplosion(alien.pos, "#4488FF", 6);
+            }
           }
         }
       } else if (alien.type === "purpleSwarm") {
