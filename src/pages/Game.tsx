@@ -2255,7 +2255,7 @@ const Game = () => {
         // Secondary aimed shot
         boss.shootTimer--;
         if (boss.shootTimer <= 0) {
-          boss.shootTimer = Math.max(30, 70 - state.wave * 2);
+          boss.shootTimer = Math.max(60, 120 - state.wave * 2);
           const ang = Math.atan2(state.ship.pos.y - boss.pos.y, state.ship.pos.x - boss.pos.x);
           state.bullets.push({
             pos: { ...boss.pos },
