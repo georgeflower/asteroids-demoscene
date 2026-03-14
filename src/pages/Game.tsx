@@ -2758,6 +2758,135 @@ const Game = () => {
         ctx.restore();
       });
 
+    // Red Drones
+    aliens
+      .filter((a) => a.type === "redDrone")
+      .forEach((alien) => {
+        ctx.save();
+        ctx.translate(alien.pos.x, alien.pos.y);
+        ctx.rotate(Math.atan2(alien.vel.y, alien.vel.x));
+        // Sleek triangular drone shape
+        ctx.strokeStyle = alien.isDashing ? "#FFFF00" : "#FF4444";
+        ctx.fillStyle = alien.isDashing ? "#FF8800" : "#661111";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(10, 0);
+        ctx.lineTo(-8, -7);
+        ctx.lineTo(-4, 0);
+        ctx.lineTo(-8, 7);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        // Thruster glow when dashing
+        if (alien.isDashing) {
+          ctx.fillStyle = "#FFAA00";
+          ctx.beginPath();
+          ctx.moveTo(-4, 0);
+          ctx.lineTo(-12, -3);
+          ctx.lineTo(-14, 0);
+          ctx.lineTo(-12, 3);
+          ctx.closePath();
+          ctx.fill();
+        }
+        // Engine dot
+        ctx.fillStyle = "#FF0000";
+        ctx.beginPath();
+        ctx.arc(-2, 0, 2, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      });
+
+    // Blue Sentinels
+    aliens
+      .filter((a) => a.type === "blueSentinel")
+      .forEach((alien) => {
+        if (alien.isInvisible) {
+          // Draw faint shimmer when invisible
+          ctx.save();
+          ctx.translate(alien.pos.x, alien.pos.y);
+          ctx.globalAlpha = 0.15;
+          ctx.strokeStyle = "#4488FF";
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.arc(0, 0, 14, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.restore();
+          return;
+        }
+        ctx.save();
+        ctx.translate(alien.pos.x, alien.pos.y);
+        // Diamond/crystal shape
+        ctx.strokeStyle = "#4488FF";
+        ctx.fillStyle = "#112244";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(0, -14);
+        ctx.lineTo(10, 0);
+        ctx.lineTo(0, 14);
+        ctx.lineTo(-10, 0);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        // Inner glow
+        ctx.strokeStyle = "#88CCFF";
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(0, -8);
+        ctx.lineTo(5, 0);
+        ctx.lineTo(0, 8);
+        ctx.lineTo(-5, 0);
+        ctx.closePath();
+        ctx.stroke();
+        // Eye
+        ctx.fillStyle = "#FFFFFF";
+        ctx.beginPath();
+        ctx.arc(0, -2, 3, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = "#4488FF";
+        ctx.beginPath();
+        ctx.arc(0, -2, 1.5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      });
+
+    // Purple Swarm
+    aliens
+      .filter((a) => a.type === "purpleSwarm")
+      .forEach((alien) => {
+        ctx.save();
+        ctx.translate(alien.pos.x, alien.pos.y);
+        const wobble = Math.sin(alien.zigzagPhase * 5) * 0.3;
+        ctx.rotate(Math.atan2(alien.vel.y, alien.vel.x) + wobble);
+        // Small insect-like shape
+        ctx.strokeStyle = "#AA44FF";
+        ctx.fillStyle = "#440066";
+        ctx.lineWidth = 1.5;
+        // Body
+        ctx.beginPath();
+        ctx.ellipse(0, 0, 6, 4, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        // Wings
+        ctx.fillStyle = "rgba(170, 68, 255, 0.3)";
+        ctx.beginPath();
+        ctx.ellipse(-2, -5, 4, 3, -0.3, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.ellipse(-2, 5, 4, 3, 0.3, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        // Antenna
+        ctx.strokeStyle = "#CC66FF";
+        ctx.beginPath();
+        ctx.moveTo(5, -2);
+        ctx.lineTo(9, -5);
+        ctx.moveTo(5, 2);
+        ctx.lineTo(9, 5);
+        ctx.stroke();
+        ctx.restore();
+      });
+
     // Floating texts
     floatingTexts.forEach((ft) => {
       ctx.save();
