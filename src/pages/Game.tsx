@@ -1203,7 +1203,11 @@ const Game = () => {
 
       const theme = getTheme(state.wave);
       spawnFloatingText({ x: CANVAS_WIDTH / 2, y: CANVAS_HEIGHT / 2 - 40 }, `WAVE ${state.wave}`, theme.ship, 28);
-      spawnFloatingText({ x: CANVAS_WIDTH / 2, y: CANVAS_HEIGHT / 2 + 10 }, "⚠ BOSS INCOMING ⚠", "#FF4444", 22);
+      const bossNames: Record<string, string> = { tentacle: "BOSS", amigaBall: "AMIGA BALL", flyingSaucer: "FLYING SAUCER", borgCube: "BORG CUBE" };
+      const bType = ((state.wave / 5 - 1) % 4);
+      const bTypes = ["tentacle", "amigaBall", "flyingSaucer", "borgCube"];
+      const bossLabel = bossNames[bTypes[bType]] || "BOSS";
+      spawnFloatingText({ x: CANVAS_WIDTH / 2, y: CANVAS_HEIGHT / 2 + 10 }, `⚠ ${bossLabel} INCOMING ⚠`, "#FF4444", 22);
       // Boss wave started
       return;
     }
