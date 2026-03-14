@@ -1093,7 +1093,7 @@ const Game = () => {
       pos: { x: a.x, y: a.y },
       vel: { x: a.vx, y: a.vy },
       rotation: 0,
-      type: a.type as "brown" | "greenMan",
+      type: a.type as Alien["type"],
       hp: 1,
       moveTimer: 0,
       shootTimer: 999,
