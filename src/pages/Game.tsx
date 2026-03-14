@@ -2825,43 +2825,7 @@ const Game = () => {
         ctx.restore();
       });
 
-    // Red Drones
-    aliens
-      .filter((a) => a.type === "redDrone")
-      .forEach((alien) => {
-        ctx.save();
-        ctx.translate(alien.pos.x, alien.pos.y);
-        ctx.rotate(Math.atan2(alien.vel.y, alien.vel.x));
-        // Sleek triangular drone shape
-        ctx.strokeStyle = alien.isDashing ? "#FFFF00" : "#FF4444";
-        ctx.fillStyle = alien.isDashing ? "#FF8800" : "#661111";
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.moveTo(10, 0);
-        ctx.lineTo(-8, -7);
-        ctx.lineTo(-4, 0);
-        ctx.lineTo(-8, 7);
-        ctx.closePath();
-        ctx.fill();
-        ctx.stroke();
-        // Thruster glow when dashing
-        if (alien.isDashing) {
-          ctx.fillStyle = "#FFAA00";
-          ctx.beginPath();
-          ctx.moveTo(-4, 0);
-          ctx.lineTo(-12, -3);
-          ctx.lineTo(-14, 0);
-          ctx.lineTo(-12, 3);
-          ctx.closePath();
-          ctx.fill();
-        }
-        // Engine dot
-        ctx.fillStyle = "#FF0000";
-        ctx.beginPath();
-        ctx.arc(-2, 0, 2, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.restore();
-      });
+    // Red Drones removed
 
     // Blue Sentinels
     aliens
