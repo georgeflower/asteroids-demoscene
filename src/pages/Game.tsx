@@ -1972,7 +1972,7 @@ const Game = () => {
 
         if (alien.isDashing) {
           // Dash toward player at high speed
-          const spd = 6 * getSpeedScale(state.wave);
+          const spd = 3.5 * getSpeedScale(state.wave);
           const ang = Math.atan2(dy, dx);
           alien.vel.x = Math.cos(ang) * spd;
           alien.vel.y = Math.sin(ang) * spd;
