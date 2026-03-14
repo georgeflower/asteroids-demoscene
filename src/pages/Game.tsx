@@ -2013,7 +2013,7 @@ const Game = () => {
             const angle = Math.atan2(state.ship.pos.y - alien.pos.y, state.ship.pos.x - alien.pos.x);
             const spread = (alien.burstCount! - 2) * 0.15;
             state.bullets.push({
-              pos: { ...alien.pos }, vel: { x: Math.cos(angle + spread) * 5, y: Math.sin(angle + spread) * 5 },
+              pos: { ...alien.pos }, vel: { x: Math.cos(angle + spread) * 3.5, y: Math.sin(angle + spread) * 3.5 },
               rotation: angle + spread, lifetime: BULLET_LIFETIME, isAlien: true, color: "#4488FF",
             });
             if (alien.burstCount! >= 3) {
