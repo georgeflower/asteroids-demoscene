@@ -2153,7 +2153,7 @@ const Game = () => {
         // Radial burst attack
         boss.shootTimer--;
         if (boss.shootTimer <= 0) {
-          boss.shootTimer = Math.max(60, 120 - state.wave * 2);
+          boss.shootTimer = Math.max(90, 180 - state.wave * 2);
           const count = 8;
           for (let i = 0; i < count; i++) {
             const ang = (i / count) * Math.PI * 2;
