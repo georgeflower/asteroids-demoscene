@@ -1971,26 +1971,26 @@ const Game = () => {
         const dx = state.ship.pos.x - alien.pos.x;
         const dy = state.ship.pos.y - alien.pos.y;
         const dist = Math.hypot(dx, dy);
-        alien.orbitAngle = (alien.orbitAngle ?? 0) + 0.02;
-        alien.dashTimer = (alien.dashTimer ?? 120) - 1;
+        alien.orbitAngle = (alien.orbitAngle ?? 0) + 0.01;
+        alien.dashTimer = (alien.dashTimer ?? 400) - 1;
 
         if (alien.isDashing) {
-          // Dash toward player at high speed
-          const spd = 3.5 * getSpeedScale(state.wave);
+          // Dash toward player at reduced speed
+          const spd = 2.0 * getSpeedScale(state.wave);
           const ang = Math.atan2(dy, dx);
           alien.vel.x = Math.cos(ang) * spd;
           alien.vel.y = Math.sin(ang) * spd;
           if (dist < 30 || alien.dashTimer! < -60) {
             alien.isDashing = false;
-            alien.dashTimer = 250 + Math.random() * 120;
+            alien.dashTimer = 400 + Math.random() * 200;
           }
         } else {
           // Orbit at ~120px distance
           const orbitDist = 120;
           const targetX = state.ship.pos.x + Math.cos(alien.orbitAngle!) * orbitDist;
           const targetY = state.ship.pos.y + Math.sin(alien.orbitAngle!) * orbitDist;
-          alien.vel.x += (targetX - alien.pos.x) * 0.02;
-          alien.vel.y += (targetY - alien.pos.y) * 0.02;
+          alien.vel.x += (targetX - alien.pos.x) * 0.01;
+          alien.vel.y += (targetY - alien.pos.y) * 0.01;
           alien.vel.x *= 0.95;
           alien.vel.y *= 0.95;
           if (alien.dashTimer! <= 0) {
