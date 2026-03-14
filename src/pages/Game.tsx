@@ -2231,7 +2231,7 @@ const Game = () => {
 
         // HP regeneration every 180 ticks
         boss.regenTimer = (boss.regenTimer ?? 0) + 1;
-        if (boss.regenTimer >= 180 && boss.hp < boss.maxHp) {
+        if (boss.regenTimer >= 300 && boss.hp < boss.maxHp) {
           boss.hp = Math.min(boss.maxHp, boss.hp + 1);
           boss.regenTimer = 0;
           spawnFloatingText(boss.pos, "REGEN", "#00FF44", 12);
