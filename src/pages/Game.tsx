@@ -1922,10 +1922,7 @@ const Game = () => {
           state.aliens.push(createAlien("greenMan", state.wave));
           addDebugLog("spawn", `Green man spawned (wave ${state.wave})`);
         }
-        if (state.wave >= 4 && state.aliens.filter((a) => a.type === "redDrone").length < 2) {
-          state.aliens.push(createAlien("redDrone", state.wave));
-          addDebugLog("spawn", `Red drone spawned (wave ${state.wave})`);
-        }
+        // Red Drone removed
         if (state.wave >= 8 && state.aliens.filter((a) => a.type === "blueSentinel").length < 1) {
           state.aliens.push(createAlien("blueSentinel", state.wave));
           addDebugLog("spawn", `Blue sentinel spawned (wave ${state.wave})`);
