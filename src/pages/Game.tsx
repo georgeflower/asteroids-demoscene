@@ -2259,7 +2259,7 @@ const Game = () => {
           const ang = Math.atan2(state.ship.pos.y - boss.pos.y, state.ship.pos.x - boss.pos.x);
           state.bullets.push({
             pos: { ...boss.pos },
-            vel: { x: Math.cos(ang) * 4, y: Math.sin(ang) * 4 },
+              vel: { x: Math.cos(ang) * 2.8, y: Math.sin(ang) * 2.8 },
             rotation: ang, lifetime: BULLET_LIFETIME * 1.5, isUFO: true, color: "#00CC00",
           });
         }
