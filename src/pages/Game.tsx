@@ -114,6 +114,24 @@ interface Boss extends GameObject {
   phase: number;
   entered: boolean;
   targetY: number;
+  bossType: "tentacle" | "amigaBall" | "flyingSaucer" | "borgCube";
+  // Amiga Ball specific
+  bounceVelX?: number;
+  bounceVelY?: number;
+  rotAngle?: number;
+  lastBounceFrame?: number;
+  // Flying Saucer specific
+  tractorBeamAngle?: number;
+  tractorBeamActive?: boolean;
+  sweepAngle?: number;
+  miniSaucerTimer?: number;
+  miniSaucers?: Array<{ pos: Vector; vel: Vector; hp: number; shootTimer: number }>;
+  // Borg Cube specific
+  cubeRotX?: number;
+  cubeRotY?: number;
+  regenTimer?: number;
+  gridLaserTimer?: number;
+  adaptPhase?: number;
 }
 
 interface ColorTheme {
