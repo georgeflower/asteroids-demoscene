@@ -2209,7 +2209,7 @@ const Game = () => {
         // Sweeping laser
         boss.shootTimer--;
         if (boss.shootTimer <= 0) {
-          boss.shootTimer = Math.max(50, 100 - state.wave * 2);
+          boss.shootTimer = Math.max(80, 160 - state.wave * 2);
           const laserAngle = boss.sweepAngle!;
           for (let d = 0; d < 300; d += 20) {
             state.bullets.push({
