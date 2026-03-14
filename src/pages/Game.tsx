@@ -3357,6 +3357,26 @@ const Game = () => {
           ctx.fill();
           ctx.restore();
         }
+
+        // Draw mini cubes
+        if (boss.miniCubes) {
+          boss.miniCubes.forEach(mc => {
+            ctx.save();
+            ctx.translate(mc.pos.x - boss.pos.x, mc.pos.y - boss.pos.y);
+            ctx.rotate(mc.rotAngle);
+            ctx.strokeStyle = "#00FF44";
+            ctx.lineWidth = 1;
+            const s = 8;
+            ctx.strokeRect(-s/2, -s/2, s, s);
+            // Inner cross
+            ctx.strokeStyle = "rgba(0,255,68,0.4)";
+            ctx.beginPath();
+            ctx.moveTo(-s/2, 0); ctx.lineTo(s/2, 0);
+            ctx.moveTo(0, -s/2); ctx.lineTo(0, s/2);
+            ctx.stroke();
+            ctx.restore();
+          });
+        }
       }
 
       ctx.restore();
