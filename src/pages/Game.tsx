@@ -1978,7 +1978,7 @@ const Game = () => {
           alien.vel.y = Math.sin(ang) * spd;
           if (dist < 30 || alien.dashTimer! < -60) {
             alien.isDashing = false;
-            alien.dashTimer = 150 + Math.random() * 80;
+            alien.dashTimer = 250 + Math.random() * 120;
           }
         } else {
           // Orbit at ~120px distance
