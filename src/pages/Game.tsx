@@ -2177,7 +2177,7 @@ const Game = () => {
             state.bullets.push({
               pos: { ...boss.pos },
               vel: { x: Math.cos(ang) * 2, y: Math.sin(ang) * 2 },
-              rotation: ang, lifetime: BULLET_LIFETIME * 1.2, isUFO: true, color: "#CC0000",
+              rotation: ang, lifetime: BULLET_LIFETIME * 2.5, isUFO: true, color: "#CC0000",
             });
           }
         }
