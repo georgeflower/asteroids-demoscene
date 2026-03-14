@@ -87,11 +87,22 @@ interface Star {
 }
 
 interface Alien extends GameObject {
-  type: "brown" | "greenMan";
+  type: "brown" | "greenMan" | "redDrone" | "blueSentinel" | "purpleSwarm";
   hp: number;
   moveTimer: number;
   shootTimer: number;
   zigzagPhase: number;
+  // Red Drone specific
+  dashTimer?: number;
+  isDashing?: boolean;
+  orbitAngle?: number;
+  // Blue Sentinel specific
+  invisTimer?: number;
+  isInvisible?: boolean;
+  burstCount?: number;
+  teleportCooldown?: number;
+  // Purple Swarm specific
+  flockId?: number;
 }
 
 interface Boss extends GameObject {
@@ -103,6 +114,24 @@ interface Boss extends GameObject {
   phase: number;
   entered: boolean;
   targetY: number;
+  bossType: "tentacle" | "amigaBall" | "flyingSaucer" | "borgCube";
+  // Amiga Ball specific
+  bounceVelX?: number;
+  bounceVelY?: number;
+  rotAngle?: number;
+  lastBounceFrame?: number;
+  // Flying Saucer specific
+  tractorBeamAngle?: number;
+  tractorBeamActive?: boolean;
+  sweepAngle?: number;
+  miniSaucerTimer?: number;
+  miniSaucers?: Array<{ pos: Vector; vel: Vector; hp: number; shootTimer: number }>;
+  // Borg Cube specific
+  cubeRotX?: number;
+  cubeRotY?: number;
+  regenTimer?: number;
+  gridLaserTimer?: number;
+  adaptPhase?: number;
 }
 
 interface ColorTheme {
@@ -733,18 +762,48 @@ const Game = () => {
     };
   };
 
-  const createAlien = (type: "brown" | "greenMan", wave: number): Alien => {
+  const createAlien = (type: Alien["type"], wave: number): Alien => {
     const side = Math.random() < 0.5 ? -20 : CANVAS_WIDTH + 20;
+    const dir = side < 0 ? 1 : -1;
+
+    if (type === "redDrone") {
+      const speed = (3 + Math.random() * 2) * getSpeedScale(wave);
+      return {
+        pos: { x: side, y: 30 + Math.random() * (CANVAS_HEIGHT - 60) },
+        vel: { x: dir * speed, y: (Math.random() - 0.5) * speed },
+        rotation: 0, type, hp: 1, moveTimer: 0,
+        shootTimer: 9999, zigzagPhase: Math.random() * Math.PI * 2,
+        dashTimer: 120 + Math.random() * 60, isDashing: false, orbitAngle: Math.random() * Math.PI * 2,
+      };
+    }
+    if (type === "blueSentinel") {
+      return {
+        pos: { x: side, y: 30 + Math.random() * (CANVAS_HEIGHT - 60) },
+        vel: { x: dir * 0.5, y: 0 },
+        rotation: 0, type, hp: 2, moveTimer: 0,
+        shootTimer: 60 + Math.random() * 40, zigzagPhase: 0,
+        invisTimer: 0, isInvisible: false, burstCount: 0, teleportCooldown: 90 + Math.random() * 60,
+      };
+    }
+    if (type === "purpleSwarm") {
+      return {
+        pos: { x: side, y: 30 + Math.random() * (CANVAS_HEIGHT - 60) },
+        vel: { x: dir * (1.5 + Math.random()) * getSpeedScale(wave), y: (Math.random() - 0.5) * 2 },
+        rotation: 0, type, hp: 1, moveTimer: 0,
+        shootTimer: 9999, zigzagPhase: Math.random() * Math.PI * 2,
+        flockId: Math.floor(Math.random() * 1000),
+      };
+    }
+
+    // Original brown / greenMan
     const speed =
       type === "brown"
         ? (2 + Math.random() * 1.5) * getSpeedScale(wave)
         : (0.8 + Math.random() * 0.4) * getSpeedScale(wave);
-    const dir = side < 0 ? 1 : -1;
     return {
       pos: { x: side, y: 30 + Math.random() * (CANVAS_HEIGHT - 60) },
       vel: { x: dir * speed, y: (Math.random() - 0.5) * speed * 0.5 },
-      rotation: 0,
-      type,
+      rotation: 0, type,
       hp: type === "brown" ? 1 : 2,
       moveTimer: 0,
       shootTimer: type === "greenMan" ? 90 + Math.random() * 60 : 9999,
@@ -752,20 +811,73 @@ const Game = () => {
     };
   };
 
+  // Spawn a group of purple swarm aliens
+  const spawnPurpleSwarmGroup = (wave: number) => {
+    const fId = Math.floor(Math.random() * 10000);
+    const side = Math.random() < 0.5 ? -20 : CANVAS_WIDTH + 20;
+    const baseY = 60 + Math.random() * (CANVAS_HEIGHT - 120);
+    const aliens: Alien[] = [];
+    for (let i = 0; i < 3; i++) {
+      const a = createAlien("purpleSwarm", wave);
+      a.pos.x = side;
+      a.pos.y = baseY + (i - 1) * 25;
+      a.flockId = fId;
+      aliens.push(a);
+    }
+    return aliens;
+  };
+
   const createBoss = (wave: number): Boss => {
-    return {
+    // Determine boss type based on wave: 5=tentacle, 10=amigaBall, 15=flyingSaucer, 20=borgCube, then cycle
+    const bossIndex = ((wave / 5) - 1) % 4; // 0,1,2,3
+    const bossTypes: Boss["bossType"][] = ["tentacle", "amigaBall", "flyingSaucer", "borgCube"];
+    const bossType = bossTypes[bossIndex] || "tentacle";
+    const baseHp = 3 + wave;
+
+    const base: Boss = {
       pos: { x: CANVAS_WIDTH / 2, y: -80 },
       vel: { x: 0, y: 1 },
       rotation: 0,
-      hp: 3 + wave,
-      maxHp: 3 + wave,
+      hp: baseHp,
+      maxHp: baseHp,
       tentacles: Math.min(4 + Math.floor(wave / 5), 8),
       shootTimer: 120,
       hitFlash: 0,
       phase: 0,
       entered: false,
       targetY: 100 + Math.random() * 60,
+      bossType,
     };
+
+    if (bossType === "amigaBall") {
+      base.hp = Math.floor(baseHp * 1.2);
+      base.maxHp = base.hp;
+      base.bounceVelX = 2 + Math.random() * 2;
+      base.bounceVelY = -3;
+      base.rotAngle = 0;
+      base.lastBounceFrame = 0;
+      base.targetY = 150;
+    } else if (bossType === "flyingSaucer") {
+      base.hp = Math.floor(baseHp * 1.5);
+      base.maxHp = base.hp;
+      base.tractorBeamAngle = 0;
+      base.tractorBeamActive = false;
+      base.sweepAngle = 0;
+      base.miniSaucerTimer = 300;
+      base.miniSaucers = [];
+      base.targetY = 120;
+    } else if (bossType === "borgCube") {
+      base.hp = Math.floor(baseHp * 1.8);
+      base.maxHp = base.hp;
+      base.cubeRotX = 0;
+      base.cubeRotY = 0;
+      base.regenTimer = 0;
+      base.gridLaserTimer = 180;
+      base.adaptPhase = 0;
+      base.targetY = 130;
+    }
+
+    return base;
   };
 
   const createPowerUp = (x: number, y: number, wave: number = 1, extraLivesThisWave: number = 0): PowerUp | null => {
@@ -981,7 +1093,7 @@ const Game = () => {
       pos: { x: a.x, y: a.y },
       vel: { x: a.vx, y: a.vy },
       rotation: 0,
-      type: a.type as "brown" | "greenMan",
+      type: a.type as Alien["type"],
       hp: 1,
       moveTimer: 0,
       shootTimer: 999,
@@ -1091,7 +1203,11 @@ const Game = () => {
 
       const theme = getTheme(state.wave);
       spawnFloatingText({ x: CANVAS_WIDTH / 2, y: CANVAS_HEIGHT / 2 - 40 }, `WAVE ${state.wave}`, theme.ship, 28);
-      spawnFloatingText({ x: CANVAS_WIDTH / 2, y: CANVAS_HEIGHT / 2 + 10 }, "⚠ BOSS INCOMING ⚠", "#FF4444", 22);
+      const bossNames: Record<string, string> = { tentacle: "BOSS", amigaBall: "AMIGA BALL", flyingSaucer: "FLYING SAUCER", borgCube: "BORG CUBE" };
+      const bType = ((state.wave / 5 - 1) % 4);
+      const bTypes = ["tentacle", "amigaBall", "flyingSaucer", "borgCube"];
+      const bossLabel = bossNames[bTypes[bType]] || "BOSS";
+      spawnFloatingText({ x: CANVAS_WIDTH / 2, y: CANVAS_HEIGHT / 2 + 10 }, `⚠ ${bossLabel} INCOMING ⚠`, "#FF4444", 22);
       // Boss wave started
       return;
     }
@@ -1801,6 +1917,19 @@ const Game = () => {
           state.aliens.push(createAlien("greenMan", state.wave));
           addDebugLog("spawn", `Green man spawned (wave ${state.wave})`);
         }
+        if (state.wave >= 4 && state.aliens.filter((a) => a.type === "redDrone").length < 2) {
+          state.aliens.push(createAlien("redDrone", state.wave));
+          addDebugLog("spawn", `Red drone spawned (wave ${state.wave})`);
+        }
+        if (state.wave >= 8 && state.aliens.filter((a) => a.type === "blueSentinel").length < 1) {
+          state.aliens.push(createAlien("blueSentinel", state.wave));
+          addDebugLog("spawn", `Blue sentinel spawned (wave ${state.wave})`);
+        }
+        if (state.wave >= 12 && state.aliens.filter((a) => a.type === "purpleSwarm").length < 3) {
+          const swarm = spawnPurpleSwarmGroup(state.wave);
+          state.aliens.push(...swarm);
+          addDebugLog("spawn", `Purple swarm group spawned (wave ${state.wave})`);
+        }
         state.alienSpawnTimer = Math.max(180, 500 - state.wave * 20) + Math.random() * 200;
       }
     }
@@ -1821,22 +1950,118 @@ const Game = () => {
           alien.vel.x = (alien.vel.x / curSpd) * maxSpd;
           alien.vel.y = (alien.vel.y / curSpd) * maxSpd;
         }
-      } else {
+      } else if (alien.type === "greenMan") {
         alien.vel.x *= 0.99;
         alien.vel.y += Math.sin(alien.zigzagPhase) * 0.02;
-
         alien.shootTimer--;
         if (alien.shootTimer <= 0) {
           alien.shootTimer = Math.max(40, 80 - state.wave * 2) + Math.random() * 40;
           const angle = Math.atan2(state.ship.pos.y - alien.pos.y, state.ship.pos.x - alien.pos.x);
           state.bullets.push({
-            pos: { ...alien.pos },
-            vel: { x: Math.cos(angle) * 6, y: Math.sin(angle) * 6 },
-            rotation: angle,
-            lifetime: BULLET_LIFETIME,
-            isAlien: true,
-            color: "#44FF44",
+            pos: { ...alien.pos }, vel: { x: Math.cos(angle) * 6, y: Math.sin(angle) * 6 },
+            rotation: angle, lifetime: BULLET_LIFETIME, isAlien: true, color: "#44FF44",
           });
+        }
+      } else if (alien.type === "redDrone") {
+        // Orbit around player, then periodically dash
+        const dx = state.ship.pos.x - alien.pos.x;
+        const dy = state.ship.pos.y - alien.pos.y;
+        const dist = Math.hypot(dx, dy);
+        alien.orbitAngle = (alien.orbitAngle ?? 0) + 0.04;
+        alien.dashTimer = (alien.dashTimer ?? 120) - 1;
+
+        if (alien.isDashing) {
+          // Dash toward player at high speed
+          const spd = 6 * getSpeedScale(state.wave);
+          const ang = Math.atan2(dy, dx);
+          alien.vel.x = Math.cos(ang) * spd;
+          alien.vel.y = Math.sin(ang) * spd;
+          if (dist < 30 || alien.dashTimer! < -60) {
+            alien.isDashing = false;
+            alien.dashTimer = 150 + Math.random() * 80;
+          }
+        } else {
+          // Orbit at ~120px distance
+          const orbitDist = 120;
+          const targetX = state.ship.pos.x + Math.cos(alien.orbitAngle!) * orbitDist;
+          const targetY = state.ship.pos.y + Math.sin(alien.orbitAngle!) * orbitDist;
+          alien.vel.x += (targetX - alien.pos.x) * 0.02;
+          alien.vel.y += (targetY - alien.pos.y) * 0.02;
+          alien.vel.x *= 0.95;
+          alien.vel.y *= 0.95;
+          if (alien.dashTimer! <= 0) {
+            alien.isDashing = true;
+            alien.dashTimer = 0;
+          }
+        }
+      } else if (alien.type === "blueSentinel") {
+        // Teleport + burst fire + invisibility
+        alien.teleportCooldown = (alien.teleportCooldown ?? 90) - 1;
+        alien.vel.x *= 0.95;
+        alien.vel.y *= 0.95;
+
+        if (alien.isInvisible) {
+          alien.invisTimer = (alien.invisTimer ?? 0) - 1;
+          if (alien.invisTimer! <= 0) {
+            alien.isInvisible = false;
+          }
+        } else {
+          alien.shootTimer--;
+          if (alien.shootTimer <= 0 && (alien.burstCount ?? 0) < 3) {
+            alien.burstCount = (alien.burstCount ?? 0) + 1;
+            alien.shootTimer = 8; // Fast burst
+            const angle = Math.atan2(state.ship.pos.y - alien.pos.y, state.ship.pos.x - alien.pos.x);
+            const spread = (alien.burstCount! - 2) * 0.15;
+            state.bullets.push({
+              pos: { ...alien.pos }, vel: { x: Math.cos(angle + spread) * 5, y: Math.sin(angle + spread) * 5 },
+              rotation: angle + spread, lifetime: BULLET_LIFETIME, isAlien: true, color: "#4488FF",
+            });
+            if (alien.burstCount! >= 3) {
+              alien.burstCount = 0;
+              alien.shootTimer = 80 + Math.random() * 40;
+              // Go invisible after burst
+              alien.isInvisible = true;
+              alien.invisTimer = 60;
+            }
+          }
+
+          if (alien.teleportCooldown! <= 0) {
+            alien.pos.x = 50 + Math.random() * (CANVAS_WIDTH - 100);
+            alien.pos.y = 50 + Math.random() * (CANVAS_HEIGHT - 100);
+            alien.vel.x = 0;
+            alien.vel.y = 0;
+            alien.teleportCooldown = 120 + Math.random() * 80;
+            // Spawn teleport particles
+            spawnExplosion(alien.pos, "#4488FF", 6);
+          }
+        }
+      } else if (alien.type === "purpleSwarm") {
+        // Boids-like flocking toward centroid of same flock, chase player
+        const flockMates = state.aliens.filter(a => a.type === "purpleSwarm" && a.flockId === alien.flockId && a !== alien);
+        let cx = state.ship.pos.x, cy = state.ship.pos.y;
+        if (flockMates.length > 0) {
+          cx = flockMates.reduce((s, a) => s + a.pos.x, alien.pos.x) / (flockMates.length + 1);
+          cy = flockMates.reduce((s, a) => s + a.pos.y, alien.pos.y) / (flockMates.length + 1);
+          // Blend centroid toward player
+          cx = cx * 0.4 + state.ship.pos.x * 0.6;
+          cy = cy * 0.4 + state.ship.pos.y * 0.6;
+        }
+        const toTarget = Math.atan2(cy - alien.pos.y, cx - alien.pos.x);
+        alien.vel.x += Math.cos(toTarget) * 0.06;
+        alien.vel.y += Math.sin(toTarget) * 0.06;
+        // Separation from close flockmates
+        flockMates.forEach(mate => {
+          const d = Math.hypot(mate.pos.x - alien.pos.x, mate.pos.y - alien.pos.y);
+          if (d < 25 && d > 0) {
+            alien.vel.x -= (mate.pos.x - alien.pos.x) / d * 0.3;
+            alien.vel.y -= (mate.pos.y - alien.pos.y) / d * 0.3;
+          }
+        });
+        const curSpd = Math.hypot(alien.vel.x, alien.vel.y);
+        const maxSpd = 2.5 * getSpeedScale(state.wave);
+        if (curSpd > maxSpd) {
+          alien.vel.x = (alien.vel.x / curSpd) * maxSpd;
+          alien.vel.y = (alien.vel.y / curSpd) * maxSpd;
         }
       }
 
@@ -1870,35 +2095,199 @@ const Game = () => {
           boss.entered = true;
           boss.vel.x = 0.5;
         }
-      } else {
+      } else if (boss.bossType === "tentacle") {
+        // Original tentacle boss behavior
         boss.pos.x += boss.vel.x;
-        if (boss.pos.x < 100 || boss.pos.x > CANVAS_WIDTH - 100) {
-          boss.vel.x *= -1;
-        }
+        if (boss.pos.x < 100 || boss.pos.x > CANVAS_WIDTH - 100) boss.vel.x *= -1;
         boss.pos.y = boss.targetY + Math.sin(boss.phase) * 30;
-
         boss.shootTimer--;
         if (boss.shootTimer <= 0) {
           boss.shootTimer = Math.max(40, 90 - state.wave * 3);
-          if (state.boss) {
-            // Re-verify boss still exists
-            const baseAngle = Math.atan2(state.ship.pos.y - boss.pos.y, state.ship.pos.x - boss.pos.x);
-            for (let i = -1; i <= 1; i++) {
-              state.bullets.push({
-                pos: { ...boss.pos },
-                vel: {
-                  x: Math.cos(baseAngle + i * 0.3) * 4,
-                  y: Math.sin(baseAngle + i * 0.3) * 4,
-                },
-                rotation: baseAngle + i * 0.3,
-                lifetime: BULLET_LIFETIME * 1.5,
-                isUFO: true,
-                color: "#FF66FF",
-              });
-            }
+          const baseAngle = Math.atan2(state.ship.pos.y - boss.pos.y, state.ship.pos.x - boss.pos.x);
+          for (let i = -1; i <= 1; i++) {
+            state.bullets.push({
+              pos: { ...boss.pos },
+              vel: { x: Math.cos(baseAngle + i * 0.3) * 4, y: Math.sin(baseAngle + i * 0.3) * 4 },
+              rotation: baseAngle + i * 0.3, lifetime: BULLET_LIFETIME * 1.5, isUFO: true, color: "#FF66FF",
+            });
           }
         }
+      } else if (boss.bossType === "amigaBall") {
+        // Bouncing ball physics
+        boss.rotAngle = (boss.rotAngle ?? 0) + 0.015;
+        const gravity = 0.05;
+        boss.bounceVelY = (boss.bounceVelY ?? 0) + gravity;
+        boss.bounceVelX = boss.bounceVelX ?? 2;
+        boss.pos.x += boss.bounceVelX;
+        boss.pos.y += boss.bounceVelY;
+        boss.lastBounceFrame = (boss.lastBounceFrame ?? 0) + 1;
+
+        // Wall bounce
+        if (boss.pos.x < 60 || boss.pos.x > CANVAS_WIDTH - 60) {
+          boss.bounceVelX *= -1;
+          boss.pos.x = Math.max(60, Math.min(CANVAS_WIDTH - 60, boss.pos.x));
+        }
+        // Floor/ceiling bounce
+        if (boss.pos.y > CANVAS_HEIGHT - 80) {
+          boss.bounceVelY = -(Math.abs(boss.bounceVelY) * 0.9 + 1.5);
+          boss.pos.y = CANVAS_HEIGHT - 80;
+          // Shockwave on bounce
+          if (boss.lastBounceFrame > 30) {
+            boss.lastBounceFrame = 0;
+            for (let i = 0; i < 12; i++) {
+              const ang = (i / 12) * Math.PI * 2;
+              state.particles.push({
+                pos: { x: boss.pos.x, y: boss.pos.y + 50 },
+                vel: { x: Math.cos(ang) * 4, y: Math.sin(ang) * 1.5 },
+                lifetime: 30, maxLifetime: 30, color: "#FF4444", size: 3,
+              });
+            }
+            soundEffects.explode();
+          }
+        }
+        if (boss.pos.y < 40) {
+          boss.bounceVelY = Math.abs(boss.bounceVelY);
+          boss.pos.y = 40;
+        }
+
+        // Radial burst attack
+        boss.shootTimer--;
+        if (boss.shootTimer <= 0) {
+          boss.shootTimer = Math.max(60, 120 - state.wave * 2);
+          const count = 8;
+          for (let i = 0; i < count; i++) {
+            const ang = (i / count) * Math.PI * 2;
+            state.bullets.push({
+              pos: { ...boss.pos },
+              vel: { x: Math.cos(ang) * 3, y: Math.sin(ang) * 3 },
+              rotation: ang, lifetime: BULLET_LIFETIME * 1.2, isUFO: true, color: "#CC0000",
+            });
+          }
+        }
+      } else if (boss.bossType === "flyingSaucer") {
+        // Slow lateral sweep
+        boss.pos.x += Math.sin(boss.phase * 0.5) * 1.5;
+        boss.pos.y = boss.targetY + Math.sin(boss.phase * 0.3) * 20;
+        boss.sweepAngle = (boss.sweepAngle ?? 0) + 0.02;
+        boss.tractorBeamAngle = Math.atan2(state.ship.pos.y - boss.pos.y, state.ship.pos.x - boss.pos.x);
+
+        // Tractor beam: periodically pull player
+        boss.tractorBeamActive = Math.sin(boss.phase * 1.5) > 0.3;
+        if (boss.tractorBeamActive && !state.ship.invulnerable) {
+          const pull = 0.15;
+          state.ship.vel.x += (boss.pos.x - state.ship.pos.x) * pull * 0.01;
+          state.ship.vel.y += (boss.pos.y - state.ship.pos.y) * pull * 0.01;
+        }
+
+        // Spawn mini-saucers
+        boss.miniSaucerTimer = (boss.miniSaucerTimer ?? 300) - 1;
+        if (!boss.miniSaucers) boss.miniSaucers = [];
+        if (boss.miniSaucerTimer <= 0 && boss.miniSaucers.length < 3) {
+          boss.miniSaucerTimer = 250 + Math.random() * 100;
+          boss.miniSaucers.push({
+            pos: { ...boss.pos }, vel: { x: (Math.random() - 0.5) * 3, y: 1 + Math.random() * 2 },
+            hp: 1, shootTimer: 60 + Math.random() * 40,
+          });
+        }
+
+        // Update mini-saucers
+        boss.miniSaucers = boss.miniSaucers.filter(ms => {
+          ms.pos.x += ms.vel.x;
+          ms.pos.y += ms.vel.y;
+          ms.shootTimer--;
+          if (ms.shootTimer <= 0) {
+            ms.shootTimer = 80 + Math.random() * 40;
+            const ang = Math.atan2(state.ship.pos.y - ms.pos.y, state.ship.pos.x - ms.pos.x);
+            state.bullets.push({
+              pos: { ...ms.pos }, vel: { x: Math.cos(ang) * 4, y: Math.sin(ang) * 4 },
+              rotation: ang, lifetime: BULLET_LIFETIME, isUFO: true, color: "#88FFAA",
+            });
+          }
+          return ms.pos.y < CANVAS_HEIGHT + 30 && ms.pos.x > -30 && ms.pos.x < CANVAS_WIDTH + 30;
+        });
+
+        // Sweeping laser
+        boss.shootTimer--;
+        if (boss.shootTimer <= 0) {
+          boss.shootTimer = Math.max(50, 100 - state.wave * 2);
+          const laserAngle = boss.sweepAngle!;
+          for (let d = 0; d < 300; d += 20) {
+            state.bullets.push({
+              pos: { x: boss.pos.x + Math.cos(laserAngle) * d, y: boss.pos.y + Math.sin(laserAngle) * d },
+              vel: { x: Math.cos(laserAngle) * 5, y: Math.sin(laserAngle) * 5 },
+              rotation: laserAngle, lifetime: 20, isUFO: true, color: "#00FF88",
+            });
+          }
+        }
+      } else if (boss.bossType === "borgCube") {
+        // Track player position slowly
+        boss.cubeRotX = (boss.cubeRotX ?? 0) + 0.008;
+        boss.cubeRotY = (boss.cubeRotY ?? 0) + 0.012;
+        boss.adaptPhase = (boss.adaptPhase ?? 0) + 0.01;
+
+        const targetX = state.ship.pos.x;
+        boss.pos.x += (targetX - boss.pos.x) * 0.005;
+        boss.pos.y = boss.targetY + Math.sin(boss.adaptPhase) * 15;
+
+        // HP regeneration every 180 ticks
+        boss.regenTimer = (boss.regenTimer ?? 0) + 1;
+        if (boss.regenTimer >= 180 && boss.hp < boss.maxHp) {
+          boss.hp = Math.min(boss.maxHp, boss.hp + 1);
+          boss.regenTimer = 0;
+          spawnFloatingText(boss.pos, "REGEN", "#00FF44", 12);
+        }
+
+        // Grid-pattern laser bursts
+        boss.gridLaserTimer = (boss.gridLaserTimer ?? 180) - 1;
+        if (boss.gridLaserTimer <= 0) {
+          boss.gridLaserTimer = Math.max(80, 160 - state.wave * 3);
+          // Fire grid pattern: 4 cardinal + 4 diagonal
+          for (let i = 0; i < 8; i++) {
+            const ang = (i / 8) * Math.PI * 2 + boss.cubeRotX!;
+            state.bullets.push({
+              pos: { ...boss.pos },
+              vel: { x: Math.cos(ang) * 3.5, y: Math.sin(ang) * 3.5 },
+              rotation: ang, lifetime: BULLET_LIFETIME * 1.5, isUFO: true, color: "#44FF44",
+            });
+          }
+        }
+
+        // Secondary aimed shot
+        boss.shootTimer--;
+        if (boss.shootTimer <= 0) {
+          boss.shootTimer = Math.max(30, 70 - state.wave * 2);
+          const ang = Math.atan2(state.ship.pos.y - boss.pos.y, state.ship.pos.x - boss.pos.x);
+          state.bullets.push({
+            pos: { ...boss.pos },
+            vel: { x: Math.cos(ang) * 4, y: Math.sin(ang) * 4 },
+            rotation: ang, lifetime: BULLET_LIFETIME * 1.5, isUFO: true, color: "#00CC00",
+          });
+        }
       }
+    }
+
+    // Update flying saucer mini-saucer collisions with player bullets
+    if (state.boss?.bossType === "flyingSaucer" && state.boss.miniSaucers) {
+      state.bullets = state.bullets.filter(bullet => {
+        if (bullet.isUFO || bullet.isAlien) return true;
+        let alive = true;
+        state.boss!.miniSaucers = state.boss!.miniSaucers!.filter(ms => {
+          if (checkCollision(bullet.pos, 2, ms.pos, 10)) {
+            alive = false;
+            ms.hp--;
+            if (ms.hp <= 0) {
+              const pts = 200 * (state.powerUpActive.multiplier > 0 ? 2 : 1);
+              state.score += pts;
+              setDisplayScore(state.score);
+              spawnFloatingText(ms.pos, `+${pts}`, "#88FFAA", 14);
+              spawnExplosion(ms.pos, "#88FFAA", 8);
+              return false;
+            }
+          }
+          return true;
+        });
+        return alive;
+      });
     }
 
     // Update power-ups
@@ -2063,16 +2452,19 @@ const Game = () => {
       if (bullet.isUFO || bullet.isAlien) return true;
       let bulletAlive = true;
       state.aliens = state.aliens.filter((alien) => {
-        const radius = alien.type === "brown" ? 12 : 14;
+        if (alien.isInvisible) return true; // Can't hit invisible sentinels
+        const radius = alien.type === "brown" ? 12 : alien.type === "redDrone" ? 10 : alien.type === "purpleSwarm" ? 8 : 14;
         if (checkCollision(bullet.pos, 2, alien.pos, radius)) {
           bulletAlive = false;
           alien.hp--;
           if (alien.hp <= 0) {
-            const pts = (alien.type === "brown" ? 300 : 500) * (state.powerUpActive.multiplier > 0 ? 2 : 1);
+            const ptsMap: Record<string, number> = { brown: 300, greenMan: 500, redDrone: 200, blueSentinel: 600, purpleSwarm: 100 };
+            const pts = (ptsMap[alien.type] ?? 300) * (state.powerUpActive.multiplier > 0 ? 2 : 1);
             state.score += pts;
             setDisplayScore(state.score);
             soundEffects.explode();
-            const color = alien.type === "brown" ? "#AA6633" : "#44FF44";
+            const colorMap: Record<string, string> = { brown: "#AA6633", greenMan: "#44FF44", redDrone: "#FF4444", blueSentinel: "#4488FF", purpleSwarm: "#AA44FF" };
+            const color = colorMap[alien.type] ?? "#FFFFFF";
             spawnFloatingText(alien.pos, `+${pts}`, color, 16);
             spawnExplosion(alien.pos, color, 12);
             const powerUp = createPowerUp(alien.pos.x, alien.pos.y, state.wave, state.extraLivesThisWave);
@@ -2092,7 +2484,8 @@ const Game = () => {
       state.bullets = state.bullets.filter((bullet) => {
         if (!state.boss) return true; // Boss defeated mid-filter, keep remaining bullets
         if (bullet.isUFO || bullet.isAlien) return true;
-        if (checkCollision(bullet.pos, 2, state.boss!.pos, 60)) {
+        const bossHitRadius = state.boss!.bossType === "amigaBall" ? 50 : state.boss!.bossType === "flyingSaucer" ? 55 : state.boss!.bossType === "borgCube" ? 50 : 60;
+        if (checkCollision(bullet.pos, 2, state.boss!.pos, bossHitRadius)) {
           state.boss!.hp--;
           state.boss!.hitFlash = 10;
           spawnExplosion(bullet.pos, "#FF88FF", 5);
@@ -2161,7 +2554,9 @@ const Game = () => {
     // Collision: Ship vs Aliens
     if (!state.ship.invulnerable && state.powerUpActive.shield === 0) {
       for (const alien of state.aliens) {
-        if (checkCollision(state.ship.pos, SHIP_SIZE, alien.pos, 12)) {
+        const alienRadius = alien.type === "redDrone" ? 10 : alien.type === "purpleSwarm" ? 8 : 12;
+        if (alien.isInvisible) continue;
+        if (checkCollision(state.ship.pos, SHIP_SIZE, alien.pos, alienRadius)) {
           addDebugLog("collision", `Ship hit ${alien.type} alien`);
           loseLife(state);
           break;
@@ -2169,10 +2564,11 @@ const Game = () => {
       }
     }
 
-    // Collision: Ship vs Boss tentacles
+    // Collision: Ship vs Boss
     if (state.boss && state.boss.entered && !state.ship.invulnerable && state.powerUpActive.shield === 0) {
       const boss = state.boss;
-      if (boss && checkCollision(state.ship.pos, SHIP_SIZE, boss.pos, 65)) {
+      const bossRadius = boss.bossType === "amigaBall" ? 50 : boss.bossType === "flyingSaucer" ? 55 : boss.bossType === "borgCube" ? 50 : 65;
+      if (boss && checkCollision(state.ship.pos, SHIP_SIZE, boss.pos, bossRadius)) {
         addDebugLog("collision", "Ship hit boss");
         loseLife(state);
       }
@@ -2367,6 +2763,135 @@ const Game = () => {
         ctx.restore();
       });
 
+    // Red Drones
+    aliens
+      .filter((a) => a.type === "redDrone")
+      .forEach((alien) => {
+        ctx.save();
+        ctx.translate(alien.pos.x, alien.pos.y);
+        ctx.rotate(Math.atan2(alien.vel.y, alien.vel.x));
+        // Sleek triangular drone shape
+        ctx.strokeStyle = alien.isDashing ? "#FFFF00" : "#FF4444";
+        ctx.fillStyle = alien.isDashing ? "#FF8800" : "#661111";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(10, 0);
+        ctx.lineTo(-8, -7);
+        ctx.lineTo(-4, 0);
+        ctx.lineTo(-8, 7);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        // Thruster glow when dashing
+        if (alien.isDashing) {
+          ctx.fillStyle = "#FFAA00";
+          ctx.beginPath();
+          ctx.moveTo(-4, 0);
+          ctx.lineTo(-12, -3);
+          ctx.lineTo(-14, 0);
+          ctx.lineTo(-12, 3);
+          ctx.closePath();
+          ctx.fill();
+        }
+        // Engine dot
+        ctx.fillStyle = "#FF0000";
+        ctx.beginPath();
+        ctx.arc(-2, 0, 2, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      });
+
+    // Blue Sentinels
+    aliens
+      .filter((a) => a.type === "blueSentinel")
+      .forEach((alien) => {
+        if (alien.isInvisible) {
+          // Draw faint shimmer when invisible
+          ctx.save();
+          ctx.translate(alien.pos.x, alien.pos.y);
+          ctx.globalAlpha = 0.15;
+          ctx.strokeStyle = "#4488FF";
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.arc(0, 0, 14, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.restore();
+          return;
+        }
+        ctx.save();
+        ctx.translate(alien.pos.x, alien.pos.y);
+        // Diamond/crystal shape
+        ctx.strokeStyle = "#4488FF";
+        ctx.fillStyle = "#112244";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(0, -14);
+        ctx.lineTo(10, 0);
+        ctx.lineTo(0, 14);
+        ctx.lineTo(-10, 0);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        // Inner glow
+        ctx.strokeStyle = "#88CCFF";
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(0, -8);
+        ctx.lineTo(5, 0);
+        ctx.lineTo(0, 8);
+        ctx.lineTo(-5, 0);
+        ctx.closePath();
+        ctx.stroke();
+        // Eye
+        ctx.fillStyle = "#FFFFFF";
+        ctx.beginPath();
+        ctx.arc(0, -2, 3, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = "#4488FF";
+        ctx.beginPath();
+        ctx.arc(0, -2, 1.5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      });
+
+    // Purple Swarm
+    aliens
+      .filter((a) => a.type === "purpleSwarm")
+      .forEach((alien) => {
+        ctx.save();
+        ctx.translate(alien.pos.x, alien.pos.y);
+        const wobble = Math.sin(alien.zigzagPhase * 5) * 0.3;
+        ctx.rotate(Math.atan2(alien.vel.y, alien.vel.x) + wobble);
+        // Small insect-like shape
+        ctx.strokeStyle = "#AA44FF";
+        ctx.fillStyle = "#440066";
+        ctx.lineWidth = 1.5;
+        // Body
+        ctx.beginPath();
+        ctx.ellipse(0, 0, 6, 4, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        // Wings
+        ctx.fillStyle = "rgba(170, 68, 255, 0.3)";
+        ctx.beginPath();
+        ctx.ellipse(-2, -5, 4, 3, -0.3, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.ellipse(-2, 5, 4, 3, 0.3, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        // Antenna
+        ctx.strokeStyle = "#CC66FF";
+        ctx.beginPath();
+        ctx.moveTo(5, -2);
+        ctx.lineTo(9, -5);
+        ctx.moveTo(5, 2);
+        ctx.lineTo(9, 5);
+        ctx.stroke();
+        ctx.restore();
+      });
+
     // Floating texts
     floatingTexts.forEach((ft) => {
       ctx.save();
@@ -2489,46 +3014,274 @@ const Game = () => {
       ctx.save();
       ctx.translate(boss.pos.x, boss.pos.y);
 
-      const bossColor = boss.hitFlash > 0 ? "#FFFFFF" : "#FF44CC";
-
-      const tentCount = boss.tentacles;
-      for (let i = 0; i < tentCount; i++) {
-        const baseAngle = (i / tentCount) * Math.PI * 2;
-        ctx.strokeStyle = boss.hitFlash > 0 ? "#FFFFFF" : "#CC44AA";
+      if (boss.bossType === "tentacle") {
+        // Original tentacle boss drawing
+        const bossColor = boss.hitFlash > 0 ? "#FFFFFF" : "#FF44CC";
+        const tentCount = boss.tentacles;
+        for (let i = 0; i < tentCount; i++) {
+          const baseAngle = (i / tentCount) * Math.PI * 2;
+          ctx.strokeStyle = boss.hitFlash > 0 ? "#FFFFFF" : "#CC44AA";
+          ctx.lineWidth = 3;
+          ctx.beginPath();
+          ctx.moveTo(0, 0);
+          const segments = 5;
+          for (let s = 1; s <= segments; s++) {
+            const dist = s * 18;
+            const wave = Math.sin(boss.phase * 2 + i + s * 0.8) * 15;
+            const tx = Math.cos(baseAngle) * dist + Math.cos(baseAngle + Math.PI / 2) * wave;
+            const ty = Math.sin(baseAngle) * dist + Math.sin(baseAngle + Math.PI / 2) * wave;
+            ctx.lineTo(tx, ty);
+          }
+          ctx.stroke();
+        }
+        const pulse = 1 + Math.sin(boss.phase * 3) * 0.05;
+        const bodyR = 45 * pulse;
+        ctx.fillStyle = boss.hitFlash > 0 ? "#FFFFFF" : "#331133";
+        ctx.strokeStyle = bossColor;
         ctx.lineWidth = 3;
         ctx.beginPath();
-        ctx.moveTo(0, 0);
-        const segments = 5;
-        for (let s = 1; s <= segments; s++) {
-          const dist = s * 18;
-          const wave = Math.sin(boss.phase * 2 + i + s * 0.8) * 15;
-          const tx = Math.cos(baseAngle) * dist + Math.cos(baseAngle + Math.PI / 2) * wave;
-          const ty = Math.sin(baseAngle) * dist + Math.sin(baseAngle + Math.PI / 2) * wave;
-          ctx.lineTo(tx, ty);
-        }
+        ctx.arc(0, 0, bodyR, 0, Math.PI * 2);
+        ctx.fill();
         ctx.stroke();
+        ctx.fillStyle = bossColor;
+        ctx.beginPath();
+        ctx.arc(0, -5, 12, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = "#000000";
+        ctx.beginPath();
+        ctx.arc(0, -5, 6, 0, Math.PI * 2);
+        ctx.fill();
+
+      } else if (boss.bossType === "amigaBall") {
+        // Procedural Amiga checkered bouncing ball
+        const radius = 50;
+        const rotAngle = boss.rotAngle ?? 0;
+        const lightDir = { x: -0.5, y: -0.7, z: 0.5 }; // upper-left light
+        const lightLen = Math.hypot(lightDir.x, lightDir.y, lightDir.z);
+        lightDir.x /= lightLen; lightDir.y /= lightLen; lightDir.z /= lightLen;
+
+        // Draw sphere scanline by scanline using checkerboard + lighting
+        const step = 3; // pixel step for performance
+        for (let py = -radius; py < radius; py += step) {
+          const xRange = Math.sqrt(radius * radius - py * py);
+          for (let px = -xRange; px < xRange; px += step) {
+            // Compute sphere normal
+            const nz = Math.sqrt(Math.max(0, radius * radius - px * px - py * py)) / radius;
+            const nx = px / radius;
+            const ny = py / radius;
+
+            // UV mapping for checkerboard
+            const theta = Math.atan2(ny, nx); // longitude
+            const phi = Math.asin(Math.min(1, Math.max(-1, nz))); // latitude
+
+            // Apply rotation offset
+            const u = ((theta + rotAngle) / Math.PI * 4 + 100) % 1;
+            const v = ((phi + Math.PI / 2) / Math.PI * 4 + 100) % 1;
+
+            // Checkerboard
+            const checkerU = Math.floor(u * 2) % 2;
+            const checkerV = Math.floor(v * 2) % 2;
+            const isRed = (checkerU + checkerV) % 2 === 0;
+
+            // Lighting: dot product with light direction
+            const dot = nx * lightDir.x + ny * lightDir.y + nz * lightDir.z;
+            const diffuse = Math.max(0.15, dot);
+
+            // Specular highlight
+            const reflX = 2 * dot * nx - lightDir.x;
+            const reflY = 2 * dot * ny - lightDir.y;
+            const reflZ = 2 * dot * nz - lightDir.z;
+            const spec = Math.pow(Math.max(0, reflZ), 20) * 0.6;
+
+            let r: number, g: number, b: number;
+            if (isRed) {
+              r = Math.min(255, Math.floor(204 * diffuse + spec * 255));
+              g = Math.min(255, Math.floor(0 * diffuse + spec * 255));
+              b = Math.min(255, Math.floor(0 * diffuse + spec * 255));
+            } else {
+              r = Math.min(255, Math.floor(255 * diffuse + spec * 255));
+              g = Math.min(255, Math.floor(255 * diffuse + spec * 255));
+              b = Math.min(255, Math.floor(255 * diffuse + spec * 255));
+            }
+
+            if (boss.hitFlash > 0) { r = 255; g = 255; b = 255; }
+
+            ctx.fillStyle = `rgb(${r},${g},${b})`;
+            ctx.fillRect(px - step / 2, py - step / 2, step, step);
+          }
+        }
+
+        // Shadow beneath ball
+        ctx.save();
+        ctx.translate(0, radius + 10);
+        ctx.scale(1, 0.3);
+        ctx.fillStyle = "rgba(0,0,0,0.3)";
+        ctx.beginPath();
+        ctx.arc(0, 0, radius * 0.8, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+
+      } else if (boss.bossType === "flyingSaucer") {
+        // Flying saucer
+        const flash = boss.hitFlash > 0;
+        // Dome
+        ctx.fillStyle = flash ? "#FFFFFF" : "#446688";
+        ctx.strokeStyle = flash ? "#FFFFFF" : "#88AACC";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.ellipse(0, -12, 25, 18, 0, Math.PI, 0);
+        ctx.fill();
+        ctx.stroke();
+        // Body disc
+        ctx.fillStyle = flash ? "#FFFFFF" : "#334455";
+        ctx.strokeStyle = flash ? "#FFFFFF" : "#667788";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.ellipse(0, 0, 55, 14, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        // Rotating lights
+        const lightCount = 8;
+        for (let i = 0; i < lightCount; i++) {
+          const lAngle = (i / lightCount) * Math.PI * 2 + boss.phase * 2;
+          const lx = Math.cos(lAngle) * 45;
+          const ly = Math.sin(lAngle) * 10;
+          const brightness = (Math.sin(boss.phase * 3 + i) + 1) / 2;
+          ctx.fillStyle = `rgba(${flash ? 255 : 255}, ${flash ? 255 : Math.floor(200 * brightness)}, ${flash ? 255 : 0}, ${0.5 + brightness * 0.5})`;
+          ctx.beginPath();
+          ctx.arc(lx, ly, 3, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        // Tractor beam
+        if (boss.tractorBeamActive) {
+          ctx.save();
+          ctx.globalAlpha = 0.15 + Math.sin(boss.phase * 5) * 0.1;
+          const grad = ctx.createLinearGradient(0, 14, 0, 200);
+          grad.addColorStop(0, "#00FF88");
+          grad.addColorStop(1, "rgba(0,255,136,0)");
+          ctx.fillStyle = grad;
+          ctx.beginPath();
+          ctx.moveTo(-20, 14);
+          ctx.lineTo(20, 14);
+          ctx.lineTo(60, 200);
+          ctx.lineTo(-60, 200);
+          ctx.closePath();
+          ctx.fill();
+          ctx.restore();
+        }
+
+        // Draw mini-saucers
+        if (boss.miniSaucers) {
+          boss.miniSaucers.forEach(ms => {
+            ctx.save();
+            ctx.translate(ms.pos.x - boss.pos.x, ms.pos.y - boss.pos.y);
+            ctx.fillStyle = "#556677";
+            ctx.strokeStyle = "#88FFAA";
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.ellipse(0, 0, 12, 4, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+            ctx.fillStyle = "#88FFAA";
+            ctx.beginPath();
+            ctx.ellipse(0, -3, 6, 4, 0, Math.PI, 0);
+            ctx.fill();
+            ctx.restore();
+          });
+        }
+
+      } else if (boss.bossType === "borgCube") {
+        // 3D wireframe rotating cube
+        const flash = boss.hitFlash > 0;
+        const cubeSize = 45;
+        const rotX = boss.cubeRotX ?? 0;
+        const rotY = boss.cubeRotY ?? 0;
+
+        // Define cube vertices
+        const verts = [
+          [-1,-1,-1],[1,-1,-1],[1,1,-1],[-1,1,-1],
+          [-1,-1,1],[1,-1,1],[1,1,1],[-1,1,1],
+        ].map(([x, y, z]) => {
+          // Rotate around Y
+          let x2 = x * Math.cos(rotY) - z * Math.sin(rotY);
+          let z2 = x * Math.sin(rotY) + z * Math.cos(rotY);
+          // Rotate around X
+          let y2 = y * Math.cos(rotX) - z2 * Math.sin(rotX);
+          let z3 = y * Math.sin(rotX) + z2 * Math.cos(rotX);
+          // Project
+          const scale = 150 / (150 + z3 * cubeSize * 0.3);
+          return { x: x2 * cubeSize * scale, y: y2 * cubeSize * scale };
+        });
+
+        const edges = [[0,1],[1,2],[2,3],[3,0],[4,5],[5,6],[6,7],[7,4],[0,4],[1,5],[2,6],[3,7]];
+        const cubeColor = flash ? "#FFFFFF" : "#00FF44";
+
+        // Glow effect
+        ctx.save();
+        ctx.globalAlpha = 0.2;
+        ctx.fillStyle = "#00FF44";
+        ctx.beginPath();
+        ctx.arc(0, 0, cubeSize * 1.5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+
+        // Draw edges
+        ctx.strokeStyle = cubeColor;
+        ctx.lineWidth = 2;
+        edges.forEach(([a, b]) => {
+          ctx.beginPath();
+          ctx.moveTo(verts[a].x, verts[a].y);
+          ctx.lineTo(verts[b].x, verts[b].y);
+          ctx.stroke();
+        });
+
+        // Draw vertices as bright dots
+        ctx.fillStyle = flash ? "#FFFFFF" : "#88FF88";
+        verts.forEach(v => {
+          ctx.beginPath();
+          ctx.arc(v.x, v.y, 3, 0, Math.PI * 2);
+          ctx.fill();
+        });
+
+        // Inner grid lines for Borg look
+        ctx.strokeStyle = flash ? "#FFFFFF" : "rgba(0,255,68,0.3)";
+        ctx.lineWidth = 1;
+        // Draw grid on front face
+        for (let i = 1; i < 3; i++) {
+          const t = i / 3;
+          const x1 = verts[0].x + (verts[1].x - verts[0].x) * t;
+          const y1 = verts[0].y + (verts[1].y - verts[0].y) * t;
+          const x2 = verts[3].x + (verts[2].x - verts[3].x) * t;
+          const y2 = verts[3].y + (verts[2].y - verts[3].y) * t;
+          ctx.beginPath();
+          ctx.moveTo(x1, y1);
+          ctx.lineTo(x2, y2);
+          ctx.stroke();
+          const x3 = verts[0].x + (verts[3].x - verts[0].x) * t;
+          const y3 = verts[0].y + (verts[3].y - verts[0].y) * t;
+          const x4 = verts[1].x + (verts[2].x - verts[1].x) * t;
+          const y4 = verts[1].y + (verts[2].y - verts[1].y) * t;
+          ctx.beginPath();
+          ctx.moveTo(x3, y3);
+          ctx.lineTo(x4, y4);
+          ctx.stroke();
+        }
+
+        // "REGEN" indicator glow
+        if ((boss.regenTimer ?? 0) > 150) {
+          ctx.save();
+          ctx.globalAlpha = 0.3 + Math.sin(boss.phase * 10) * 0.2;
+          ctx.fillStyle = "#00FF44";
+          ctx.beginPath();
+          ctx.arc(0, 0, cubeSize * 0.6, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+        }
       }
 
-      const pulse = 1 + Math.sin(boss.phase * 3) * 0.05;
-      const bodyR = 45 * pulse;
-      ctx.fillStyle = boss.hitFlash > 0 ? "#FFFFFF" : "#331133";
-      ctx.strokeStyle = bossColor;
-      ctx.lineWidth = 3;
-      ctx.beginPath();
-      ctx.arc(0, 0, bodyR, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.stroke();
-
-      ctx.fillStyle = bossColor;
-      ctx.beginPath();
-      ctx.arc(0, -5, 12, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = "#000000";
-      ctx.beginPath();
-      ctx.arc(0, -5, 6, 0, Math.PI * 2);
-      ctx.fill();
-
       ctx.restore();
+
+      // HP Bar (shared by all bosses)
       ctx.save();
       const barW = 200;
       const barH = 8;
@@ -2536,16 +3289,19 @@ const Game = () => {
       const barY = CANVAS_HEIGHT - 30;
       const hpFrac = boss.hp / boss.maxHp;
       ctx.globalAlpha = 0.7;
-      ctx.strokeStyle = "#FF44CC";
+      const bossBarColors: Record<string, string> = { tentacle: "#FF44CC", amigaBall: "#CC0000", flyingSaucer: "#00FF88", borgCube: "#00FF44" };
+      const barColor = bossBarColors[boss.bossType] || "#FF44CC";
+      ctx.strokeStyle = barColor;
       ctx.lineWidth = 1;
       ctx.strokeRect(barX, barY, barW, barH);
-      ctx.fillStyle = hpFrac > 0.3 ? "#FF44CC" : "#FF0000";
+      ctx.fillStyle = hpFrac > 0.3 ? barColor : "#FF0000";
       ctx.fillRect(barX, barY, barW * hpFrac, barH);
       ctx.globalAlpha = 0.9;
       ctx.font = "8px 'Press Start 2P', monospace";
       ctx.fillStyle = "#FFFFFF";
       ctx.textAlign = "center";
-      ctx.fillText("BOSS", CANVAS_WIDTH / 2, barY - 4);
+      const bossNames: Record<string, string> = { tentacle: "BOSS", amigaBall: "AMIGA BALL", flyingSaucer: "FLYING SAUCER", borgCube: "BORG CUBE" };
+      ctx.fillText(bossNames[boss.bossType] || "BOSS", CANVAS_WIDTH / 2, barY - 4);
       ctx.restore();
     }
 
