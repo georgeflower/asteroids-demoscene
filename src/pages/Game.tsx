@@ -2448,16 +2448,19 @@ const Game = () => {
       if (bullet.isUFO || bullet.isAlien) return true;
       let bulletAlive = true;
       state.aliens = state.aliens.filter((alien) => {
-        const radius = alien.type === "brown" ? 12 : 14;
+        if (alien.isInvisible) return true; // Can't hit invisible sentinels
+        const radius = alien.type === "brown" ? 12 : alien.type === "redDrone" ? 10 : alien.type === "purpleSwarm" ? 8 : 14;
         if (checkCollision(bullet.pos, 2, alien.pos, radius)) {
           bulletAlive = false;
           alien.hp--;
           if (alien.hp <= 0) {
-            const pts = (alien.type === "brown" ? 300 : 500) * (state.powerUpActive.multiplier > 0 ? 2 : 1);
+            const ptsMap: Record<string, number> = { brown: 300, greenMan: 500, redDrone: 200, blueSentinel: 600, purpleSwarm: 100 };
+            const pts = (ptsMap[alien.type] ?? 300) * (state.powerUpActive.multiplier > 0 ? 2 : 1);
             state.score += pts;
             setDisplayScore(state.score);
             soundEffects.explode();
-            const color = alien.type === "brown" ? "#AA6633" : "#44FF44";
+            const colorMap: Record<string, string> = { brown: "#AA6633", greenMan: "#44FF44", redDrone: "#FF4444", blueSentinel: "#4488FF", purpleSwarm: "#AA44FF" };
+            const color = colorMap[alien.type] ?? "#FFFFFF";
             spawnFloatingText(alien.pos, `+${pts}`, color, 16);
             spawnExplosion(alien.pos, color, 12);
             const powerUp = createPowerUp(alien.pos.x, alien.pos.y, state.wave, state.extraLivesThisWave);
