@@ -2091,35 +2091,199 @@ const Game = () => {
           boss.entered = true;
           boss.vel.x = 0.5;
         }
-      } else {
+      } else if (boss.bossType === "tentacle") {
+        // Original tentacle boss behavior
         boss.pos.x += boss.vel.x;
-        if (boss.pos.x < 100 || boss.pos.x > CANVAS_WIDTH - 100) {
-          boss.vel.x *= -1;
-        }
+        if (boss.pos.x < 100 || boss.pos.x > CANVAS_WIDTH - 100) boss.vel.x *= -1;
         boss.pos.y = boss.targetY + Math.sin(boss.phase) * 30;
-
         boss.shootTimer--;
         if (boss.shootTimer <= 0) {
           boss.shootTimer = Math.max(40, 90 - state.wave * 3);
-          if (state.boss) {
-            // Re-verify boss still exists
-            const baseAngle = Math.atan2(state.ship.pos.y - boss.pos.y, state.ship.pos.x - boss.pos.x);
-            for (let i = -1; i <= 1; i++) {
-              state.bullets.push({
-                pos: { ...boss.pos },
-                vel: {
-                  x: Math.cos(baseAngle + i * 0.3) * 4,
-                  y: Math.sin(baseAngle + i * 0.3) * 4,
-                },
-                rotation: baseAngle + i * 0.3,
-                lifetime: BULLET_LIFETIME * 1.5,
-                isUFO: true,
-                color: "#FF66FF",
-              });
-            }
+          const baseAngle = Math.atan2(state.ship.pos.y - boss.pos.y, state.ship.pos.x - boss.pos.x);
+          for (let i = -1; i <= 1; i++) {
+            state.bullets.push({
+              pos: { ...boss.pos },
+              vel: { x: Math.cos(baseAngle + i * 0.3) * 4, y: Math.sin(baseAngle + i * 0.3) * 4 },
+              rotation: baseAngle + i * 0.3, lifetime: BULLET_LIFETIME * 1.5, isUFO: true, color: "#FF66FF",
+            });
           }
         }
+      } else if (boss.bossType === "amigaBall") {
+        // Bouncing ball physics
+        boss.rotAngle = (boss.rotAngle ?? 0) + 0.015;
+        const gravity = 0.05;
+        boss.bounceVelY = (boss.bounceVelY ?? 0) + gravity;
+        boss.bounceVelX = boss.bounceVelX ?? 2;
+        boss.pos.x += boss.bounceVelX;
+        boss.pos.y += boss.bounceVelY;
+        boss.lastBounceFrame = (boss.lastBounceFrame ?? 0) + 1;
+
+        // Wall bounce
+        if (boss.pos.x < 60 || boss.pos.x > CANVAS_WIDTH - 60) {
+          boss.bounceVelX *= -1;
+          boss.pos.x = Math.max(60, Math.min(CANVAS_WIDTH - 60, boss.pos.x));
+        }
+        // Floor/ceiling bounce
+        if (boss.pos.y > CANVAS_HEIGHT - 80) {
+          boss.bounceVelY = -(Math.abs(boss.bounceVelY) * 0.9 + 1.5);
+          boss.pos.y = CANVAS_HEIGHT - 80;
+          // Shockwave on bounce
+          if (boss.lastBounceFrame > 30) {
+            boss.lastBounceFrame = 0;
+            for (let i = 0; i < 12; i++) {
+              const ang = (i / 12) * Math.PI * 2;
+              state.particles.push({
+                pos: { x: boss.pos.x, y: boss.pos.y + 50 },
+                vel: { x: Math.cos(ang) * 4, y: Math.sin(ang) * 1.5 },
+                lifetime: 30, maxLifetime: 30, color: "#FF4444", size: 3,
+              });
+            }
+            soundEffects.explode();
+          }
+        }
+        if (boss.pos.y < 40) {
+          boss.bounceVelY = Math.abs(boss.bounceVelY);
+          boss.pos.y = 40;
+        }
+
+        // Radial burst attack
+        boss.shootTimer--;
+        if (boss.shootTimer <= 0) {
+          boss.shootTimer = Math.max(60, 120 - state.wave * 2);
+          const count = 8;
+          for (let i = 0; i < count; i++) {
+            const ang = (i / count) * Math.PI * 2;
+            state.bullets.push({
+              pos: { ...boss.pos },
+              vel: { x: Math.cos(ang) * 3, y: Math.sin(ang) * 3 },
+              rotation: ang, lifetime: BULLET_LIFETIME * 1.2, isUFO: true, color: "#CC0000",
+            });
+          }
+        }
+      } else if (boss.bossType === "flyingSaucer") {
+        // Slow lateral sweep
+        boss.pos.x += Math.sin(boss.phase * 0.5) * 1.5;
+        boss.pos.y = boss.targetY + Math.sin(boss.phase * 0.3) * 20;
+        boss.sweepAngle = (boss.sweepAngle ?? 0) + 0.02;
+        boss.tractorBeamAngle = Math.atan2(state.ship.pos.y - boss.pos.y, state.ship.pos.x - boss.pos.x);
+
+        // Tractor beam: periodically pull player
+        boss.tractorBeamActive = Math.sin(boss.phase * 1.5) > 0.3;
+        if (boss.tractorBeamActive && !state.ship.invulnerable) {
+          const pull = 0.15;
+          state.ship.vel.x += (boss.pos.x - state.ship.pos.x) * pull * 0.01;
+          state.ship.vel.y += (boss.pos.y - state.ship.pos.y) * pull * 0.01;
+        }
+
+        // Spawn mini-saucers
+        boss.miniSaucerTimer = (boss.miniSaucerTimer ?? 300) - 1;
+        if (!boss.miniSaucers) boss.miniSaucers = [];
+        if (boss.miniSaucerTimer <= 0 && boss.miniSaucers.length < 3) {
+          boss.miniSaucerTimer = 250 + Math.random() * 100;
+          boss.miniSaucers.push({
+            pos: { ...boss.pos }, vel: { x: (Math.random() - 0.5) * 3, y: 1 + Math.random() * 2 },
+            hp: 1, shootTimer: 60 + Math.random() * 40,
+          });
+        }
+
+        // Update mini-saucers
+        boss.miniSaucers = boss.miniSaucers.filter(ms => {
+          ms.pos.x += ms.vel.x;
+          ms.pos.y += ms.vel.y;
+          ms.shootTimer--;
+          if (ms.shootTimer <= 0) {
+            ms.shootTimer = 80 + Math.random() * 40;
+            const ang = Math.atan2(state.ship.pos.y - ms.pos.y, state.ship.pos.x - ms.pos.x);
+            state.bullets.push({
+              pos: { ...ms.pos }, vel: { x: Math.cos(ang) * 4, y: Math.sin(ang) * 4 },
+              rotation: ang, lifetime: BULLET_LIFETIME, isUFO: true, color: "#88FFAA",
+            });
+          }
+          return ms.pos.y < CANVAS_HEIGHT + 30 && ms.pos.x > -30 && ms.pos.x < CANVAS_WIDTH + 30;
+        });
+
+        // Sweeping laser
+        boss.shootTimer--;
+        if (boss.shootTimer <= 0) {
+          boss.shootTimer = Math.max(50, 100 - state.wave * 2);
+          const laserAngle = boss.sweepAngle!;
+          for (let d = 0; d < 300; d += 20) {
+            state.bullets.push({
+              pos: { x: boss.pos.x + Math.cos(laserAngle) * d, y: boss.pos.y + Math.sin(laserAngle) * d },
+              vel: { x: Math.cos(laserAngle) * 5, y: Math.sin(laserAngle) * 5 },
+              rotation: laserAngle, lifetime: 20, isUFO: true, color: "#00FF88",
+            });
+          }
+        }
+      } else if (boss.bossType === "borgCube") {
+        // Track player position slowly
+        boss.cubeRotX = (boss.cubeRotX ?? 0) + 0.008;
+        boss.cubeRotY = (boss.cubeRotY ?? 0) + 0.012;
+        boss.adaptPhase = (boss.adaptPhase ?? 0) + 0.01;
+
+        const targetX = state.ship.pos.x;
+        boss.pos.x += (targetX - boss.pos.x) * 0.005;
+        boss.pos.y = boss.targetY + Math.sin(boss.adaptPhase) * 15;
+
+        // HP regeneration every 180 ticks
+        boss.regenTimer = (boss.regenTimer ?? 0) + 1;
+        if (boss.regenTimer >= 180 && boss.hp < boss.maxHp) {
+          boss.hp = Math.min(boss.maxHp, boss.hp + 1);
+          boss.regenTimer = 0;
+          spawnFloatingText(boss.pos, "REGEN", "#00FF44", 12);
+        }
+
+        // Grid-pattern laser bursts
+        boss.gridLaserTimer = (boss.gridLaserTimer ?? 180) - 1;
+        if (boss.gridLaserTimer <= 0) {
+          boss.gridLaserTimer = Math.max(80, 160 - state.wave * 3);
+          // Fire grid pattern: 4 cardinal + 4 diagonal
+          for (let i = 0; i < 8; i++) {
+            const ang = (i / 8) * Math.PI * 2 + boss.cubeRotX!;
+            state.bullets.push({
+              pos: { ...boss.pos },
+              vel: { x: Math.cos(ang) * 3.5, y: Math.sin(ang) * 3.5 },
+              rotation: ang, lifetime: BULLET_LIFETIME * 1.5, isUFO: true, color: "#44FF44",
+            });
+          }
+        }
+
+        // Secondary aimed shot
+        boss.shootTimer--;
+        if (boss.shootTimer <= 0) {
+          boss.shootTimer = Math.max(30, 70 - state.wave * 2);
+          const ang = Math.atan2(state.ship.pos.y - boss.pos.y, state.ship.pos.x - boss.pos.x);
+          state.bullets.push({
+            pos: { ...boss.pos },
+            vel: { x: Math.cos(ang) * 4, y: Math.sin(ang) * 4 },
+            rotation: ang, lifetime: BULLET_LIFETIME * 1.5, isUFO: true, color: "#00CC00",
+          });
+        }
       }
+    }
+
+    // Update flying saucer mini-saucer collisions with player bullets
+    if (state.boss?.bossType === "flyingSaucer" && state.boss.miniSaucers) {
+      state.bullets = state.bullets.filter(bullet => {
+        if (bullet.isUFO || bullet.isAlien) return true;
+        let alive = true;
+        state.boss!.miniSaucers = state.boss!.miniSaucers!.filter(ms => {
+          if (checkCollision(bullet.pos, 2, ms.pos, 10)) {
+            alive = false;
+            ms.hp--;
+            if (ms.hp <= 0) {
+              const pts = 200 * (state.powerUpActive.multiplier > 0 ? 2 : 1);
+              state.score += pts;
+              setDisplayScore(state.score);
+              spawnFloatingText(ms.pos, `+${pts}`, "#88FFAA", 14);
+              spawnExplosion(ms.pos, "#88FFAA", 8);
+              return false;
+            }
+          }
+          return true;
+        });
+        return alive;
+      });
     }
 
     // Update power-ups
