@@ -2246,7 +2246,7 @@ const Game = () => {
             const ang = (i / 8) * Math.PI * 2 + boss.cubeRotX!;
             state.bullets.push({
               pos: { ...boss.pos },
-              vel: { x: Math.cos(ang) * 3.5, y: Math.sin(ang) * 3.5 },
+              vel: { x: Math.cos(ang) * 2.5, y: Math.sin(ang) * 2.5 },
               rotation: ang, lifetime: BULLET_LIFETIME * 1.5, isUFO: true, color: "#44FF44",
             });
           }
