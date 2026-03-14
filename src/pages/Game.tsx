@@ -132,6 +132,8 @@ interface Boss extends GameObject {
   regenTimer?: number;
   gridLaserTimer?: number;
   adaptPhase?: number;
+  miniCubeTimer?: number;
+  miniCubes?: Array<{ pos: Vector; vel: Vector; hp: number; rotAngle: number }>;
 }
 
 interface ColorTheme {
