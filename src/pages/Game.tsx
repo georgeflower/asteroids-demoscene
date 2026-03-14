@@ -877,6 +877,8 @@ const Game = () => {
       base.gridLaserTimer = 180;
       base.adaptPhase = 0;
       base.targetY = 130;
+      base.miniCubeTimer = 300 + Math.random() * 180;
+      base.miniCubes = [];
     }
 
     return base;
