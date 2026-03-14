@@ -788,7 +788,7 @@ const Game = () => {
     if (type === "purpleSwarm") {
       return {
         pos: { x: side, y: 30 + Math.random() * (CANVAS_HEIGHT - 60) },
-        vel: { x: dir * (1.5 + Math.random()) * getSpeedScale(wave), y: (Math.random() - 0.5) * 2 },
+        vel: { x: dir * (0.8 + Math.random() * 0.5) * getSpeedScale(wave), y: (Math.random() - 0.5) * 2 },
         rotation: 0, type, hp: 1, moveTimer: 0,
         shootTimer: 9999, zigzagPhase: Math.random() * Math.PI * 2,
         flockId: Math.floor(Math.random() * 1000),
