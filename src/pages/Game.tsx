@@ -1922,10 +1922,7 @@ const Game = () => {
           state.aliens.push(createAlien("greenMan", state.wave));
           addDebugLog("spawn", `Green man spawned (wave ${state.wave})`);
         }
-        if (state.wave >= 4 && state.aliens.filter((a) => a.type === "redDrone").length < 2) {
-          state.aliens.push(createAlien("redDrone", state.wave));
-          addDebugLog("spawn", `Red drone spawned (wave ${state.wave})`);
-        }
+        // Red Drone removed
         if (state.wave >= 8 && state.aliens.filter((a) => a.type === "blueSentinel").length < 1) {
           state.aliens.push(createAlien("blueSentinel", state.wave));
           addDebugLog("spawn", `Blue sentinel spawned (wave ${state.wave})`);
@@ -2828,43 +2825,7 @@ const Game = () => {
         ctx.restore();
       });
 
-    // Red Drones
-    aliens
-      .filter((a) => a.type === "redDrone")
-      .forEach((alien) => {
-        ctx.save();
-        ctx.translate(alien.pos.x, alien.pos.y);
-        ctx.rotate(Math.atan2(alien.vel.y, alien.vel.x));
-        // Sleek triangular drone shape
-        ctx.strokeStyle = alien.isDashing ? "#FFFF00" : "#FF4444";
-        ctx.fillStyle = alien.isDashing ? "#FF8800" : "#661111";
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.moveTo(10, 0);
-        ctx.lineTo(-8, -7);
-        ctx.lineTo(-4, 0);
-        ctx.lineTo(-8, 7);
-        ctx.closePath();
-        ctx.fill();
-        ctx.stroke();
-        // Thruster glow when dashing
-        if (alien.isDashing) {
-          ctx.fillStyle = "#FFAA00";
-          ctx.beginPath();
-          ctx.moveTo(-4, 0);
-          ctx.lineTo(-12, -3);
-          ctx.lineTo(-14, 0);
-          ctx.lineTo(-12, 3);
-          ctx.closePath();
-          ctx.fill();
-        }
-        // Engine dot
-        ctx.fillStyle = "#FF0000";
-        ctx.beginPath();
-        ctx.arc(-2, 0, 2, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.restore();
-      });
+    // Red Drones removed
 
     // Blue Sentinels
     aliens
