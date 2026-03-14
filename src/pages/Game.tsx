@@ -2009,7 +2009,7 @@ const Game = () => {
           alien.shootTimer--;
           if (alien.shootTimer <= 0 && (alien.burstCount ?? 0) < 3) {
             alien.burstCount = (alien.burstCount ?? 0) + 1;
-            alien.shootTimer = 8; // Fast burst
+            alien.shootTimer = 15; // Slower burst
             const angle = Math.atan2(state.ship.pos.y - alien.pos.y, state.ship.pos.x - alien.pos.x);
             const spread = (alien.burstCount! - 2) * 0.15;
             state.bullets.push({
