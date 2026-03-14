@@ -1946,22 +1946,118 @@ const Game = () => {
           alien.vel.x = (alien.vel.x / curSpd) * maxSpd;
           alien.vel.y = (alien.vel.y / curSpd) * maxSpd;
         }
-      } else {
+      } else if (alien.type === "greenMan") {
         alien.vel.x *= 0.99;
         alien.vel.y += Math.sin(alien.zigzagPhase) * 0.02;
-
         alien.shootTimer--;
         if (alien.shootTimer <= 0) {
           alien.shootTimer = Math.max(40, 80 - state.wave * 2) + Math.random() * 40;
           const angle = Math.atan2(state.ship.pos.y - alien.pos.y, state.ship.pos.x - alien.pos.x);
           state.bullets.push({
-            pos: { ...alien.pos },
-            vel: { x: Math.cos(angle) * 6, y: Math.sin(angle) * 6 },
-            rotation: angle,
-            lifetime: BULLET_LIFETIME,
-            isAlien: true,
-            color: "#44FF44",
+            pos: { ...alien.pos }, vel: { x: Math.cos(angle) * 6, y: Math.sin(angle) * 6 },
+            rotation: angle, lifetime: BULLET_LIFETIME, isAlien: true, color: "#44FF44",
           });
+        }
+      } else if (alien.type === "redDrone") {
+        // Orbit around player, then periodically dash
+        const dx = state.ship.pos.x - alien.pos.x;
+        const dy = state.ship.pos.y - alien.pos.y;
+        const dist = Math.hypot(dx, dy);
+        alien.orbitAngle = (alien.orbitAngle ?? 0) + 0.04;
+        alien.dashTimer = (alien.dashTimer ?? 120) - 1;
+
+        if (alien.isDashing) {
+          // Dash toward player at high speed
+          const spd = 6 * getSpeedScale(state.wave);
+          const ang = Math.atan2(dy, dx);
+          alien.vel.x = Math.cos(ang) * spd;
+          alien.vel.y = Math.sin(ang) * spd;
+          if (dist < 30 || alien.dashTimer! < -60) {
+            alien.isDashing = false;
+            alien.dashTimer = 150 + Math.random() * 80;
+          }
+        } else {
+          // Orbit at ~120px distance
+          const orbitDist = 120;
+          const targetX = state.ship.pos.x + Math.cos(alien.orbitAngle!) * orbitDist;
+          const targetY = state.ship.pos.y + Math.sin(alien.orbitAngle!) * orbitDist;
+          alien.vel.x += (targetX - alien.pos.x) * 0.02;
+          alien.vel.y += (targetY - alien.pos.y) * 0.02;
+          alien.vel.x *= 0.95;
+          alien.vel.y *= 0.95;
+          if (alien.dashTimer! <= 0) {
+            alien.isDashing = true;
+            alien.dashTimer = 0;
+          }
+        }
+      } else if (alien.type === "blueSentinel") {
+        // Teleport + burst fire + invisibility
+        alien.teleportCooldown = (alien.teleportCooldown ?? 90) - 1;
+        alien.vel.x *= 0.95;
+        alien.vel.y *= 0.95;
+
+        if (alien.isInvisible) {
+          alien.invisTimer = (alien.invisTimer ?? 0) - 1;
+          if (alien.invisTimer! <= 0) {
+            alien.isInvisible = false;
+          }
+        } else {
+          alien.shootTimer--;
+          if (alien.shootTimer <= 0 && (alien.burstCount ?? 0) < 3) {
+            alien.burstCount = (alien.burstCount ?? 0) + 1;
+            alien.shootTimer = 8; // Fast burst
+            const angle = Math.atan2(state.ship.pos.y - alien.pos.y, state.ship.pos.x - alien.pos.x);
+            const spread = (alien.burstCount! - 2) * 0.15;
+            state.bullets.push({
+              pos: { ...alien.pos }, vel: { x: Math.cos(angle + spread) * 5, y: Math.sin(angle + spread) * 5 },
+              rotation: angle + spread, lifetime: BULLET_LIFETIME, isAlien: true, color: "#4488FF",
+            });
+            if (alien.burstCount! >= 3) {
+              alien.burstCount = 0;
+              alien.shootTimer = 80 + Math.random() * 40;
+              // Go invisible after burst
+              alien.isInvisible = true;
+              alien.invisTimer = 60;
+            }
+          }
+
+          if (alien.teleportCooldown! <= 0) {
+            alien.pos.x = 50 + Math.random() * (CANVAS_WIDTH - 100);
+            alien.pos.y = 50 + Math.random() * (CANVAS_HEIGHT - 100);
+            alien.vel.x = 0;
+            alien.vel.y = 0;
+            alien.teleportCooldown = 120 + Math.random() * 80;
+            // Spawn teleport particles
+            spawnExplosion(alien.pos, "#4488FF", 6);
+          }
+        }
+      } else if (alien.type === "purpleSwarm") {
+        // Boids-like flocking toward centroid of same flock, chase player
+        const flockMates = state.aliens.filter(a => a.type === "purpleSwarm" && a.flockId === alien.flockId && a !== alien);
+        let cx = state.ship.pos.x, cy = state.ship.pos.y;
+        if (flockMates.length > 0) {
+          cx = flockMates.reduce((s, a) => s + a.pos.x, alien.pos.x) / (flockMates.length + 1);
+          cy = flockMates.reduce((s, a) => s + a.pos.y, alien.pos.y) / (flockMates.length + 1);
+          // Blend centroid toward player
+          cx = cx * 0.4 + state.ship.pos.x * 0.6;
+          cy = cy * 0.4 + state.ship.pos.y * 0.6;
+        }
+        const toTarget = Math.atan2(cy - alien.pos.y, cx - alien.pos.x);
+        alien.vel.x += Math.cos(toTarget) * 0.06;
+        alien.vel.y += Math.sin(toTarget) * 0.06;
+        // Separation from close flockmates
+        flockMates.forEach(mate => {
+          const d = Math.hypot(mate.pos.x - alien.pos.x, mate.pos.y - alien.pos.y);
+          if (d < 25 && d > 0) {
+            alien.vel.x -= (mate.pos.x - alien.pos.x) / d * 0.3;
+            alien.vel.y -= (mate.pos.y - alien.pos.y) / d * 0.3;
+          }
+        });
+        const curSpd = Math.hypot(alien.vel.x, alien.vel.y);
+        const maxSpd = 2.5 * getSpeedScale(state.wave);
+        if (curSpd > maxSpd) {
+          alien.vel.x = (alien.vel.x / curSpd) * maxSpd;
+          alien.vel.y = (alien.vel.y / curSpd) * maxSpd;
         }
       }
 
