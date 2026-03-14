@@ -762,18 +762,48 @@ const Game = () => {
     };
   };
 
-  const createAlien = (type: "brown" | "greenMan", wave: number): Alien => {
+  const createAlien = (type: Alien["type"], wave: number): Alien => {
     const side = Math.random() < 0.5 ? -20 : CANVAS_WIDTH + 20;
+    const dir = side < 0 ? 1 : -1;
+
+    if (type === "redDrone") {
+      const speed = (3 + Math.random() * 2) * getSpeedScale(wave);
+      return {
+        pos: { x: side, y: 30 + Math.random() * (CANVAS_HEIGHT - 60) },
+        vel: { x: dir * speed, y: (Math.random() - 0.5) * speed },
+        rotation: 0, type, hp: 1, moveTimer: 0,
+        shootTimer: 9999, zigzagPhase: Math.random() * Math.PI * 2,
+        dashTimer: 120 + Math.random() * 60, isDashing: false, orbitAngle: Math.random() * Math.PI * 2,
+      };
+    }
+    if (type === "blueSentinel") {
+      return {
+        pos: { x: side, y: 30 + Math.random() * (CANVAS_HEIGHT - 60) },
+        vel: { x: dir * 0.5, y: 0 },
+        rotation: 0, type, hp: 2, moveTimer: 0,
+        shootTimer: 60 + Math.random() * 40, zigzagPhase: 0,
+        invisTimer: 0, isInvisible: false, burstCount: 0, teleportCooldown: 90 + Math.random() * 60,
+      };
+    }
+    if (type === "purpleSwarm") {
+      return {
+        pos: { x: side, y: 30 + Math.random() * (CANVAS_HEIGHT - 60) },
+        vel: { x: dir * (1.5 + Math.random()) * getSpeedScale(wave), y: (Math.random() - 0.5) * 2 },
+        rotation: 0, type, hp: 1, moveTimer: 0,
+        shootTimer: 9999, zigzagPhase: Math.random() * Math.PI * 2,
+        flockId: Math.floor(Math.random() * 1000),
+      };
+    }
+
+    // Original brown / greenMan
     const speed =
       type === "brown"
         ? (2 + Math.random() * 1.5) * getSpeedScale(wave)
         : (0.8 + Math.random() * 0.4) * getSpeedScale(wave);
-    const dir = side < 0 ? 1 : -1;
     return {
       pos: { x: side, y: 30 + Math.random() * (CANVAS_HEIGHT - 60) },
       vel: { x: dir * speed, y: (Math.random() - 0.5) * speed * 0.5 },
-      rotation: 0,
-      type,
+      rotation: 0, type,
       hp: type === "brown" ? 1 : 2,
       moveTimer: 0,
       shootTimer: type === "greenMan" ? 90 + Math.random() * 60 : 9999,
@@ -781,20 +811,73 @@ const Game = () => {
     };
   };
 
+  // Spawn a group of purple swarm aliens
+  const spawnPurpleSwarmGroup = (wave: number) => {
+    const fId = Math.floor(Math.random() * 10000);
+    const side = Math.random() < 0.5 ? -20 : CANVAS_WIDTH + 20;
+    const baseY = 60 + Math.random() * (CANVAS_HEIGHT - 120);
+    const aliens: Alien[] = [];
+    for (let i = 0; i < 3; i++) {
+      const a = createAlien("purpleSwarm", wave);
+      a.pos.x = side;
+      a.pos.y = baseY + (i - 1) * 25;
+      a.flockId = fId;
+      aliens.push(a);
+    }
+    return aliens;
+  };
+
   const createBoss = (wave: number): Boss => {
-    return {
+    // Determine boss type based on wave: 5=tentacle, 10=amigaBall, 15=flyingSaucer, 20=borgCube, then cycle
+    const bossIndex = ((wave / 5) - 1) % 4; // 0,1,2,3
+    const bossTypes: Boss["bossType"][] = ["tentacle", "amigaBall", "flyingSaucer", "borgCube"];
+    const bossType = bossTypes[bossIndex] || "tentacle";
+    const baseHp = 3 + wave;
+
+    const base: Boss = {
       pos: { x: CANVAS_WIDTH / 2, y: -80 },
       vel: { x: 0, y: 1 },
       rotation: 0,
-      hp: 3 + wave,
-      maxHp: 3 + wave,
+      hp: baseHp,
+      maxHp: baseHp,
       tentacles: Math.min(4 + Math.floor(wave / 5), 8),
       shootTimer: 120,
       hitFlash: 0,
       phase: 0,
       entered: false,
       targetY: 100 + Math.random() * 60,
+      bossType,
     };
+
+    if (bossType === "amigaBall") {
+      base.hp = Math.floor(baseHp * 1.2);
+      base.maxHp = base.hp;
+      base.bounceVelX = 2 + Math.random() * 2;
+      base.bounceVelY = -3;
+      base.rotAngle = 0;
+      base.lastBounceFrame = 0;
+      base.targetY = 150;
+    } else if (bossType === "flyingSaucer") {
+      base.hp = Math.floor(baseHp * 1.5);
+      base.maxHp = base.hp;
+      base.tractorBeamAngle = 0;
+      base.tractorBeamActive = false;
+      base.sweepAngle = 0;
+      base.miniSaucerTimer = 300;
+      base.miniSaucers = [];
+      base.targetY = 120;
+    } else if (bossType === "borgCube") {
+      base.hp = Math.floor(baseHp * 1.8);
+      base.maxHp = base.hp;
+      base.cubeRotX = 0;
+      base.cubeRotY = 0;
+      base.regenTimer = 0;
+      base.gridLaserTimer = 180;
+      base.adaptPhase = 0;
+      base.targetY = 130;
+    }
+
+    return base;
   };
 
   const createPowerUp = (x: number, y: number, wave: number = 1, extraLivesThisWave: number = 0): PowerUp | null => {
