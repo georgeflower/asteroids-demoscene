@@ -2214,7 +2214,7 @@ const Game = () => {
           for (let d = 0; d < 300; d += 20) {
             state.bullets.push({
               pos: { x: boss.pos.x + Math.cos(laserAngle) * d, y: boss.pos.y + Math.sin(laserAngle) * d },
-              vel: { x: Math.cos(laserAngle) * 5, y: Math.sin(laserAngle) * 5 },
+              vel: { x: Math.cos(laserAngle) * 3.5, y: Math.sin(laserAngle) * 3.5 },
               rotation: laserAngle, lifetime: 20, isUFO: true, color: "#00FF88",
             });
           }
