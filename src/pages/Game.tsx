@@ -87,11 +87,22 @@ interface Star {
 }
 
 interface Alien extends GameObject {
-  type: "brown" | "greenMan";
+  type: "brown" | "greenMan" | "redDrone" | "blueSentinel" | "purpleSwarm";
   hp: number;
   moveTimer: number;
   shootTimer: number;
   zigzagPhase: number;
+  // Red Drone specific
+  dashTimer?: number;
+  isDashing?: boolean;
+  orbitAngle?: number;
+  // Blue Sentinel specific
+  invisTimer?: number;
+  isInvisible?: boolean;
+  burstCount?: number;
+  teleportCooldown?: number;
+  // Purple Swarm specific
+  flockId?: number;
 }
 
 interface Boss extends GameObject {
