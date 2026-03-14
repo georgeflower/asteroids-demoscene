@@ -2240,7 +2240,7 @@ const Game = () => {
         // Grid-pattern laser bursts
         boss.gridLaserTimer = (boss.gridLaserTimer ?? 180) - 1;
         if (boss.gridLaserTimer <= 0) {
-          boss.gridLaserTimer = Math.max(80, 160 - state.wave * 3);
+          boss.gridLaserTimer = Math.max(120, 240 - state.wave * 3);
           // Fire grid pattern: 4 cardinal + 4 diagonal
           for (let i = 0; i < 8; i++) {
             const ang = (i / 8) * Math.PI * 2 + boss.cubeRotX!;
