@@ -101,6 +101,7 @@ interface Alien extends GameObject {
   isInvisible?: boolean;
   burstCount?: number;
   teleportCooldown?: number;
+  chargeTimer?: number;
   // Purple Swarm specific
   flockId?: number;
 }
