@@ -2075,7 +2075,7 @@ const Game = () => {
           }
         });
         const curSpd = Math.hypot(alien.vel.x, alien.vel.y);
-        const maxSpd = 1.5 * getSpeedScale(state.wave);
+        const maxSpd = 0.8 * getSpeedScale(state.wave);
         if (curSpd > maxSpd) {
           alien.vel.x = (alien.vel.x / curSpd) * maxSpd;
           alien.vel.y = (alien.vel.y / curSpd) * maxSpd;
