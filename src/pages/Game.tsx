@@ -852,7 +852,7 @@ const Game = () => {
     if (bossType === "amigaBall") {
       base.hp = Math.floor(baseHp * 1.2);
       base.maxHp = base.hp;
-      base.bounceVelX = 2 + Math.random() * 2;
+      base.bounceVelX = 1 + Math.random() * 1;
       base.bounceVelY = -3;
       base.rotAngle = 0;
       base.lastBounceFrame = 0;
