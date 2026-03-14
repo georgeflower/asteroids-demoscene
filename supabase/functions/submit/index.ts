@@ -247,18 +247,16 @@ Deno.serve(async (req) => {
       session.lastScore = submission.score;
       session.lastSubmissionTime = Date.now();
 
-      // Insert score using server-calculated time
-      const { data: insertedScore, error } = await supabaseAdmin
-        .from('current_high_scores')
-        .insert({
-          initials: submission.initials,
-          score: submission.score,
-          level: submission.level ?? 1,
-          time_played_seconds: effectiveTimePlayed,
-          source: source,
-        })
-        .select('id')
-        .single();
+      // Insert score + audit log in single transaction via RPC
+      const { data: scoreId, error } = await supabaseAdmin
+        .rpc('insert_score_with_audit', {
+          p_initials: submission.initials,
+          p_score: submission.score,
+          p_level: submission.level ?? 1,
+          p_time_played_seconds: effectiveTimePlayed,
+          p_source: source,
+          p_session_token: submission.gameSessionToken,
+        });
 
       if (error) {
         console.error('Database error:', error);
@@ -266,22 +264,6 @@ Deno.serve(async (req) => {
           JSON.stringify({ error: 'Failed to save score' }),
           { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
-      }
-
-      // Immediately insert audit log (trigger will clean up if this fails)
-      if (insertedScore) {
-        const { error: auditError } = await supabaseAdmin
-          .from('score_audit_log')
-          .insert({
-            score_id: insertedScore.id,
-            session_token: submission.gameSessionToken,
-            submission_method: 'edge_function',
-          });
-        
-        if (auditError) {
-          console.error('Audit log error:', auditError);
-          // Score will be cleaned up by the deferred trigger
-        }
       }
 
       return new Response(
