@@ -102,7 +102,17 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      insert_score_with_audit: {
+        Args: {
+          p_initials: string
+          p_level: number
+          p_score: number
+          p_session_token: string
+          p_source: string
+          p_time_played_seconds: number
+        }
+        Returns: string
+      }
     }
     Enums: {
       [_ in never]: never
