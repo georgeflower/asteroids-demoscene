@@ -2129,7 +2129,7 @@ const Game = () => {
         }
         // Floor/ceiling bounce
         if (boss.pos.y > CANVAS_HEIGHT - 80) {
-          boss.bounceVelY = -(Math.abs(boss.bounceVelY) * 0.9 + 1.5);
+          boss.bounceVelY = -(Math.abs(boss.bounceVelY) * 0.5 + 0.5 + Math.random() * 2);
           boss.pos.y = CANVAS_HEIGHT - 80;
           // Shockwave on bounce
           if (boss.lastBounceFrame > 30) {
