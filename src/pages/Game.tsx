@@ -2115,9 +2115,9 @@ const Game = () => {
       } else if (boss.bossType === "amigaBall") {
         // Bouncing ball physics
         boss.rotAngle = (boss.rotAngle ?? 0) + 0.015;
-        const gravity = 0.05;
+        const gravity = 0.025;
         boss.bounceVelY = (boss.bounceVelY ?? 0) + gravity;
-        boss.bounceVelX = boss.bounceVelX ?? 2;
+        boss.bounceVelX = boss.bounceVelX ?? (1 + Math.random() * 1.5);
         boss.pos.x += boss.bounceVelX;
         boss.pos.y += boss.bounceVelY;
         boss.lastBounceFrame = (boss.lastBounceFrame ?? 0) + 1;
