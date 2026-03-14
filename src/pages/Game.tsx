@@ -2047,8 +2047,8 @@ const Game = () => {
           cy = cy * 0.4 + state.ship.pos.y * 0.6;
         }
         const toTarget = Math.atan2(cy - alien.pos.y, cx - alien.pos.x);
-        alien.vel.x += Math.cos(toTarget) * 0.06;
-        alien.vel.y += Math.sin(toTarget) * 0.06;
+        alien.vel.x += Math.cos(toTarget) * 0.03;
+        alien.vel.y += Math.sin(toTarget) * 0.03;
         // Separation from close flockmates
         flockMates.forEach(mate => {
           const d = Math.hypot(mate.pos.x - alien.pos.x, mate.pos.y - alien.pos.y);
