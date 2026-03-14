@@ -2559,10 +2559,11 @@ const Game = () => {
       }
     }
 
-    // Collision: Ship vs Boss tentacles
+    // Collision: Ship vs Boss
     if (state.boss && state.boss.entered && !state.ship.invulnerable && state.powerUpActive.shield === 0) {
       const boss = state.boss;
-      if (boss && checkCollision(state.ship.pos, SHIP_SIZE, boss.pos, 65)) {
+      const bossRadius = boss.bossType === "amigaBall" ? 50 : boss.bossType === "flyingSaucer" ? 55 : boss.bossType === "borgCube" ? 50 : 65;
+      if (boss && checkCollision(state.ship.pos, SHIP_SIZE, boss.pos, bossRadius)) {
         addDebugLog("collision", "Ship hit boss");
         loseLife(state);
       }
