@@ -2280,6 +2280,53 @@ const Game = () => {
             rotation: ang, lifetime: BULLET_LIFETIME * 1.5, isUFO: true, color: "#00CC00",
           });
         }
+
+        // Spawn mini cubes every 5-8 seconds
+        boss.miniCubeTimer = (boss.miniCubeTimer ?? 300) - 1;
+        if (!boss.miniCubes) boss.miniCubes = [];
+        if (boss.miniCubeTimer <= 0) {
+          boss.miniCubeTimer = 300 + Math.random() * 180;
+          const ang = Math.random() * Math.PI * 2;
+          boss.miniCubes.push({
+            pos: { x: boss.pos.x, y: boss.pos.y },
+            vel: { x: Math.cos(ang) * 0.8 + (state.ship.pos.x - boss.pos.x) * 0.003, y: Math.sin(ang) * 0.8 + (state.ship.pos.y - boss.pos.y) * 0.003 },
+            hp: 1,
+            rotAngle: Math.random() * Math.PI * 2,
+          });
+        }
+
+        // Update mini cubes
+        boss.miniCubes = boss.miniCubes.filter(mc => {
+          mc.pos.x += mc.vel.x;
+          mc.pos.y += mc.vel.y;
+          mc.rotAngle += 0.03;
+          // Drift toward player slowly
+          mc.vel.x += (state.ship.pos.x - mc.pos.x) * 0.0005;
+          mc.vel.y += (state.ship.pos.y - mc.pos.y) * 0.0005;
+          // Remove if off-screen
+          return mc.pos.x > -50 && mc.pos.x < CANVAS_WIDTH + 50 && mc.pos.y > -50 && mc.pos.y < CANVAS_HEIGHT + 50;
+        });
+
+        // Mini cube collision with player bullets
+        boss.miniCubes = boss.miniCubes.filter(mc => {
+          const hitIdx = state.bullets.findIndex(b => !b.isUFO && !b.isAlien && Math.hypot(b.pos.x - mc.pos.x, b.pos.y - mc.pos.y) < 12);
+          if (hitIdx >= 0) {
+            state.bullets.splice(hitIdx, 1);
+            spawnExplosion(mc.pos, "#00FF44", 4);
+            state.score += 25;
+            return false;
+          }
+          return true;
+        });
+
+        // Mini cube collision with player ship
+        boss.miniCubes.forEach(mc => {
+          if (Math.hypot(mc.pos.x - state.ship.pos.x, mc.pos.y - state.ship.pos.y) < 18 && !state.ship.invulnerable) {
+            // Damage player (handled by existing ship hit logic elsewhere, just remove the cube)
+            mc.hp = 0;
+          }
+        });
+        boss.miniCubes = boss.miniCubes.filter(mc => mc.hp > 0);
       }
     }
 
