@@ -3134,6 +3134,22 @@ const Game = () => {
         return;
       }
 
+      // Add 100k points with X key (solo only, debug only)
+      if (
+        DEBUG_ENABLED &&
+        (e.key === "x" || e.key === "X") &&
+        gameModeRef.current === "solo" &&
+        gameStateRef.current &&
+        !gameStateRef.current.gameOver &&
+        !isPausedRef.current
+      ) {
+        e.preventDefault();
+        gameStateRef.current.score += 100000;
+        setDisplayScore(gameStateRef.current.score);
+        addDebugLog("wave", `+100,000 points cheat (now ${gameStateRef.current.score})`);
+        return;
+      }
+
       // Pause toggle on Escape
       if (
         e.key === "Escape" &&
