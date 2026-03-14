@@ -767,13 +767,13 @@ const Game = () => {
     const dir = side < 0 ? 1 : -1;
 
     if (type === "redDrone") {
-      const speed = (3 + Math.random() * 2) * getSpeedScale(wave);
+      const speed = (1.5 + Math.random() * 1) * getSpeedScale(wave);
       return {
         pos: { x: side, y: 30 + Math.random() * (CANVAS_HEIGHT - 60) },
         vel: { x: dir * speed, y: (Math.random() - 0.5) * speed },
         rotation: 0, type, hp: 1, moveTimer: 0,
         shootTimer: 9999, zigzagPhase: Math.random() * Math.PI * 2,
-        dashTimer: 120 + Math.random() * 60, isDashing: false, orbitAngle: Math.random() * Math.PI * 2,
+        dashTimer: 200 + Math.random() * 100, isDashing: false, orbitAngle: Math.random() * Math.PI * 2,
       };
     }
     if (type === "blueSentinel") {
