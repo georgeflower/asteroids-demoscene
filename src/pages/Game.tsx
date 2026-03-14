@@ -767,13 +767,13 @@ const Game = () => {
     const dir = side < 0 ? 1 : -1;
 
     if (type === "redDrone") {
-      const speed = (3 + Math.random() * 2) * getSpeedScale(wave);
+      const speed = (1.5 + Math.random() * 1) * getSpeedScale(wave);
       return {
         pos: { x: side, y: 30 + Math.random() * (CANVAS_HEIGHT - 60) },
         vel: { x: dir * speed, y: (Math.random() - 0.5) * speed },
         rotation: 0, type, hp: 1, moveTimer: 0,
         shootTimer: 9999, zigzagPhase: Math.random() * Math.PI * 2,
-        dashTimer: 120 + Math.random() * 60, isDashing: false, orbitAngle: Math.random() * Math.PI * 2,
+        dashTimer: 200 + Math.random() * 100, isDashing: false, orbitAngle: Math.random() * Math.PI * 2,
       };
     }
     if (type === "blueSentinel") {
@@ -788,7 +788,7 @@ const Game = () => {
     if (type === "purpleSwarm") {
       return {
         pos: { x: side, y: 30 + Math.random() * (CANVAS_HEIGHT - 60) },
-        vel: { x: dir * (1.5 + Math.random()) * getSpeedScale(wave), y: (Math.random() - 0.5) * 2 },
+        vel: { x: dir * (0.8 + Math.random() * 0.5) * getSpeedScale(wave), y: (Math.random() - 0.5) * 2 },
         rotation: 0, type, hp: 1, moveTimer: 0,
         shootTimer: 9999, zigzagPhase: Math.random() * Math.PI * 2,
         flockId: Math.floor(Math.random() * 1000),
@@ -852,7 +852,7 @@ const Game = () => {
     if (bossType === "amigaBall") {
       base.hp = Math.floor(baseHp * 1.2);
       base.maxHp = base.hp;
-      base.bounceVelX = 2 + Math.random() * 2;
+      base.bounceVelX = 1 + Math.random() * 1;
       base.bounceVelY = -3;
       base.rotAngle = 0;
       base.lastBounceFrame = 0;
@@ -1967,18 +1967,18 @@ const Game = () => {
         const dx = state.ship.pos.x - alien.pos.x;
         const dy = state.ship.pos.y - alien.pos.y;
         const dist = Math.hypot(dx, dy);
-        alien.orbitAngle = (alien.orbitAngle ?? 0) + 0.04;
+        alien.orbitAngle = (alien.orbitAngle ?? 0) + 0.02;
         alien.dashTimer = (alien.dashTimer ?? 120) - 1;
 
         if (alien.isDashing) {
           // Dash toward player at high speed
-          const spd = 6 * getSpeedScale(state.wave);
+          const spd = 3.5 * getSpeedScale(state.wave);
           const ang = Math.atan2(dy, dx);
           alien.vel.x = Math.cos(ang) * spd;
           alien.vel.y = Math.sin(ang) * spd;
           if (dist < 30 || alien.dashTimer! < -60) {
             alien.isDashing = false;
-            alien.dashTimer = 150 + Math.random() * 80;
+            alien.dashTimer = 250 + Math.random() * 120;
           }
         } else {
           // Orbit at ~120px distance
@@ -2009,16 +2009,16 @@ const Game = () => {
           alien.shootTimer--;
           if (alien.shootTimer <= 0 && (alien.burstCount ?? 0) < 3) {
             alien.burstCount = (alien.burstCount ?? 0) + 1;
-            alien.shootTimer = 8; // Fast burst
+            alien.shootTimer = 15; // Slower burst
             const angle = Math.atan2(state.ship.pos.y - alien.pos.y, state.ship.pos.x - alien.pos.x);
             const spread = (alien.burstCount! - 2) * 0.15;
             state.bullets.push({
-              pos: { ...alien.pos }, vel: { x: Math.cos(angle + spread) * 5, y: Math.sin(angle + spread) * 5 },
+              pos: { ...alien.pos }, vel: { x: Math.cos(angle + spread) * 3.5, y: Math.sin(angle + spread) * 3.5 },
               rotation: angle + spread, lifetime: BULLET_LIFETIME, isAlien: true, color: "#4488FF",
             });
             if (alien.burstCount! >= 3) {
               alien.burstCount = 0;
-              alien.shootTimer = 80 + Math.random() * 40;
+              alien.shootTimer = 120 + Math.random() * 60;
               // Go invisible after burst
               alien.isInvisible = true;
               alien.invisTimer = 60;
@@ -2030,7 +2030,7 @@ const Game = () => {
             alien.pos.y = 50 + Math.random() * (CANVAS_HEIGHT - 100);
             alien.vel.x = 0;
             alien.vel.y = 0;
-            alien.teleportCooldown = 120 + Math.random() * 80;
+            alien.teleportCooldown = 200 + Math.random() * 120;
             // Spawn teleport particles
             spawnExplosion(alien.pos, "#4488FF", 6);
           }
@@ -2047,8 +2047,8 @@ const Game = () => {
           cy = cy * 0.4 + state.ship.pos.y * 0.6;
         }
         const toTarget = Math.atan2(cy - alien.pos.y, cx - alien.pos.x);
-        alien.vel.x += Math.cos(toTarget) * 0.06;
-        alien.vel.y += Math.sin(toTarget) * 0.06;
+        alien.vel.x += Math.cos(toTarget) * 0.03;
+        alien.vel.y += Math.sin(toTarget) * 0.03;
         // Separation from close flockmates
         flockMates.forEach(mate => {
           const d = Math.hypot(mate.pos.x - alien.pos.x, mate.pos.y - alien.pos.y);
@@ -2058,7 +2058,7 @@ const Game = () => {
           }
         });
         const curSpd = Math.hypot(alien.vel.x, alien.vel.y);
-        const maxSpd = 2.5 * getSpeedScale(state.wave);
+        const maxSpd = 1.5 * getSpeedScale(state.wave);
         if (curSpd > maxSpd) {
           alien.vel.x = (alien.vel.x / curSpd) * maxSpd;
           alien.vel.y = (alien.vel.y / curSpd) * maxSpd;
@@ -2115,9 +2115,9 @@ const Game = () => {
       } else if (boss.bossType === "amigaBall") {
         // Bouncing ball physics
         boss.rotAngle = (boss.rotAngle ?? 0) + 0.015;
-        const gravity = 0.05;
+        const gravity = 0.025;
         boss.bounceVelY = (boss.bounceVelY ?? 0) + gravity;
-        boss.bounceVelX = boss.bounceVelX ?? 2;
+        boss.bounceVelX = boss.bounceVelX ?? (1 + Math.random() * 1.5);
         boss.pos.x += boss.bounceVelX;
         boss.pos.y += boss.bounceVelY;
         boss.lastBounceFrame = (boss.lastBounceFrame ?? 0) + 1;
@@ -2129,7 +2129,7 @@ const Game = () => {
         }
         // Floor/ceiling bounce
         if (boss.pos.y > CANVAS_HEIGHT - 80) {
-          boss.bounceVelY = -(Math.abs(boss.bounceVelY) * 0.9 + 1.5);
+          boss.bounceVelY = -(Math.abs(boss.bounceVelY) * 0.5 + 0.5 + Math.random() * 2);
           boss.pos.y = CANVAS_HEIGHT - 80;
           // Shockwave on bounce
           if (boss.lastBounceFrame > 30) {
@@ -2153,13 +2153,13 @@ const Game = () => {
         // Radial burst attack
         boss.shootTimer--;
         if (boss.shootTimer <= 0) {
-          boss.shootTimer = Math.max(60, 120 - state.wave * 2);
+          boss.shootTimer = Math.max(90, 180 - state.wave * 2);
           const count = 8;
           for (let i = 0; i < count; i++) {
             const ang = (i / count) * Math.PI * 2;
             state.bullets.push({
               pos: { ...boss.pos },
-              vel: { x: Math.cos(ang) * 3, y: Math.sin(ang) * 3 },
+              vel: { x: Math.cos(ang) * 2, y: Math.sin(ang) * 2 },
               rotation: ang, lifetime: BULLET_LIFETIME * 1.2, isUFO: true, color: "#CC0000",
             });
           }
@@ -2174,7 +2174,7 @@ const Game = () => {
         // Tractor beam: periodically pull player
         boss.tractorBeamActive = Math.sin(boss.phase * 1.5) > 0.3;
         if (boss.tractorBeamActive && !state.ship.invulnerable) {
-          const pull = 0.15;
+          const pull = 0.06;
           state.ship.vel.x += (boss.pos.x - state.ship.pos.x) * pull * 0.01;
           state.ship.vel.y += (boss.pos.y - state.ship.pos.y) * pull * 0.01;
         }
@@ -2209,12 +2209,12 @@ const Game = () => {
         // Sweeping laser
         boss.shootTimer--;
         if (boss.shootTimer <= 0) {
-          boss.shootTimer = Math.max(50, 100 - state.wave * 2);
+          boss.shootTimer = Math.max(80, 160 - state.wave * 2);
           const laserAngle = boss.sweepAngle!;
           for (let d = 0; d < 300; d += 20) {
             state.bullets.push({
               pos: { x: boss.pos.x + Math.cos(laserAngle) * d, y: boss.pos.y + Math.sin(laserAngle) * d },
-              vel: { x: Math.cos(laserAngle) * 5, y: Math.sin(laserAngle) * 5 },
+              vel: { x: Math.cos(laserAngle) * 3.5, y: Math.sin(laserAngle) * 3.5 },
               rotation: laserAngle, lifetime: 20, isUFO: true, color: "#00FF88",
             });
           }
@@ -2231,7 +2231,7 @@ const Game = () => {
 
         // HP regeneration every 180 ticks
         boss.regenTimer = (boss.regenTimer ?? 0) + 1;
-        if (boss.regenTimer >= 180 && boss.hp < boss.maxHp) {
+        if (boss.regenTimer >= 300 && boss.hp < boss.maxHp) {
           boss.hp = Math.min(boss.maxHp, boss.hp + 1);
           boss.regenTimer = 0;
           spawnFloatingText(boss.pos, "REGEN", "#00FF44", 12);
@@ -2240,13 +2240,13 @@ const Game = () => {
         // Grid-pattern laser bursts
         boss.gridLaserTimer = (boss.gridLaserTimer ?? 180) - 1;
         if (boss.gridLaserTimer <= 0) {
-          boss.gridLaserTimer = Math.max(80, 160 - state.wave * 3);
+          boss.gridLaserTimer = Math.max(120, 240 - state.wave * 3);
           // Fire grid pattern: 4 cardinal + 4 diagonal
           for (let i = 0; i < 8; i++) {
             const ang = (i / 8) * Math.PI * 2 + boss.cubeRotX!;
             state.bullets.push({
               pos: { ...boss.pos },
-              vel: { x: Math.cos(ang) * 3.5, y: Math.sin(ang) * 3.5 },
+              vel: { x: Math.cos(ang) * 2.5, y: Math.sin(ang) * 2.5 },
               rotation: ang, lifetime: BULLET_LIFETIME * 1.5, isUFO: true, color: "#44FF44",
             });
           }
@@ -2255,11 +2255,11 @@ const Game = () => {
         // Secondary aimed shot
         boss.shootTimer--;
         if (boss.shootTimer <= 0) {
-          boss.shootTimer = Math.max(30, 70 - state.wave * 2);
+          boss.shootTimer = Math.max(60, 120 - state.wave * 2);
           const ang = Math.atan2(state.ship.pos.y - boss.pos.y, state.ship.pos.x - boss.pos.x);
           state.bullets.push({
             pos: { ...boss.pos },
-            vel: { x: Math.cos(ang) * 4, y: Math.sin(ang) * 4 },
+              vel: { x: Math.cos(ang) * 2.8, y: Math.sin(ang) * 2.8 },
             rotation: ang, lifetime: BULLET_LIFETIME * 1.5, isUFO: true, color: "#00CC00",
           });
         }
