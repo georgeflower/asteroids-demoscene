@@ -2030,7 +2030,7 @@ const Game = () => {
             alien.pos.y = 50 + Math.random() * (CANVAS_HEIGHT - 100);
             alien.vel.x = 0;
             alien.vel.y = 0;
-            alien.teleportCooldown = 120 + Math.random() * 80;
+            alien.teleportCooldown = 200 + Math.random() * 120;
             // Spawn teleport particles
             spawnExplosion(alien.pos, "#4488FF", 6);
           }
