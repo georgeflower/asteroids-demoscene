@@ -2018,7 +2018,7 @@ const Game = () => {
             });
             if (alien.burstCount! >= 3) {
               alien.burstCount = 0;
-              alien.shootTimer = 80 + Math.random() * 40;
+              alien.shootTimer = 120 + Math.random() * 60;
               // Go invisible after burst
               alien.isInvisible = true;
               alien.invisTimer = 60;
