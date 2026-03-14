@@ -2174,7 +2174,7 @@ const Game = () => {
         // Tractor beam: periodically pull player
         boss.tractorBeamActive = Math.sin(boss.phase * 1.5) > 0.3;
         if (boss.tractorBeamActive && !state.ship.invulnerable) {
-          const pull = 0.15;
+          const pull = 0.06;
           state.ship.vel.x += (boss.pos.x - state.ship.pos.x) * pull * 0.01;
           state.ship.vel.y += (boss.pos.y - state.ship.pos.y) * pull * 0.01;
         }
