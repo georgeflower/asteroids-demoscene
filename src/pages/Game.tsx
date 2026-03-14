@@ -2882,10 +2882,26 @@ const Game = () => {
           ctx.restore();
           return;
         }
+        // Draw charge rings before teleport
+        if (alien.chargeTimer && alien.chargeTimer > 0) {
+          ctx.save();
+          ctx.translate(alien.pos.x, alien.pos.y);
+          const chargeProgress = 1 - alien.chargeTimer / 30;
+          for (let ring = 0; ring < 3; ring++) {
+            ctx.globalAlpha = 0.3 + chargeProgress * 0.4 - ring * 0.1;
+            ctx.strokeStyle = "#4488FF";
+            ctx.lineWidth = 2 - ring * 0.5;
+            ctx.beginPath();
+            ctx.arc(0, 0, 8 + chargeProgress * (15 + ring * 8), 0, Math.PI * 2);
+            ctx.stroke();
+          }
+          ctx.restore();
+        }
         ctx.save();
         ctx.translate(alien.pos.x, alien.pos.y);
-        // Diamond/crystal shape
-        ctx.strokeStyle = "#4488FF";
+        // Diamond/crystal shape - glow brighter during charge
+        const isCharging = alien.chargeTimer && alien.chargeTimer > 0;
+        ctx.strokeStyle = isCharging ? "#88CCFF" : "#4488FF";
         ctx.fillStyle = "#112244";
         ctx.lineWidth = 2;
         ctx.beginPath();
