@@ -2480,7 +2480,8 @@ const Game = () => {
       state.bullets = state.bullets.filter((bullet) => {
         if (!state.boss) return true; // Boss defeated mid-filter, keep remaining bullets
         if (bullet.isUFO || bullet.isAlien) return true;
-        if (checkCollision(bullet.pos, 2, state.boss!.pos, 60)) {
+        const bossHitRadius = state.boss!.bossType === "amigaBall" ? 50 : state.boss!.bossType === "flyingSaucer" ? 55 : state.boss!.bossType === "borgCube" ? 50 : 60;
+        if (checkCollision(bullet.pos, 2, state.boss!.pos, bossHitRadius)) {
           state.boss!.hp--;
           state.boss!.hitFlash = 10;
           spawnExplosion(bullet.pos, "#FF88FF", 5);
