@@ -254,7 +254,7 @@ Deno.serve(async (req) => {
           initials: submission.initials,
           score: submission.score,
           level: submission.level ?? 1,
-          time_played_seconds: serverTimePlayedSeconds,
+          time_played_seconds: effectiveTimePlayed,
           source: source,
         })
         .select('id')
