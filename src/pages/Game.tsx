@@ -1967,7 +1967,7 @@ const Game = () => {
         const dx = state.ship.pos.x - alien.pos.x;
         const dy = state.ship.pos.y - alien.pos.y;
         const dist = Math.hypot(dx, dy);
-        alien.orbitAngle = (alien.orbitAngle ?? 0) + 0.04;
+        alien.orbitAngle = (alien.orbitAngle ?? 0) + 0.02;
         alien.dashTimer = (alien.dashTimer ?? 120) - 1;
 
         if (alien.isDashing) {
