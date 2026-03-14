@@ -21,6 +21,7 @@ interface GameSession {
   lastScore: number;
   submissionCount: number;
   lastSubmissionTime: number;
+  recreated?: boolean;
 }
 
 // In-memory store for game sessions
@@ -70,6 +71,7 @@ function validateSession(token: string, score: number): { valid: boolean; error?
       lastScore: 0,
       submissionCount: 0,
       lastSubmissionTime: 0,
+      recreated: true,
     };
     gameSessions.set(token, session);
   }
@@ -202,9 +204,20 @@ Deno.serve(async (req) => {
 
       // Calculate elapsed time SERVER-SIDE (unforgeable)
       const serverTimePlayedSeconds = Math.floor((Date.now() - session.startTime) / 1000);
+      let effectiveTimePlayed = serverTimePlayedSeconds;
+
+      // Cold-start fallback: if session was auto-recreated, server time is near zero.
+      // Use client-reported time as fallback, capped at max session duration.
+      if (session.recreated && submission.timePlayedSeconds && submission.timePlayedSeconds > 0) {
+        effectiveTimePlayed = Math.min(
+          submission.timePlayedSeconds,
+          Math.floor(SESSION_TIMEOUT / 1000)
+        );
+        console.log(`Cold-start fallback: using client time ${effectiveTimePlayed}s (server was ${serverTimePlayedSeconds}s)`);
+      }
       
-      // Validate score plausibility using server-calculated time
-      const plausibility = validateScorePlausibility(submission.score, serverTimePlayedSeconds, submission.level);
+      // Validate score plausibility using effective time
+      const plausibility = validateScorePlausibility(submission.score, effectiveTimePlayed, submission.level);
       if (!plausibility.valid) {
         return new Response(
           JSON.stringify({ error: plausibility.error }),
@@ -241,7 +254,7 @@ Deno.serve(async (req) => {
           initials: submission.initials,
           score: submission.score,
           level: submission.level ?? 1,
-          time_played_seconds: serverTimePlayedSeconds,
+          time_played_seconds: effectiveTimePlayed,
           source: source,
         })
         .select('id')
