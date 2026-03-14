@@ -101,6 +101,7 @@ interface Alien extends GameObject {
   isInvisible?: boolean;
   burstCount?: number;
   teleportCooldown?: number;
+  chargeTimer?: number;
   // Purple Swarm specific
   flockId?: number;
 }
@@ -132,6 +133,8 @@ interface Boss extends GameObject {
   regenTimer?: number;
   gridLaserTimer?: number;
   adaptPhase?: number;
+  miniCubeTimer?: number;
+  miniCubes?: Array<{ pos: Vector; vel: Vector; hp: number; rotAngle: number }>;
 }
 
 interface ColorTheme {
@@ -767,13 +770,13 @@ const Game = () => {
     const dir = side < 0 ? 1 : -1;
 
     if (type === "redDrone") {
-      const speed = (1.5 + Math.random() * 1) * getSpeedScale(wave);
+      const speed = (1.0 + Math.random() * 0.8) * getSpeedScale(wave);
       return {
         pos: { x: side, y: 30 + Math.random() * (CANVAS_HEIGHT - 60) },
         vel: { x: dir * speed, y: (Math.random() - 0.5) * speed },
         rotation: 0, type, hp: 1, moveTimer: 0,
         shootTimer: 9999, zigzagPhase: Math.random() * Math.PI * 2,
-        dashTimer: 200 + Math.random() * 100, isDashing: false, orbitAngle: Math.random() * Math.PI * 2,
+        dashTimer: 400 + Math.random() * 200, isDashing: false, orbitAngle: Math.random() * Math.PI * 2,
       };
     }
     if (type === "blueSentinel") {
@@ -782,13 +785,13 @@ const Game = () => {
         vel: { x: dir * 0.5, y: 0 },
         rotation: 0, type, hp: 2, moveTimer: 0,
         shootTimer: 60 + Math.random() * 40, zigzagPhase: 0,
-        invisTimer: 0, isInvisible: false, burstCount: 0, teleportCooldown: 90 + Math.random() * 60,
+        invisTimer: 0, isInvisible: false, burstCount: 0, teleportCooldown: 90 + Math.random() * 60, chargeTimer: 0,
       };
     }
     if (type === "purpleSwarm") {
       return {
         pos: { x: side, y: 30 + Math.random() * (CANVAS_HEIGHT - 60) },
-        vel: { x: dir * (0.8 + Math.random() * 0.5) * getSpeedScale(wave), y: (Math.random() - 0.5) * 2 },
+        vel: { x: dir * (0.4 + Math.random() * 0.3) * getSpeedScale(wave), y: (Math.random() - 0.5) * 1 },
         rotation: 0, type, hp: 1, moveTimer: 0,
         shootTimer: 9999, zigzagPhase: Math.random() * Math.PI * 2,
         flockId: Math.floor(Math.random() * 1000),
@@ -875,6 +878,8 @@ const Game = () => {
       base.gridLaserTimer = 180;
       base.adaptPhase = 0;
       base.targetY = 130;
+      base.miniCubeTimer = 300 + Math.random() * 180;
+      base.miniCubes = [];
     }
 
     return base;
@@ -1967,26 +1972,26 @@ const Game = () => {
         const dx = state.ship.pos.x - alien.pos.x;
         const dy = state.ship.pos.y - alien.pos.y;
         const dist = Math.hypot(dx, dy);
-        alien.orbitAngle = (alien.orbitAngle ?? 0) + 0.02;
-        alien.dashTimer = (alien.dashTimer ?? 120) - 1;
+        alien.orbitAngle = (alien.orbitAngle ?? 0) + 0.01;
+        alien.dashTimer = (alien.dashTimer ?? 400) - 1;
 
         if (alien.isDashing) {
-          // Dash toward player at high speed
-          const spd = 3.5 * getSpeedScale(state.wave);
+          // Dash toward player at reduced speed
+          const spd = 2.0 * getSpeedScale(state.wave);
           const ang = Math.atan2(dy, dx);
           alien.vel.x = Math.cos(ang) * spd;
           alien.vel.y = Math.sin(ang) * spd;
           if (dist < 30 || alien.dashTimer! < -60) {
             alien.isDashing = false;
-            alien.dashTimer = 250 + Math.random() * 120;
+            alien.dashTimer = 400 + Math.random() * 200;
           }
         } else {
           // Orbit at ~120px distance
           const orbitDist = 120;
           const targetX = state.ship.pos.x + Math.cos(alien.orbitAngle!) * orbitDist;
           const targetY = state.ship.pos.y + Math.sin(alien.orbitAngle!) * orbitDist;
-          alien.vel.x += (targetX - alien.pos.x) * 0.02;
-          alien.vel.y += (targetY - alien.pos.y) * 0.02;
+          alien.vel.x += (targetX - alien.pos.x) * 0.01;
+          alien.vel.y += (targetY - alien.pos.y) * 0.01;
           alien.vel.x *= 0.95;
           alien.vel.y *= 0.95;
           if (alien.dashTimer! <= 0) {
@@ -2026,13 +2031,26 @@ const Game = () => {
           }
 
           if (alien.teleportCooldown! <= 0) {
-            alien.pos.x = 50 + Math.random() * (CANVAS_WIDTH - 100);
-            alien.pos.y = 50 + Math.random() * (CANVAS_HEIGHT - 100);
+            if (!alien.chargeTimer || alien.chargeTimer <= 0) {
+              // Start charge-up before teleport
+              alien.chargeTimer = 30; // 0.5 sec charge
+              soundEffects.warpCharge();
+            }
+          }
+          // Process charge timer
+          if (alien.chargeTimer && alien.chargeTimer > 0) {
+            alien.chargeTimer--;
             alien.vel.x = 0;
             alien.vel.y = 0;
-            alien.teleportCooldown = 200 + Math.random() * 120;
-            // Spawn teleport particles
-            spawnExplosion(alien.pos, "#4488FF", 6);
+            if (alien.chargeTimer <= 0) {
+              // Execute teleport
+              alien.pos.x = 50 + Math.random() * (CANVAS_WIDTH - 100);
+              alien.pos.y = 50 + Math.random() * (CANVAS_HEIGHT - 100);
+              alien.vel.x = 0;
+              alien.vel.y = 0;
+              alien.teleportCooldown = 200 + Math.random() * 120;
+              spawnExplosion(alien.pos, "#4488FF", 6);
+            }
           }
         }
       } else if (alien.type === "purpleSwarm") {
@@ -2047,8 +2065,8 @@ const Game = () => {
           cy = cy * 0.4 + state.ship.pos.y * 0.6;
         }
         const toTarget = Math.atan2(cy - alien.pos.y, cx - alien.pos.x);
-        alien.vel.x += Math.cos(toTarget) * 0.03;
-        alien.vel.y += Math.sin(toTarget) * 0.03;
+        alien.vel.x += Math.cos(toTarget) * 0.015;
+        alien.vel.y += Math.sin(toTarget) * 0.015;
         // Separation from close flockmates
         flockMates.forEach(mate => {
           const d = Math.hypot(mate.pos.x - alien.pos.x, mate.pos.y - alien.pos.y);
@@ -2058,7 +2076,7 @@ const Game = () => {
           }
         });
         const curSpd = Math.hypot(alien.vel.x, alien.vel.y);
-        const maxSpd = 1.5 * getSpeedScale(state.wave);
+        const maxSpd = 0.8 * getSpeedScale(state.wave);
         if (curSpd > maxSpd) {
           alien.vel.x = (alien.vel.x / curSpd) * maxSpd;
           alien.vel.y = (alien.vel.y / curSpd) * maxSpd;
@@ -2160,7 +2178,7 @@ const Game = () => {
             state.bullets.push({
               pos: { ...boss.pos },
               vel: { x: Math.cos(ang) * 2, y: Math.sin(ang) * 2 },
-              rotation: ang, lifetime: BULLET_LIFETIME * 1.2, isUFO: true, color: "#CC0000",
+              rotation: ang, lifetime: BULLET_LIFETIME * 2.5, isUFO: true, color: "#CC0000",
             });
           }
         }
@@ -2174,7 +2192,7 @@ const Game = () => {
         // Tractor beam: periodically pull player
         boss.tractorBeamActive = Math.sin(boss.phase * 1.5) > 0.3;
         if (boss.tractorBeamActive && !state.ship.invulnerable) {
-          const pull = 0.06;
+          const pull = 0.015;
           state.ship.vel.x += (boss.pos.x - state.ship.pos.x) * pull * 0.01;
           state.ship.vel.y += (boss.pos.y - state.ship.pos.y) * pull * 0.01;
         }
@@ -2263,6 +2281,53 @@ const Game = () => {
             rotation: ang, lifetime: BULLET_LIFETIME * 1.5, isUFO: true, color: "#00CC00",
           });
         }
+
+        // Spawn mini cubes every 5-8 seconds
+        boss.miniCubeTimer = (boss.miniCubeTimer ?? 300) - 1;
+        if (!boss.miniCubes) boss.miniCubes = [];
+        if (boss.miniCubeTimer <= 0) {
+          boss.miniCubeTimer = 300 + Math.random() * 180;
+          const ang = Math.random() * Math.PI * 2;
+          boss.miniCubes.push({
+            pos: { x: boss.pos.x, y: boss.pos.y },
+            vel: { x: Math.cos(ang) * 0.8 + (state.ship.pos.x - boss.pos.x) * 0.003, y: Math.sin(ang) * 0.8 + (state.ship.pos.y - boss.pos.y) * 0.003 },
+            hp: 1,
+            rotAngle: Math.random() * Math.PI * 2,
+          });
+        }
+
+        // Update mini cubes
+        boss.miniCubes = boss.miniCubes.filter(mc => {
+          mc.pos.x += mc.vel.x;
+          mc.pos.y += mc.vel.y;
+          mc.rotAngle += 0.03;
+          // Drift toward player slowly
+          mc.vel.x += (state.ship.pos.x - mc.pos.x) * 0.0005;
+          mc.vel.y += (state.ship.pos.y - mc.pos.y) * 0.0005;
+          // Remove if off-screen
+          return mc.pos.x > -50 && mc.pos.x < CANVAS_WIDTH + 50 && mc.pos.y > -50 && mc.pos.y < CANVAS_HEIGHT + 50;
+        });
+
+        // Mini cube collision with player bullets
+        boss.miniCubes = boss.miniCubes.filter(mc => {
+          const hitIdx = state.bullets.findIndex(b => !b.isUFO && !b.isAlien && Math.hypot(b.pos.x - mc.pos.x, b.pos.y - mc.pos.y) < 12);
+          if (hitIdx >= 0) {
+            state.bullets.splice(hitIdx, 1);
+            spawnExplosion(mc.pos, "#00FF44", 4);
+            state.score += 25;
+            return false;
+          }
+          return true;
+        });
+
+        // Mini cube collision with player ship
+        boss.miniCubes.forEach(mc => {
+          if (Math.hypot(mc.pos.x - state.ship.pos.x, mc.pos.y - state.ship.pos.y) < 18 && !state.ship.invulnerable) {
+            // Damage player (handled by existing ship hit logic elsewhere, just remove the cube)
+            mc.hp = 0;
+          }
+        });
+        boss.miniCubes = boss.miniCubes.filter(mc => mc.hp > 0);
       }
     }
 
@@ -2818,10 +2883,26 @@ const Game = () => {
           ctx.restore();
           return;
         }
+        // Draw charge rings before teleport
+        if (alien.chargeTimer && alien.chargeTimer > 0) {
+          ctx.save();
+          ctx.translate(alien.pos.x, alien.pos.y);
+          const chargeProgress = 1 - alien.chargeTimer / 30;
+          for (let ring = 0; ring < 3; ring++) {
+            ctx.globalAlpha = 0.3 + chargeProgress * 0.4 - ring * 0.1;
+            ctx.strokeStyle = "#4488FF";
+            ctx.lineWidth = 2 - ring * 0.5;
+            ctx.beginPath();
+            ctx.arc(0, 0, 8 + chargeProgress * (15 + ring * 8), 0, Math.PI * 2);
+            ctx.stroke();
+          }
+          ctx.restore();
+        }
         ctx.save();
         ctx.translate(alien.pos.x, alien.pos.y);
-        // Diamond/crystal shape
-        ctx.strokeStyle = "#4488FF";
+        // Diamond/crystal shape - glow brighter during charge
+        const isCharging = alien.chargeTimer && alien.chargeTimer > 0;
+        ctx.strokeStyle = isCharging ? "#88CCFF" : "#4488FF";
         ctx.fillStyle = "#112244";
         ctx.lineWidth = 2;
         ctx.beginPath();
@@ -3276,6 +3357,26 @@ const Game = () => {
           ctx.arc(0, 0, cubeSize * 0.6, 0, Math.PI * 2);
           ctx.fill();
           ctx.restore();
+        }
+
+        // Draw mini cubes
+        if (boss.miniCubes) {
+          boss.miniCubes.forEach(mc => {
+            ctx.save();
+            ctx.translate(mc.pos.x - boss.pos.x, mc.pos.y - boss.pos.y);
+            ctx.rotate(mc.rotAngle);
+            ctx.strokeStyle = "#00FF44";
+            ctx.lineWidth = 1;
+            const s = 8;
+            ctx.strokeRect(-s/2, -s/2, s, s);
+            // Inner cross
+            ctx.strokeStyle = "rgba(0,255,68,0.4)";
+            ctx.beginPath();
+            ctx.moveTo(-s/2, 0); ctx.lineTo(s/2, 0);
+            ctx.moveTo(0, -s/2); ctx.lineTo(0, s/2);
+            ctx.stroke();
+            ctx.restore();
+          });
         }
       }
 

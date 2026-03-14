@@ -145,6 +145,25 @@ class SoundEffects {
     oscillator.stop(this.audioContext.currentTime + 0.15);
   }
 
+  // Warp charge sound - subtle ascending tone before teleport
+  warpCharge() {
+    const oscillator = this.audioContext.createOscillator();
+    const gainNode = this.audioContext.createGain();
+
+    oscillator.type = 'sine';
+    oscillator.connect(gainNode);
+    gainNode.connect(this.audioContext.destination);
+
+    oscillator.frequency.setValueAtTime(200, this.audioContext.currentTime);
+    oscillator.frequency.exponentialRampToValueAtTime(800, this.audioContext.currentTime + 0.3);
+
+    gainNode.gain.setValueAtTime(0.12, this.audioContext.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.01, this.audioContext.currentTime + 0.35);
+
+    oscillator.start(this.audioContext.currentTime);
+    oscillator.stop(this.audioContext.currentTime + 0.35);
+  }
+
   // Power-up collection - bright ascending arpeggio chime
   powerUp() {
     const notes = [523.25, 659.25, 783.99, 1046.50]; // C5, E5, G5, C6
