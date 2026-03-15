@@ -831,9 +831,9 @@ const Game = () => {
   };
 
   const createBoss = (wave: number): Boss => {
-    // Determine boss type based on wave: 5=tentacle, 10=amigaBall, 15=flyingSaucer, 20=borgCube, then cycle
+    // Determine boss type based on wave: 5=amigaBall, 10=flyingSaucer, 15=tentacle, 20=borgCube, then cycle
     const bossIndex = ((wave / 5) - 1) % 4; // 0,1,2,3
-    const bossTypes: Boss["bossType"][] = ["tentacle", "amigaBall", "flyingSaucer", "borgCube"];
+    const bossTypes: Boss["bossType"][] = ["amigaBall", "flyingSaucer", "tentacle", "borgCube"];
     const bossType = bossTypes[bossIndex] || "tentacle";
     const baseHp = 3 + wave;
 
@@ -1210,7 +1210,7 @@ const Game = () => {
       spawnFloatingText({ x: CANVAS_WIDTH / 2, y: CANVAS_HEIGHT / 2 - 40 }, `WAVE ${state.wave}`, theme.ship, 28);
       const bossNames: Record<string, string> = { tentacle: "BOSS", amigaBall: "AMIGA BALL", flyingSaucer: "FLYING SAUCER", borgCube: "BORG CUBE" };
       const bType = ((state.wave / 5 - 1) % 4);
-      const bTypes = ["tentacle", "amigaBall", "flyingSaucer", "borgCube"];
+      const bTypes = ["amigaBall", "flyingSaucer", "tentacle", "borgCube"];
       const bossLabel = bossNames[bTypes[bType]] || "BOSS";
       spawnFloatingText({ x: CANVAS_WIDTH / 2, y: CANVAS_HEIGHT / 2 + 10 }, `⚠ ${bossLabel} INCOMING ⚠`, "#FF4444", 22);
       // Boss wave started
