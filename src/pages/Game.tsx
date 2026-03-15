@@ -4330,8 +4330,9 @@ const Game = () => {
         {hallOfFame.length > 0 && (
           <div className="mb-8 w-72">
             <div
-              className="text-sm font-mono text-[#FFD700] text-center mb-2 tracking-wider"
+              className="text-sm font-mono text-[#FFD700] text-center mb-2 tracking-wider cursor-help"
               style={{ textShadow: "0 0 10px #FFD700" }}
+              title="These are the top 3 individuals that have the highest score based on both old highscore list and new highscore list combined"
             >
               ★ HALL OF FAME ★
             </div>
