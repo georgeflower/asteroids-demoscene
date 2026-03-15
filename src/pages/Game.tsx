@@ -245,7 +245,7 @@ const FRAME_MIN_TIME = FIXED_TIMESTEP; // 60 FPS render cap (tied to fixed times
 // accidentally skipping a frame due to sub-millisecond precision drift.
 const FRAME_TIME_TOLERANCE = 1;
 
-const GAME_VERSION = "0.1.7";
+const GAME_VERSION = "0.1.8";
 const SHIP_SIZE = 10;
 const BULLET_SPEED = 7;
 const BULLET_LIFETIME = 60;
