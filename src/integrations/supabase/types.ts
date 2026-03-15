@@ -44,6 +44,33 @@ export type Database = {
         }
         Relationships: []
       }
+      game_sessions: {
+        Row: {
+          expired: boolean
+          id: string
+          last_submission_at: string | null
+          started_at: string
+          submission_count: number
+          token: string
+        }
+        Insert: {
+          expired?: boolean
+          id?: string
+          last_submission_at?: string | null
+          started_at?: string
+          submission_count?: number
+          token: string
+        }
+        Update: {
+          expired?: boolean
+          id?: string
+          last_submission_at?: string | null
+          started_at?: string
+          submission_count?: number
+          token?: string
+        }
+        Relationships: []
+      }
       high_scores: {
         Row: {
           created_at: string
@@ -102,6 +129,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      cleanup_old_sessions: { Args: never; Returns: undefined }
       insert_score_with_audit: {
         Args: {
           p_initials: string
