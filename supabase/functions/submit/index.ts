@@ -1,8 +1,8 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
 
 const corsHeaders = {
-  'Access-Control-Allow-Origin': Deno.env.get('VITE_APP_URL') || '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 };
 
 interface ScoreSubmission {
@@ -15,128 +15,49 @@ interface ScoreSubmission {
   source?: string;
 }
 
-interface GameSession {
-  token: string;
-  startTime: number;
-  lastScore: number;
-  submissionCount: number;
-  lastSubmissionTime: number;
-  recreated?: boolean;
-}
-
-// In-memory store for game sessions
-const gameSessions = new Map<string, GameSession>();
-
+// --- Constants ---
 const MAX_SUBMISSIONS_PER_SESSION = 10;
-const SESSION_TIMEOUT = 3600000;
-const MIN_SUBMISSION_INTERVAL = 5000;
-const MAX_VALID_SCORE = 99999999;
-// Max ~200 points per second of actual play time (server-verified)
-const MAX_SCORE_PER_SECOND = 200;
-// Max ~20000 points per level
+const SESSION_TIMEOUT_MS = 3600000; // 1 hour
+const MIN_SUBMISSION_INTERVAL_MS = 5000;
+const MAX_VALID_SCORE = 500000;
+const MAX_SCORE_PER_SECOND = 150;
 const MAX_SCORE_PER_LEVEL = 20000;
-// Minimum play time in seconds before a score can be submitted
+const MAX_LEVEL = 30;
 const MIN_PLAY_TIME_SECONDS = 10;
+
+const ALLOWED_ORIGINS = [
+  'https://asteroids-demoscene.lovable.app',
+  'https://id-preview--b6edd2f4-8993-4a05-a257-466f1a773f73.lovable.app',
+];
 
 const BANNED_INITIALS = new Set([
   'ASS', 'FUK', 'FUC', 'FCK', 'SHT', 'DMN', 'HEL', 'DIE',
   'KKK', 'SEX', 'XXX', 'WTF', 'FAG', 'GAY', 'DIK', 'COK',
   'PIS', 'CUM', 'TIT', 'VAG', 'PUS', 'CNT', 'FCU', 'FKU',
   'SHI', 'POO', 'PEE', 'BTH', 'BTC', 'WTH', 'OMG', 'JFC',
-  'GDM', 'SLT', 'HOR', 'BAD', 'EVL', 'HAT', 'KIL', 'BUT'
+  'GDM', 'SLT', 'HOR', 'BAD', 'EVL', 'HAT', 'KIL', 'BUT',
+  'AZZ', 'NIG', 'JEW', 'HOE', 'STD', 'SUK', 'SUC',
 ]);
 
 function isInitialsAppropriate(initials: string): boolean {
   return !BANNED_INITIALS.has(initials.toUpperCase());
 }
 
-function generateSessionToken(): string {
-  return crypto.randomUUID();
+function validateOrigin(req: Request): boolean {
+  const origin = req.headers.get('origin') || '';
+  const referer = req.headers.get('referer') || '';
+  // Allow any origin in development, check in production
+  if (ALLOWED_ORIGINS.length === 0) return true;
+  return ALLOWED_ORIGINS.some(allowed =>
+    origin.startsWith(allowed) || referer.startsWith(allowed)
+  );
 }
 
-function validateSession(token: string, score: number): { valid: boolean; error?: string; session?: GameSession } {
-  let session = gameSessions.get(token);
-  
-  if (!session) {
-    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-    if (!uuidRegex.test(token)) {
-      return { valid: false, error: 'Invalid game session token' };
-    }
-    
-    // Auto-recreate session for cold starts
-    console.log('Session not found in memory, auto-recreating for token:', token);
-    session = {
-      token,
-      startTime: Date.now(),
-      lastScore: 0,
-      submissionCount: 0,
-      lastSubmissionTime: 0,
-      recreated: true,
-    };
-    gameSessions.set(token, session);
-  }
-  
-  if (Date.now() - session.startTime > SESSION_TIMEOUT) {
-    gameSessions.delete(token);
-    return { valid: false, error: 'Game session expired' };
-  }
-  const timeSinceLastSubmission = Date.now() - session.lastSubmissionTime;
-  if (session.submissionCount > 0 && timeSinceLastSubmission < MIN_SUBMISSION_INTERVAL) {
-    return { valid: false, error: 'Please wait before submitting another score' };
-  }
-  if (session.submissionCount >= MAX_SUBMISSIONS_PER_SESSION) {
-    return { valid: false, error: 'Maximum submissions reached for this session' };
-  }
-  if (score < 0 || score > MAX_VALID_SCORE) {
-    return { valid: false, error: 'Invalid score range' };
-  }
-  return { valid: true, session };
-}
-
-// Validate score plausibility using SERVER-SIDE elapsed time
-function validateScorePlausibility(score: number, serverTimePlayedSeconds: number, level?: number): { valid: boolean; error?: string } {
-  // Must have played for minimum duration
-  if (serverTimePlayedSeconds < MIN_PLAY_TIME_SECONDS) {
-    return { valid: false, error: 'Game duration too short' };
-  }
-  
-  // Score vs server-verified time (unforgeable)
-  const maxScoreForTime = serverTimePlayedSeconds * MAX_SCORE_PER_SECOND;
-  if (score > maxScoreForTime) {
-    console.log(`Score plausibility fail: score=${score}, time=${serverTimePlayedSeconds}s, max=${maxScoreForTime}`);
-    return { valid: false, error: 'Score too high for game duration' };
-  }
-
-  if (level !== undefined && level !== null) {
-    if (level < 1 || level > 100) return { valid: false, error: 'Invalid level value' };
-    const maxScoreForLevel = level * MAX_SCORE_PER_LEVEL;
-    if (score > maxScoreForLevel) {
-      console.log(`Score plausibility fail: score=${score}, level=${level}, max=${maxScoreForLevel}`);
-      return { valid: false, error: 'Score too high for reported level' };
-    }
-  }
-
-  return { valid: true };
-}
-
-async function checkDuplicateScore(
-  supabaseAdmin: any,
-  initials: string,
-  score: number
-): Promise<boolean> {
-  const oneHourAgo = new Date(Date.now() - 3600000).toISOString();
-  const { data, error } = await supabaseAdmin
-    .from('current_high_scores')
-    .select('id')
-    .eq('initials', initials)
-    .eq('score', score)
-    .gte('created_at', oneHourAgo)
-    .limit(1);
-  if (error) {
-    console.error('Error checking duplicates:', error);
-    return false;
-  }
-  return data && data.length > 0;
+function errorResponse(message: string, status: number) {
+  return new Response(
+    JSON.stringify({ error: message }),
+    { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+  );
 }
 
 Deno.serve(async (req) => {
@@ -152,118 +73,166 @@ Deno.serve(async (req) => {
 
     const url = new URL(req.url);
 
+    // === START SESSION ===
     if (url.pathname.endsWith('/start-session')) {
-      const token = generateSessionToken();
-      gameSessions.set(token, {
-        token,
-        startTime: Date.now(),
-        lastScore: 0,
-        submissionCount: 0,
-        lastSubmissionTime: 0,
-      });
+      if (!validateOrigin(req)) {
+        console.log('Origin rejected:', req.headers.get('origin'));
+        return errorResponse('Forbidden', 403);
+      }
+
+      const token = crypto.randomUUID();
+
+      // Clean up old sessions opportunistically
+      await supabaseAdmin.rpc('cleanup_old_sessions').catch(() => {});
+
+      const { error } = await supabaseAdmin
+        .from('game_sessions')
+        .insert({ token });
+
+      if (error) {
+        console.error('Failed to create session:', error);
+        return errorResponse('Failed to create session', 500);
+      }
+
       return new Response(
         JSON.stringify({ sessionToken: token }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
+    // === SUBMIT SCORE ===
     if (url.pathname.endsWith('/submit')) {
+      if (!validateOrigin(req)) {
+        console.log('Origin rejected on submit:', req.headers.get('origin'));
+        return errorResponse('Forbidden', 403);
+      }
+
       const submission: ScoreSubmission = await req.json();
 
+      // --- Basic field validation ---
       if (!submission.initials || submission.score === undefined || !submission.gameSessionToken) {
-        return new Response(
-          JSON.stringify({ error: 'Missing required fields' }),
-          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+        return errorResponse('Missing required fields', 400);
       }
 
       const initialsRegex = /^[A-Z]{1,3}$/;
       if (!initialsRegex.test(submission.initials)) {
-        return new Response(
-          JSON.stringify({ error: 'Invalid initials format' }),
-          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+        return errorResponse('Invalid initials format', 400);
       }
 
       if (!isInitialsAppropriate(submission.initials)) {
-        return new Response(
-          JSON.stringify({ error: 'Please choose different initials' }),
-          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+        return errorResponse('Please choose different initials', 400);
       }
 
-      const sessionValidation = validateSession(submission.gameSessionToken, submission.score);
-      if (!sessionValidation.valid) {
-        return new Response(
-          JSON.stringify({ error: sessionValidation.error }),
-          { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-
-      const session = sessionValidation.session!;
-
-      // Calculate elapsed time SERVER-SIDE (unforgeable)
-      const serverTimePlayedSeconds = Math.floor((Date.now() - session.startTime) / 1000);
-      let effectiveTimePlayed = serverTimePlayedSeconds;
-
-      // Cold-start fallback: if session was auto-recreated, server time is near zero.
-      // Use client-reported time as fallback, capped at max session duration.
-      if (session.recreated && submission.timePlayedSeconds && submission.timePlayedSeconds > 0) {
-        effectiveTimePlayed = Math.min(
-          submission.timePlayedSeconds,
-          Math.floor(SESSION_TIMEOUT / 1000)
-        );
-        console.log(`Cold-start fallback: using client time ${effectiveTimePlayed}s (server was ${serverTimePlayedSeconds}s)`);
-      }
-      
-      // Validate score plausibility using effective time
-      const plausibility = validateScorePlausibility(submission.score, effectiveTimePlayed, submission.level);
-      if (!plausibility.valid) {
-        return new Response(
-          JSON.stringify({ error: plausibility.error }),
-          { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+      if (submission.score < 0 || submission.score > MAX_VALID_SCORE) {
+        return errorResponse('Invalid score range', 400);
       }
 
       // Reject submissions without a valid source
       const validSources = ['game_client'];
       const source = submission.source || 'unknown';
       if (!validSources.includes(source)) {
-        return new Response(
-          JSON.stringify({ error: 'Invalid submission source' }),
-          { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+        return errorResponse('Invalid submission source', 403);
       }
 
-      const isDuplicate = await checkDuplicateScore(supabaseAdmin, submission.initials, submission.score);
-      if (isDuplicate) {
-        return new Response(
-          JSON.stringify({ error: 'Duplicate score detected. This score was already submitted recently.' }),
-          { status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+      // --- Validate session from DATABASE (not memory) ---
+      const { data: session, error: sessionError } = await supabaseAdmin
+        .from('game_sessions')
+        .select('*')
+        .eq('token', submission.gameSessionToken)
+        .single();
+
+      if (sessionError || !session) {
+        console.log('Session not found:', submission.gameSessionToken);
+        return errorResponse('Invalid game session token', 403);
       }
 
-      session.submissionCount++;
-      session.lastScore = submission.score;
-      session.lastSubmissionTime = Date.now();
+      if (session.expired) {
+        return errorResponse('Game session expired', 403);
+      }
 
-      // Insert score + audit log in single transaction via RPC
-      const { data: scoreId, error } = await supabaseAdmin
+      // Check session timeout using DB server time
+      const sessionAge = Date.now() - new Date(session.started_at).getTime();
+      if (sessionAge > SESSION_TIMEOUT_MS) {
+        await supabaseAdmin
+          .from('game_sessions')
+          .update({ expired: true })
+          .eq('id', session.id);
+        return errorResponse('Game session expired', 403);
+      }
+
+      // Rate limiting
+      if (session.submission_count >= MAX_SUBMISSIONS_PER_SESSION) {
+        return errorResponse('Maximum submissions reached for this session', 403);
+      }
+
+      if (session.last_submission_at) {
+        const timeSinceLast = Date.now() - new Date(session.last_submission_at).getTime();
+        if (timeSinceLast < MIN_SUBMISSION_INTERVAL_MS) {
+          return errorResponse('Please wait before submitting another score', 403);
+        }
+      }
+
+      // --- Score plausibility using SERVER time (unforgeable) ---
+      const serverTimePlayedSeconds = Math.floor(sessionAge / 1000);
+
+      if (serverTimePlayedSeconds < MIN_PLAY_TIME_SECONDS) {
+        return errorResponse('Game duration too short', 403);
+      }
+
+      const maxScoreForTime = serverTimePlayedSeconds * MAX_SCORE_PER_SECOND;
+      if (submission.score > maxScoreForTime) {
+        console.log(`Plausibility fail: score=${submission.score}, time=${serverTimePlayedSeconds}s, max=${maxScoreForTime}`);
+        return errorResponse('Score too high for game duration', 403);
+      }
+
+      if (submission.level !== undefined && submission.level !== null) {
+        if (submission.level < 1 || submission.level > MAX_LEVEL) {
+          return errorResponse('Invalid level value', 403);
+        }
+        const maxScoreForLevel = submission.level * MAX_SCORE_PER_LEVEL;
+        if (submission.score > maxScoreForLevel) {
+          console.log(`Plausibility fail: score=${submission.score}, level=${submission.level}, max=${maxScoreForLevel}`);
+          return errorResponse('Score too high for reported level', 403);
+        }
+      }
+
+      // --- Duplicate check ---
+      const oneHourAgo = new Date(Date.now() - 3600000).toISOString();
+      const { data: dupes } = await supabaseAdmin
+        .from('current_high_scores')
+        .select('id')
+        .eq('initials', submission.initials)
+        .eq('score', submission.score)
+        .gte('created_at', oneHourAgo)
+        .limit(1);
+
+      if (dupes && dupes.length > 0) {
+        return errorResponse('Duplicate score detected', 409);
+      }
+
+      // --- Update session counters ---
+      await supabaseAdmin
+        .from('game_sessions')
+        .update({
+          submission_count: session.submission_count + 1,
+          last_submission_at: new Date().toISOString(),
+        })
+        .eq('id', session.id);
+
+      // --- Insert score + audit log atomically ---
+      const { data: scoreId, error: insertError } = await supabaseAdmin
         .rpc('insert_score_with_audit', {
           p_initials: submission.initials,
           p_score: submission.score,
           p_level: submission.level ?? 1,
-          p_time_played_seconds: effectiveTimePlayed,
+          p_time_played_seconds: serverTimePlayedSeconds,
           p_source: source,
           p_session_token: submission.gameSessionToken,
         });
 
-      if (error) {
-        console.error('Database error:', error);
-        return new Response(
-          JSON.stringify({ error: 'Failed to save score' }),
-          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+      if (insertError) {
+        console.error('Database error:', insertError);
+        return errorResponse('Failed to save score', 500);
       }
 
       return new Response(
@@ -272,15 +241,9 @@ Deno.serve(async (req) => {
       );
     }
 
-    return new Response(
-      JSON.stringify({ error: 'Invalid endpoint' }),
-      { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    return errorResponse('Invalid endpoint', 404);
   } catch (error) {
     console.error('Error:', error);
-    return new Response(
-      JSON.stringify({ error: 'Internal server error' }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    return errorResponse('Internal server error', 500);
   }
 });
