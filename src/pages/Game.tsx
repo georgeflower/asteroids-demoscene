@@ -4334,7 +4334,7 @@ const Game = () => {
               ★ HALL OF FAME ★
             </div>
             <div className="border border-[#FFD700]/30 p-2">
-               {hallOfFame.filter(e => !BANNED_INITIALS.has(e.initials.toUpperCase())).slice(0, 3).map((entry, i) => {
+               {hallOfFame.slice(0, 3).map((entry, i) => {
                 const initialsDisplay = entry.initials.padEnd(3, " ");
                 return (
                   <div
@@ -4345,7 +4345,7 @@ const Game = () => {
                       className={i === 0 ? "text-[#FFD700]" : i === 1 ? "text-[#C0C0C0]" : "text-[#CD7F32]"}
                       style={{ whiteSpace: "pre" }}
                     >
-                      {(i + 1).toString().padStart(2, " ")}. {initialsDisplay}
+                      {entry.rank.toString().padStart(2, " ")}. {initialsDisplay}
                     </span>
                     <span className={i === 0 ? "text-[#FFD700]" : i === 1 ? "text-[#C0C0C0]" : "text-[#CD7F32]"}>
                       {entry.score.toString().padStart(8, "0")}
