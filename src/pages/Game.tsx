@@ -333,7 +333,7 @@ const Game = () => {
   const [initials, setInitials] = useState("");
   const [initialsError, setInitialsError] = useState("");
   const [leaderboard, setLeaderboard] = useState<{ initials: string; score: number; date: string }[]>([]);
-  const [hallOfFame, setHallOfFame] = useState<{ initials: string; score: number; date: string }[]>([]);
+  const [hallOfFame, setHallOfFame] = useState<{ initials: string; score: number; date: string; rank: number }[]>([]);
   const [oldLeaderboard, setOldLeaderboard] = useState<{ initials: string; score: number; date: string }[]>([]);
   const [showOldLeaderboard, setShowOldLeaderboard] = useState(false);
   const [showChangelog, setShowChangelog] = useState(false);
@@ -496,13 +496,24 @@ const Game = () => {
       .from("high_scores")
       .select("initials, score, created_at")
       .order("score", { ascending: false })
-      .limit(3);
+      .limit(1000);
     if (!error && data) {
-      return data.map((row) => ({
-        initials: row.initials,
-        score: row.score,
-        date: new Date(row.created_at).toLocaleDateString(),
-      }));
+      // Deduplicate: keep only the best score per initials, preserving overall rank
+      const seen = new Set<string>();
+      const unique: { initials: string; score: number; date: string; rank: number }[] = [];
+      data.forEach((row, idx) => {
+        const key = row.initials.toUpperCase();
+        if (!seen.has(key) && !BANNED_INITIALS.has(key)) {
+          seen.add(key);
+          unique.push({
+            initials: row.initials,
+            score: row.score,
+            date: new Date(row.created_at).toLocaleDateString(),
+            rank: idx + 1,
+          });
+        }
+      });
+      return unique.slice(0, 3);
     }
     return [];
   }, []);
@@ -4323,7 +4334,7 @@ const Game = () => {
               ★ HALL OF FAME ★
             </div>
             <div className="border border-[#FFD700]/30 p-2">
-               {hallOfFame.filter(e => !BANNED_INITIALS.has(e.initials.toUpperCase())).slice(0, 3).map((entry, i) => {
+               {hallOfFame.slice(0, 3).map((entry, i) => {
                 const initialsDisplay = entry.initials.padEnd(3, " ");
                 return (
                   <div
@@ -4334,7 +4345,7 @@ const Game = () => {
                       className={i === 0 ? "text-[#FFD700]" : i === 1 ? "text-[#C0C0C0]" : "text-[#CD7F32]"}
                       style={{ whiteSpace: "pre" }}
                     >
-                      {(i + 1).toString().padStart(2, " ")}. {initialsDisplay}
+                      {entry.rank.toString().padStart(2, " ")}. {initialsDisplay}
                     </span>
                     <span className={i === 0 ? "text-[#FFD700]" : i === 1 ? "text-[#C0C0C0]" : "text-[#CD7F32]"}>
                       {entry.score.toString().padStart(8, "0")}
