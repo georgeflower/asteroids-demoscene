@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.8] - 2026-03-15
+
+### Added
+
+- **Enemy Varieties**: Blue Sentinels (wave 8+) with teleporting, 0.5s charge-up visual/sound, burst-fire, and brief invisibility. Purple Swarms (wave 12+) with boids-style flocking behavior
+- **Boss Reorder**: Bosses now appear as Amiga Ball (level 5), Flying Saucer (level 10), Tentacle (level 15), Borg Cube (level 20), then cycle
+- **Security Hardening**: Database-backed game sessions replacing in-memory tracking, server-side time validation, tightened plausibility checks (max level 30, max score 500k, 150 pts/sec cap), origin header validation
+
+### Fixed
+
+- **Fraudulent Score Removal**: Removed injected "AZZ" high score entry and associated audit logs
+- **Cold-Start Exploit**: Eliminated vulnerability where edge function cold starts allowed forged session data
+
 ## [0.1.7] - 2026-03-13
 
 ### Added
