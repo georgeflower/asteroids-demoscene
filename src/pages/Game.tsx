@@ -492,30 +492,32 @@ const Game = () => {
   }, []);
 
   const loadHallOfFame = useCallback(async () => {
-    const { data, error } = await supabase
-      .from("high_scores")
-      .select("initials, score, created_at")
-      .order("score", { ascending: false })
-      .limit(1000);
-    if (!error && data) {
-      // Deduplicate: keep only the best score per initials, preserving overall rank
-      const seen = new Set<string>();
-      const unique: { initials: string; score: number; date: string; rank: number }[] = [];
-      data.forEach((row, idx) => {
-        const key = row.initials.toUpperCase();
-        if (!seen.has(key) && !BANNED_INITIALS.has(key)) {
-          seen.add(key);
-          unique.push({
-            initials: row.initials,
-            score: row.score,
-            date: new Date(row.created_at).toLocaleDateString(),
-            rank: idx + 1,
-          });
-        }
-      });
-      return unique.slice(0, 3);
-    }
-    return [];
+    // Fetch from both tables in parallel
+    const [oldRes, currentRes] = await Promise.all([
+      supabase.from("high_scores").select("initials, score, created_at").order("score", { ascending: false }).limit(1000),
+      supabase.from("current_high_scores").select("initials, score, created_at").order("score", { ascending: false }).limit(1000),
+    ]);
+    const allRows = [
+      ...(oldRes.data || []),
+      ...(currentRes.data || []),
+    ].sort((a, b) => b.score - a.score);
+
+    // Deduplicate: best score per initials, with overall rank
+    const seen = new Set<string>();
+    const unique: { initials: string; score: number; date: string; rank: number }[] = [];
+    allRows.forEach((row, idx) => {
+      const key = row.initials.toUpperCase();
+      if (!seen.has(key) && !BANNED_INITIALS.has(key)) {
+        seen.add(key);
+        unique.push({
+          initials: row.initials,
+          score: row.score,
+          date: new Date(row.created_at).toLocaleDateString(),
+          rank: idx + 1,
+        });
+      }
+    });
+    return unique.slice(0, 3);
   }, []);
 
   const loadOldLeaderboard = useCallback(async () => {
