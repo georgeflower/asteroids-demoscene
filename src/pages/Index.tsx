@@ -1,8 +1,10 @@
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
+import { useVersionCheck } from "@/hooks/useVersionCheck";
 
 const Index = () => {
   const navigate = useNavigate();
+  useVersionCheck();
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-[hsl(var(--game-background))]">
