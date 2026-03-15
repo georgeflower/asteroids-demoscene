@@ -84,7 +84,7 @@ Deno.serve(async (req) => {
       const token = crypto.randomUUID();
 
       // Clean up old sessions opportunistically
-      await supabaseAdmin.rpc('cleanup_old_sessions').catch(() => {});
+      try { await supabaseAdmin.rpc('cleanup_old_sessions'); } catch (_) { /* ignore */ }
 
       const { error } = await supabaseAdmin
         .from('game_sessions')
