@@ -4454,10 +4454,17 @@ const Game = () => {
             onClick={() => setShowChangelog(false)}
           >
             <div
-              className="bg-black border border-[hsl(var(--game-foreground))]/40 rounded p-6 max-w-2xl w-[90vw] max-h-[80vh] overflow-y-auto"
+              className="bg-black border border-[hsl(var(--game-foreground))]/40 rounded p-6 max-w-2xl w-[90vw] max-h-[80vh] overflow-y-auto relative"
               onClick={(e) => e.stopPropagation()}
               style={{ scrollbarWidth: "thin", scrollbarColor: "#444 #111" }}
             >
+              <button
+                onClick={() => setShowChangelog(false)}
+                className="absolute top-3 right-3 font-mono text-[hsl(var(--game-foreground))] hover:text-[#FFD700] text-xl leading-none"
+                aria-label="Close changelog"
+              >
+                ✕
+              </button>
               <div className="text-center font-mono text-lg text-[#FFD700] mb-4" style={{ textShadow: "0 0 10px #FFD700" }}>
                 📋 CHANGELOG
               </div>
