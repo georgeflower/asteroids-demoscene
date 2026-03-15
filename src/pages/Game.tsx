@@ -4462,7 +4462,18 @@ const Game = () => {
                 📋 CHANGELOG
               </div>
               <pre className="font-mono text-[11px] text-[hsl(var(--game-foreground))] whitespace-pre-wrap leading-relaxed opacity-90">
-{`[0.1.7] - 2026-03-13
+{`[0.1.8] - 2026-03-15
+
+  Added
+  - Boss Cycle: Amiga Ball (Lv5), Flying Saucer (Lv10),
+    Tentacle (Lv15), Borg Cube (Lv20)
+  - New Enemies: Blue Sentinels (wave 8+),
+    Purple Swarms (wave 12+)
+  - Auto version check on main menu
+  - Security: database-backed sessions,
+    server-side time validation
+
+[0.1.7] - 2026-03-13
 
   Added
   - Rebindable keyboard controls for both players
