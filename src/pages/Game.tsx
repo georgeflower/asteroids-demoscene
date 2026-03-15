@@ -333,7 +333,7 @@ const Game = () => {
   const [initials, setInitials] = useState("");
   const [initialsError, setInitialsError] = useState("");
   const [leaderboard, setLeaderboard] = useState<{ initials: string; score: number; date: string }[]>([]);
-  const [hallOfFame, setHallOfFame] = useState<{ initials: string; score: number; date: string }[]>([]);
+  const [hallOfFame, setHallOfFame] = useState<{ initials: string; score: number; date: string; rank: number }[]>([]);
   const [oldLeaderboard, setOldLeaderboard] = useState<{ initials: string; score: number; date: string }[]>([]);
   const [showOldLeaderboard, setShowOldLeaderboard] = useState(false);
   const [showChangelog, setShowChangelog] = useState(false);
