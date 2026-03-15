@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.9] - 2026-03-15
+
+### Changed
+
+- **Extra Life Cap Removed**: Extra life power-ups now always grant +1 life with no per-wave cap
+
 ## [0.1.8] - 2026-03-15
 
 ### Added
