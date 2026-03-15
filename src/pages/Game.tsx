@@ -831,9 +831,9 @@ const Game = () => {
   };
 
   const createBoss = (wave: number): Boss => {
-    // Determine boss type based on wave: 5=tentacle, 10=amigaBall, 15=flyingSaucer, 20=borgCube, then cycle
+    // Determine boss type based on wave: 5=amigaBall, 10=flyingSaucer, 15=tentacle, 20=borgCube, then cycle
     const bossIndex = ((wave / 5) - 1) % 4; // 0,1,2,3
-    const bossTypes: Boss["bossType"][] = ["tentacle", "amigaBall", "flyingSaucer", "borgCube"];
+    const bossTypes: Boss["bossType"][] = ["amigaBall", "flyingSaucer", "tentacle", "borgCube"];
     const bossType = bossTypes[bossIndex] || "tentacle";
     const baseHp = 3 + wave;
 
