@@ -2393,12 +2393,8 @@ const Game = () => {
             state.powerUpActive.rapidFire = 600;
             break;
           case "extraLife": {
-            const maxExtraLives = state.wave <= 3 ? 1 : state.wave <= 6 ? 2 : 3;
-            if (state.extraLivesThisWave < maxExtraLives) {
-              state.extraLivesThisWave++;
-              state.lives++;
-              setDisplayLives(state.lives);
-            }
+            state.lives++;
+            setDisplayLives(state.lives);
             break;
           }
           case "multiplier":
