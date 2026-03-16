@@ -2455,13 +2455,9 @@ const Game = () => {
           spawnExplosion(asteroid.pos, aColor, asteroid.size === "large" ? 15 : asteroid.size === "medium" ? 10 : 6);
 
           if (Math.floor((state.score - pts) / 10000) < Math.floor(state.score / 10000)) {
-            const maxExtraLives = state.wave <= 3 ? 1 : state.wave <= 6 ? 2 : 3;
-            if (state.extraLivesThisWave < maxExtraLives) {
-              state.extraLivesThisWave++;
-              state.lives++;
-              setDisplayLives(state.lives);
-              spawnFloatingText(state.ship.pos, "EXTRA LIFE!", "#CC66FF", 22);
-            }
+            state.lives++;
+            setDisplayLives(state.lives);
+            spawnFloatingText(state.ship.pos, "EXTRA LIFE!", "#CC66FF", 22);
           }
 
           if (asteroid.size === "large") {
