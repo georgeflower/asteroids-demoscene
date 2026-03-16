@@ -214,7 +214,7 @@ interface GameState {
   alienSpawnTimer: number;
   bossDefeated: boolean;
   pendingNextWave: boolean;
-  extraLivesThisWave: number;
+  
 }
 
 interface DuelState {
