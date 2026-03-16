@@ -245,7 +245,7 @@ const FRAME_MIN_TIME = FIXED_TIMESTEP; // 60 FPS render cap (tied to fixed times
 // accidentally skipping a frame due to sub-millisecond precision drift.
 const FRAME_TIME_TOLERANCE = 1;
 
-const GAME_VERSION = "0.1.9";
+const GAME_VERSION = "0.2.0";
 const SHIP_SIZE = 10;
 const BULLET_SPEED = 7;
 const BULLET_LIFETIME = 60;
@@ -4464,7 +4464,15 @@ const Game = () => {
                 📋 CHANGELOG
               </div>
               <pre className="font-mono text-[11px] text-[hsl(var(--game-foreground))] whitespace-pre-wrap leading-relaxed opacity-90">
-{`[0.1.8] - 2026-03-15
+{`[0.2.0] - 2026-03-16
+
+  Changed
+  - Removed extra life cap per wave — lives can now
+    be earned without limit
+  - Settings: removed gamepad section, added
+    Turn Speed slider (persisted to localStorage)
+
+[0.1.8] - 2026-03-15
 
   Added
   - Boss Cycle: Amiga Ball (Lv5), Flying Saucer (Lv10),
