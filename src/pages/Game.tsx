@@ -4435,6 +4435,7 @@ const Game = () => {
             bindings={controlBindingsRef.current}
             onSave={(newBindings) => {
               controlBindingsRef.current = newBindings;
+              if (gameStateRef.current) gameStateRef.current.ship.rotationSpeed = newBindings.turnSpeed;
               setShowSettings(false);
             }}
             onClose={() => setShowSettings(false)}
