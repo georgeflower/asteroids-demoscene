@@ -4464,7 +4464,15 @@ const Game = () => {
                 📋 CHANGELOG
               </div>
               <pre className="font-mono text-[11px] text-[hsl(var(--game-foreground))] whitespace-pre-wrap leading-relaxed opacity-90">
-{`[0.1.8] - 2026-03-15
+{`[0.2.0] - 2026-03-16
+
+  Changed
+  - Removed extra life cap per wave — lives can now
+    be earned without limit
+  - Settings: removed gamepad section, added
+    Turn Speed slider (persisted to localStorage)
+
+[0.1.8] - 2026-03-15
 
   Added
   - Boss Cycle: Amiga Ball (Lv5), Flying Saucer (Lv10),
