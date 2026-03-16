@@ -16,6 +16,7 @@ export interface ControlBindings {
   p1: KeyBindings;
   p2: KeyBindings;
   gamepad: GamepadBindings;
+  turnSpeed: number;
 }
 
 export const DEFAULT_BINDINGS: ControlBindings = {
@@ -38,6 +39,7 @@ export const DEFAULT_BINDINGS: ControlBindings = {
     hyperspace: 1, // B button
     thrust: 2,     // X button
   },
+  turnSpeed: 0.055,
 };
 
 const STORAGE_KEY = "controlSettings";
@@ -49,7 +51,8 @@ export function loadBindings(): ControlBindings {
       const parsed = JSON.parse(raw) as ControlBindings;
       // Validate structure
       if (parsed.p1 && parsed.p2 && parsed.gamepad) {
-        return parsed;
+        // Backward compat: merge in turnSpeed default if missing
+        return { ...DEFAULT_BINDINGS, ...parsed };
       }
     }
   } catch {

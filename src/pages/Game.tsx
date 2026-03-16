@@ -732,7 +732,7 @@ const Game = () => {
     pos: { x: x ?? CANVAS_WIDTH / 2, y: y ?? CANVAS_HEIGHT / 2 },
     vel: { x: 0, y: 0 },
     rotation: -Math.PI / 2,
-    rotationSpeed: 0.055,
+    rotationSpeed: controlBindingsRef.current.turnSpeed || 0.055,
     thrust: 0.08,
     isThrusting: false,
     invulnerable: true,
@@ -1188,7 +1188,7 @@ const Game = () => {
     if (isHost) {
       const worker = new Worker(new URL("../workers/gameWorker.ts", import.meta.url), { type: "module" });
       workerRef.current = worker;
-      worker.postMessage({ type: "init" });
+      worker.postMessage({ type: "init", turnSpeed: controlBindingsRef.current.turnSpeed || 0.05 });
     }
     // Online game started
     setTimeout(() => {
@@ -4435,6 +4435,7 @@ const Game = () => {
             bindings={controlBindingsRef.current}
             onSave={(newBindings) => {
               controlBindingsRef.current = newBindings;
+              if (gameStateRef.current) gameStateRef.current.ship.rotationSpeed = newBindings.turnSpeed;
               setShowSettings(false);
             }}
             onClose={() => setShowSettings(false)}
@@ -4876,6 +4877,7 @@ const Game = () => {
             bindings={controlBindingsRef.current}
             onSave={(newBindings) => {
               controlBindingsRef.current = newBindings;
+              if (gameStateRef.current) gameStateRef.current.ship.rotationSpeed = newBindings.turnSpeed;
               setShowSettings(false);
             }}
             onClose={() => setShowSettings(false)}

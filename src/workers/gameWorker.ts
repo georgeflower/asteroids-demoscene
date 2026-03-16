@@ -34,6 +34,7 @@ interface GameEvent {
 const W = 800, H = 600, SHIP_SIZE = 10, BULLET_SPEED = 7, BULLET_LIFETIME = 60;
 const ASTEROID_SPEEDS: Record<string, number> = { large: 0.5, medium: 0.8, small: 1.2 };
 const WORKER_FIXED_TIMESTEP = 1000 / 60; // 16.666ms – always update at 60 Hz
+let workerTurnSpeed = 0.05;
 
 let asteroidIdCounter = 0;
 let ship1: Ship, ship2: Ship;
@@ -55,7 +56,7 @@ function createShip(x: number, y: number): Ship {
   return {
     pos: { x, y }, vel: { x: 0, y: 0 },
     rotation: x < W / 2 ? 0 : Math.PI,
-    rotationSpeed: 0.05, thrust: 0.08, isThrusting: false,
+    rotationSpeed: workerTurnSpeed, thrust: 0.08, isThrusting: false,
     invulnerable: true, invulnerableTime: 120,
   };
 }
@@ -358,6 +359,7 @@ function buildAndSendState() {
 onmessage = (e: MessageEvent) => {
   const msg = e.data;
   if (msg.type === "init") {
+    if (msg.turnSpeed != null) workerTurnSpeed = msg.turnSpeed;
     initGame();
     if (timeoutId !== null) { clearTimeout(timeoutId); timeoutId = null; }
     workerLastTime = performance.now();
@@ -367,6 +369,11 @@ onmessage = (e: MessageEvent) => {
   } else if (msg.type === "inputs") {
     p1Input = msg.p1;
     p2Input = msg.p2;
+    if (msg.turnSpeed != null) {
+      workerTurnSpeed = msg.turnSpeed;
+      ship1.rotationSpeed = workerTurnSpeed;
+      ship2.rotationSpeed = workerTurnSpeed;
+    }
   } else if (msg.type === "stop") {
     if (timeoutId !== null) { clearTimeout(timeoutId); timeoutId = null; }
     pendingEvents = [];
