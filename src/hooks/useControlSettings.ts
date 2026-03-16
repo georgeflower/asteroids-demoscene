@@ -16,6 +16,7 @@ export interface ControlBindings {
   p1: KeyBindings;
   p2: KeyBindings;
   gamepad: GamepadBindings;
+  turnSpeed: number;
 }
 
 export const DEFAULT_BINDINGS: ControlBindings = {
