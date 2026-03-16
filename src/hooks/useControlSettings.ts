@@ -51,7 +51,8 @@ export function loadBindings(): ControlBindings {
       const parsed = JSON.parse(raw) as ControlBindings;
       // Validate structure
       if (parsed.p1 && parsed.p2 && parsed.gamepad) {
-        return parsed;
+        // Backward compat: merge in turnSpeed default if missing
+        return { ...DEFAULT_BINDINGS, ...parsed };
       }
     }
   } catch {

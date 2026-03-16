@@ -359,6 +359,7 @@ function buildAndSendState() {
 onmessage = (e: MessageEvent) => {
   const msg = e.data;
   if (msg.type === "init") {
+    if (msg.turnSpeed != null) workerTurnSpeed = msg.turnSpeed;
     initGame();
     if (timeoutId !== null) { clearTimeout(timeoutId); timeoutId = null; }
     workerLastTime = performance.now();
@@ -368,6 +369,11 @@ onmessage = (e: MessageEvent) => {
   } else if (msg.type === "inputs") {
     p1Input = msg.p1;
     p2Input = msg.p2;
+    if (msg.turnSpeed != null) {
+      workerTurnSpeed = msg.turnSpeed;
+      ship1.rotationSpeed = workerTurnSpeed;
+      ship2.rotationSpeed = workerTurnSpeed;
+    }
   } else if (msg.type === "stop") {
     if (timeoutId !== null) { clearTimeout(timeoutId); timeoutId = null; }
     pendingEvents = [];

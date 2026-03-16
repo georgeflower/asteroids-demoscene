@@ -147,6 +147,29 @@ export default function ControlSettings({ bindings, onSave, onClose }: ControlSe
             ))}
           </div>
 
+          {/* Turn Speed slider */}
+          <div className="text-sm text-center mb-3 opacity-60">TURN SPEED</div>
+          <div className="border border-[hsl(var(--game-foreground))]/20 p-3 rounded mb-6">
+            <div className="flex items-center justify-between gap-4">
+              <span className="text-xs opacity-60 shrink-0">SLOW</span>
+              <input
+                type="range"
+                min={0.02}
+                max={0.10}
+                step={0.005}
+                value={draft.turnSpeed}
+                onChange={(e) =>
+                  setDraft((prev) => ({ ...prev, turnSpeed: parseFloat(e.target.value) }))
+                }
+                className="w-full h-1 appearance-none bg-[hsl(var(--game-foreground))]/20 rounded accent-[#FFD700] cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-[#FFD700]"
+              />
+              <span className="text-xs opacity-60 shrink-0">FAST</span>
+            </div>
+            <div className="text-center text-xs mt-2 text-[#FFD700]" style={{ textShadow: "0 0 6px #FFD700" }}>
+              {draft.turnSpeed.toFixed(3)}
+            </div>
+          </div>
+
           {/* Buttons */}
           <div className="flex gap-3 justify-center">
             <button
