@@ -24,12 +24,6 @@ const ACTIONS: { key: ActionKey; label: string }[] = [
   { key: "hyperspace", label: "HYPERSPACE" },
 ];
 
-const GAMEPAD_BUTTONS: { label: string; button: string }[] = [
-  { label: "STEER", button: "Left Stick / D-Pad" },
-  { label: "THRUST", button: "Left Stick Up / D-Pad Up / X" },
-  { label: "FIRE", button: "A" },
-  { label: "HYPERSPACE", button: "B" },
-];
 
 export default function ControlSettings({ bindings, onSave, onClose }: ControlSettingsProps) {
   const [draft, setDraft] = useState<ControlBindings>(() => JSON.parse(JSON.stringify(bindings)));
@@ -133,19 +127,6 @@ export default function ControlSettings({ bindings, onSave, onClose }: ControlSe
             </div>
           </div>
 
-          {/* Gamepad section */}
-          <div className="text-sm text-center mb-3 opacity-60">GAMEPAD (XBOX LAYOUT)</div>
-          <div className="border border-[hsl(var(--game-foreground))]/20 p-3 rounded mb-6">
-            <div className="text-xs opacity-50 text-center mb-2">
-              Standard mapping — not rebindable
-            </div>
-            {GAMEPAD_BUTTONS.map(({ label, button }) => (
-              <div key={label} className="flex items-center justify-between py-1 text-xs">
-                <span className="opacity-80">{label}</span>
-                <span className="opacity-60">{button}</span>
-              </div>
-            ))}
-          </div>
 
           {/* Turn Speed slider */}
           <div className="text-sm text-center mb-3 opacity-60">TURN SPEED</div>
