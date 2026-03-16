@@ -4484,8 +4484,6 @@ const Game = () => {
 [0.1.6] - 2026-03-13
 
   Gameplay
-  - Extra Life Cap: Max extra lives per level capped at
-    1 (waves 1-3), 2 (waves 4-6), 3 (waves 7+)
   - Difficulty Scaling: Speed now starts at 100% on wave 1
     with +5% per level (was 110% base + 3%/wave)
 
