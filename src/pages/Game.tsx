@@ -214,7 +214,7 @@ interface GameState {
   alienSpawnTimer: number;
   bossDefeated: boolean;
   pendingNextWave: boolean;
-  extraLivesThisWave: number;
+  
 }
 
 interface DuelState {
@@ -898,13 +898,9 @@ const Game = () => {
     return base;
   };
 
-  const createPowerUp = (x: number, y: number, wave: number = 1, extraLivesThisWave: number = 0): PowerUp | null => {
+  const createPowerUp = (x: number, y: number): PowerUp | null => {
     if (Math.random() > 0.15) return null;
-    let types: PowerUp["type"][] = ["shield", "rapidFire", "extraLife", "multiplier"];
-    const maxExtraLives = wave <= 3 ? 1 : wave <= 6 ? 2 : 3;
-    if (extraLivesThisWave >= maxExtraLives) {
-      types = types.filter(t => t !== "extraLife");
-    }
+    const types: PowerUp["type"][] = ["shield", "rapidFire", "extraLife", "multiplier"];
     const type = types[Math.floor(Math.random() * types.length)];
     return {
       pos: { x, y },
@@ -984,7 +980,7 @@ const Game = () => {
       alienSpawnTimer: 600,
       bossDefeated: false,
       pendingNextWave: false,
-      extraLivesThisWave: 0,
+      
     };
 
     duelStateRef.current = null;
@@ -1205,7 +1201,7 @@ const Game = () => {
     const state = gameStateRef.current;
 
     state.wave++;
-    state.extraLivesThisWave = 0;
+    
     addDebugLog("wave", `Wave ${state.wave} started`);
     const isBossWave = state.wave % 5 === 0;
 
@@ -2459,13 +2455,9 @@ const Game = () => {
           spawnExplosion(asteroid.pos, aColor, asteroid.size === "large" ? 15 : asteroid.size === "medium" ? 10 : 6);
 
           if (Math.floor((state.score - pts) / 10000) < Math.floor(state.score / 10000)) {
-            const maxExtraLives = state.wave <= 3 ? 1 : state.wave <= 6 ? 2 : 3;
-            if (state.extraLivesThisWave < maxExtraLives) {
-              state.extraLivesThisWave++;
-              state.lives++;
-              setDisplayLives(state.lives);
-              spawnFloatingText(state.ship.pos, "EXTRA LIFE!", "#CC66FF", 22);
-            }
+            state.lives++;
+            setDisplayLives(state.lives);
+            spawnFloatingText(state.ship.pos, "EXTRA LIFE!", "#CC66FF", 22);
           }
 
           if (asteroid.size === "large") {
@@ -2480,7 +2472,7 @@ const Game = () => {
             soundEffects.smallExplode();
           }
 
-          const powerUp = createPowerUp(asteroid.pos.x, asteroid.pos.y, state.wave, state.extraLivesThisWave);
+          const powerUp = createPowerUp(asteroid.pos.x, asteroid.pos.y);
           if (powerUp) state.powerUps.push(powerUp);
           return false;
         }
@@ -2505,7 +2497,7 @@ const Game = () => {
           soundEffects.explode();
           spawnFloatingText(ufo.pos, `+${pts}`, "#FFFF66", 18);
           spawnExplosion(ufo.pos, "#FFFF66", 15);
-          const powerUp = createPowerUp(ufo.pos.x, ufo.pos.y, state.wave, state.extraLivesThisWave);
+          const powerUp = createPowerUp(ufo.pos.x, ufo.pos.y);
           if (powerUp) state.powerUps.push(powerUp);
           return false;
         }
@@ -2534,7 +2526,7 @@ const Game = () => {
             const color = colorMap[alien.type] ?? "#FFFFFF";
             spawnFloatingText(alien.pos, `+${pts}`, color, 16);
             spawnExplosion(alien.pos, color, 12);
-            const powerUp = createPowerUp(alien.pos.x, alien.pos.y, state.wave, state.extraLivesThisWave);
+            const powerUp = createPowerUp(alien.pos.x, alien.pos.y);
             if (powerUp) state.powerUps.push(powerUp);
             return false;
           } else {
@@ -2567,11 +2559,7 @@ const Game = () => {
             spawnExplosion(state.boss!.pos, "#FFFF44", 20);
             soundEffects.explode();
 
-            let bossDropTypes: PowerUp["type"][] = ["shield", "rapidFire", "extraLife", "multiplier"];
-            const bossMaxExtra = state.wave <= 3 ? 1 : state.wave <= 6 ? 2 : 3;
-            if (state.extraLivesThisWave >= bossMaxExtra) {
-              bossDropTypes = bossDropTypes.filter(t => t !== "extraLife");
-            }
+            const bossDropTypes: PowerUp["type"][] = ["shield", "rapidFire", "extraLife", "multiplier"];
             state.powerUps.push({
               pos: { ...state.boss!.pos },
               vel: { x: Math.random() - 0.5, y: Math.random() - 0.5 },
@@ -4496,8 +4484,6 @@ const Game = () => {
 [0.1.6] - 2026-03-13
 
   Gameplay
-  - Extra Life Cap: Max extra lives per level capped at
-    1 (waves 1-3), 2 (waves 4-6), 3 (waves 7+)
   - Difficulty Scaling: Speed now starts at 100% on wave 1
     with +5% per level (was 110% base + 3%/wave)
 
