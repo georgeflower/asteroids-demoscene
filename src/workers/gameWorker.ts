@@ -34,6 +34,7 @@ interface GameEvent {
 const W = 800, H = 600, SHIP_SIZE = 10, BULLET_SPEED = 7, BULLET_LIFETIME = 60;
 const ASTEROID_SPEEDS: Record<string, number> = { large: 0.5, medium: 0.8, small: 1.2 };
 const WORKER_FIXED_TIMESTEP = 1000 / 60; // 16.666ms – always update at 60 Hz
+let workerTurnSpeed = 0.05;
 
 let asteroidIdCounter = 0;
 let ship1: Ship, ship2: Ship;
