@@ -24,12 +24,6 @@ const ACTIONS: { key: ActionKey; label: string }[] = [
   { key: "hyperspace", label: "HYPERSPACE" },
 ];
 
-const GAMEPAD_BUTTONS: { label: string; button: string }[] = [
-  { label: "STEER", button: "Left Stick / D-Pad" },
-  { label: "THRUST", button: "Left Stick Up / D-Pad Up / X" },
-  { label: "FIRE", button: "A" },
-  { label: "HYPERSPACE", button: "B" },
-];
 
 export default function ControlSettings({ bindings, onSave, onClose }: ControlSettingsProps) {
   const [draft, setDraft] = useState<ControlBindings>(() => JSON.parse(JSON.stringify(bindings)));
