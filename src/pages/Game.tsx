@@ -2526,7 +2526,7 @@ const Game = () => {
             const color = colorMap[alien.type] ?? "#FFFFFF";
             spawnFloatingText(alien.pos, `+${pts}`, color, 16);
             spawnExplosion(alien.pos, color, 12);
-            const powerUp = createPowerUp(alien.pos.x, alien.pos.y, state.wave, state.extraLivesThisWave);
+            const powerUp = createPowerUp(alien.pos.x, alien.pos.y);
             if (powerUp) state.powerUps.push(powerUp);
             return false;
           } else {
