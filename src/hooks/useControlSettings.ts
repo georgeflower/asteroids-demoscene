@@ -39,6 +39,7 @@ export const DEFAULT_BINDINGS: ControlBindings = {
     hyperspace: 1, // B button
     thrust: 2,     // X button
   },
+  turnSpeed: 0.055,
 };
 
 const STORAGE_KEY = "controlSettings";
