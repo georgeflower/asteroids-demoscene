@@ -1188,7 +1188,7 @@ const Game = () => {
     if (isHost) {
       const worker = new Worker(new URL("../workers/gameWorker.ts", import.meta.url), { type: "module" });
       workerRef.current = worker;
-      worker.postMessage({ type: "init" });
+      worker.postMessage({ type: "init", turnSpeed: controlBindingsRef.current.turnSpeed || 0.05 });
     }
     // Online game started
     setTimeout(() => {
