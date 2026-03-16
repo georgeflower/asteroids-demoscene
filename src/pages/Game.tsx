@@ -2472,7 +2472,7 @@ const Game = () => {
             soundEffects.smallExplode();
           }
 
-          const powerUp = createPowerUp(asteroid.pos.x, asteroid.pos.y, state.wave, state.extraLivesThisWave);
+          const powerUp = createPowerUp(asteroid.pos.x, asteroid.pos.y);
           if (powerUp) state.powerUps.push(powerUp);
           return false;
         }
