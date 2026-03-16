@@ -55,7 +55,7 @@ function createShip(x: number, y: number): Ship {
   return {
     pos: { x, y }, vel: { x: 0, y: 0 },
     rotation: x < W / 2 ? 0 : Math.PI,
-    rotationSpeed: 0.05, thrust: 0.08, isThrusting: false,
+    rotationSpeed: workerTurnSpeed, thrust: 0.08, isThrusting: false,
     invulnerable: true, invulnerableTime: 120,
   };
 }
