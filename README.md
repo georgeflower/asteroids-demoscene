@@ -1,25 +1,7 @@
-ASTEROIDS v0.1.8
-A Retro Vector Graphics Arcade Game
+# Asteroids Demoscene
 
-SOLO: Arrow Keys + Space + Ctrl for Hyperspace | Gamepad supported
-DUEL: P1 Arrows+Space | P2 WASD+E | Gamepads 1 & 2
-ONLINE: Create or join a room to duel remotely
+... (other content)...
 
-Features:
-- Extra life cap: 1/level (waves 1-3), 2/level (4-6), 3/level (7+)
-- Difficulty scaling: 100% base speed, +5% per level
-- Boss fights every 5 levels: Amiga Ball (5), Flying Saucer (10), Tentacle (15), Borg Cube (20)
-- Enemy varieties: Blue Sentinels (wave 8+, teleporting burst-fire), Purple Swarms (wave 12+, boids flocking)
-- Hall of Fame with all-time top 3 scores and SceneStream profile links
-- Old Highscores archive (top 30, scrollable)
-- In-game changelog viewer (monospace overlay)
-- Optimised canvas rendering for stable 60 FPS
-- Delta-time game loop for consistent speed across all hardware
-- Secure highscore submission with server-side validation (see SECURITY.md)
+- Secure highscore submission with HMAC signature verification, client-side obfuscation, and server-side validation (see SECURITY.md)
 
-Thanks to Nectarine Demoscene Radio for the music!
-Streaming demoscene & chiptune tracks 24/7
-
-open source GPL: see LICENSE in repo for full details
-
-Play here: https://asteroids-demoscene.lovable.app/
+... (other content)...
