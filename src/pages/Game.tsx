@@ -1024,8 +1024,15 @@ const Game = () => {
     setGameMode("solo");
     checkVersion();
     // Start a new game session for secure score submission
-    await startGameSession();
-    gameStartTimeRef.current = Date.now();
+    const session = await startGameSession();
+    if (!session) {
+      // If we cannot start a secure session, log a warning so score-submission
+      // issues can be diagnosed. Gameplay can still proceed, but secure
+      // high-score submission may be disabled for this run.
+      console.warn("Failed to start secure game session; high-score submission may be unavailable for this run.");
+    } else {
+      gameStartTimeRef.current = Date.now();
+    }
     // Game started
     // Focus canvas for input capture
     setTimeout(() => {
