@@ -615,21 +615,19 @@ const Game = () => {
         let response = await attemptSubmit(gameSessionTokenRef.current);
         let result = await response.json();
 
-        // If the session is expired or invalid, refresh it and retry once
+        // If the session is expired or invalid, show a clear error instead of retrying with a new session
         if (
           response.status === 403 &&
           (result.error === 'Invalid game session token' ||
             result.error === 'Game session expired' ||
             result.error === 'Maximum submissions reached for this session')
         ) {
-          console.warn("Session issue detected, refreshing session token and retrying...");
-          const newToken = await startGameSession();
-          if (newToken) {
-            // Reset game start time to now so server plausibility check uses fresh session
-            gameStartTimeRef.current = Date.now();
-            response = await attemptSubmit(newToken);
-            result = await response.json();
-          }
+          console.warn("Session issue detected; not retrying with a new session token.", result.error);
+          setInitialsError(
+            "This game session can no longer be submitted (it may have expired or reached the maximum submissions).\n\n" +
+            "Please refresh the page and play another round to submit a new score."
+          );
+          return false;
         }
 
         if (!response.ok) {
