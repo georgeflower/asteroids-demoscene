@@ -219,8 +219,15 @@ async function recordFailure(
   supabaseAdmin: any,
   details: FailedSubmissionDetails,
 ): Promise<void> {
-  const id = await logFailedSubmission(supabaseAdmin, details);
-  await sendEmailNotification(supabaseAdmin, details, id);
+  // Fire-and-forget: do not block the caller (e.g., HTTP request handler)
+  (async () => {
+    try {
+      const id = await logFailedSubmission(supabaseAdmin, details);
+      await sendEmailNotification(supabaseAdmin, details, id);
+    } catch (err) {
+      console.error('Error while recording failure:', err);
+    }
+  })();
 }
 
 Deno.serve(async (req) => {
