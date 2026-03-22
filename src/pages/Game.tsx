@@ -571,18 +571,20 @@ const Game = () => {
         // Return true to close dialog and proceed - trainer mode is for practice only
         return true;
       }
-      
+
       if (!gameSessionTokenRef.current) {
         console.error("No game session token available");
-        setInitialsError("Unable to save score. Please try again.");
+        setInitialsError(
+          "Unable to save score: no active game session.\n\nPlease refresh the page and play again."
+        );
         return false;
       }
 
       const timePlayedSeconds = Math.floor((Date.now() - gameStartTimeRef.current) / 1000);
       const currentWave = gameStateRef.current?.wave ?? 1;
 
-      try {
-        const response = await fetch(
+      const attemptSubmit = async (token: string): Promise<Response> => {
+        return fetch(
           `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/submit/submit`,
           {
             method: 'POST',
@@ -593,7 +595,7 @@ const Game = () => {
             body: JSON.stringify({
               initials: playerInitials.toUpperCase(),
               score,
-              gameSessionToken: gameSessionTokenRef.current,
+              gameSessionToken: token,
               timestamp: Date.now(),
               level: currentWave,
               timePlayedSeconds,
@@ -601,37 +603,56 @@ const Game = () => {
             }),
           }
         );
+      };
 
-        const result = await response.json();
-        
+      try {
+        let response = await attemptSubmit(gameSessionTokenRef.current);
+        let result = await response.json();
+
+        // If the session is expired or invalid, show a clear error instead of retrying with a new session
+        if (
+          response.status === 403 &&
+          (result.error === 'Invalid game session token' ||
+            result.error === 'Game session expired' ||
+            result.error === 'Maximum submissions reached for this session')
+        ) {
+          console.warn("Session issue detected; not retrying with a new session token.", result.error);
+          setInitialsError(
+            "This game session can no longer be submitted (it may have expired or reached the maximum submissions).\n\n" +
+            "Please refresh the page and play another round to submit a new score."
+          );
+          return false;
+        }
+
         if (!response.ok) {
           console.error("Failed to save score:", result.error || "Unknown error");
-          // Handle inappropriate initials error
+          // Handle inappropriate initials error — keep form open, no logging message needed
           if (response.status === 400 && result.error === 'Please choose different initials') {
             setInitialsError(result.error);
             setEnteringInitials(true); // Keep the initials entry form open
             return false;
           }
-          // Log duplicate score detection - UI could be enhanced with toast notification
+          // Duplicate score — treat as success
           if (response.status === 409) {
             console.warn("Duplicate score detected:", result.error);
-            // Refresh leaderboard to show current standings
             const board = await loadLeaderboard();
             setLeaderboard(board);
-            // For duplicate scores, consider it successful since the score is already there
             return true;
           }
-          // Generic error message for other failures
-          setInitialsError("Failed to save score. Please try again.");
+          // All other failures: show specific reason and reassurance
+          const reason = result.error || "Unknown error";
+          setInitialsError(
+            `Unable to save score: ${reason}\n\nYour score has been logged and we've been notified. If this is a valid score, we'll debug the error and add it to the leaderboard.`
+          );
           return false;
         }
-        
+
         const board = await loadLeaderboard();
         setLeaderboard(board);
         return true;
       } catch (error) {
         console.error("Error saving score:", error);
-        setInitialsError("Network error. Please try again.");
+        setInitialsError("Network error. Please check your connection and try again.");
         return false;
       }
     },
@@ -946,7 +967,7 @@ const Game = () => {
     }
   }, []);
 
-  const initGame = useCallback(() => {
+  const initGame = useCallback(async () => {
     const asteroids: Asteroid[] = [];
     for (let i = 0; i < 4; i++) {
       const x = Math.random() * CANVAS_WIDTH;
@@ -997,8 +1018,15 @@ const Game = () => {
     setGameMode("solo");
     checkVersion();
     // Start a new game session for secure score submission
-    startGameSession();
-    gameStartTimeRef.current = Date.now();
+    const session = await startGameSession();
+    if (!session) {
+      // If we cannot start a secure session, log a warning so score-submission
+      // issues can be diagnosed. Gameplay can still proceed, but secure
+      // high-score submission may be disabled for this run.
+      console.warn("Failed to start secure game session; high-score submission may be unavailable for this run.");
+    } else {
+      gameStartTimeRef.current = Date.now();
+    }
     // Game started
     // Focus canvas for input capture
     setTimeout(() => {
@@ -4721,7 +4749,7 @@ const Game = () => {
               <div className="mb-4 flex flex-col items-center gap-2">
                 <div className="text-lg font-mono text-[hsl(var(--game-glow))]">NEW HIGH SCORE! ENTER INITIALS:</div>
                 {initialsError && (
-                  <div className="text-sm font-mono text-[hsl(var(--game-danger))] animate-pulse">
+                  <div className="text-sm font-mono text-[hsl(var(--game-danger))] animate-pulse max-w-xs text-center whitespace-pre-line">
                     {initialsError}
                   </div>
                 )}
