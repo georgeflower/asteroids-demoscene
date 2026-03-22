@@ -190,7 +190,7 @@ Consider manually adding it to the leaderboard using the Supabase dashboard with
       body: JSON.stringify({
         from: fromEmail,
         to: [notificationEmail],
-        subject: `[Asteroids] Failed submission: ${details.initials ?? '???'} scored ${details.score ?? '?'} – ${details.errorMessage}`,
+        subject: `[Asteroids] Failed submission: ${(details.initials ?? '???').slice(0, 3)} scored ${details.score ?? '?'} – ${(details.errorMessage ?? 'Unknown error').slice(0, 80)}`,
         html: htmlBody,
       }),
     });
@@ -314,7 +314,7 @@ Deno.serve(async (req) => {
       if (sessionError || !session) {
         console.log('Session not found:', submission.gameSessionToken);
         const msg = 'Invalid game session token';
-        await recordFailure(supabaseAdmin, {
+        recordFailure(supabaseAdmin, {
           initials: submission.initials,
           score: submission.score,
           gameSessionToken: submission.gameSessionToken,
@@ -335,7 +335,7 @@ Deno.serve(async (req) => {
 
       if (session.expired) {
         const msg = 'Game session expired';
-        await recordFailure(supabaseAdmin, {
+        recordFailure(supabaseAdmin, {
           initials: submission.initials,
           score: submission.score,
           gameSessionToken: submission.gameSessionToken,
@@ -360,7 +360,7 @@ Deno.serve(async (req) => {
           .update({ expired: true })
           .eq('id', session.id);
         const msg = 'Game session expired';
-        await recordFailure(supabaseAdmin, {
+        recordFailure(supabaseAdmin, {
           initials: submission.initials,
           score: submission.score,
           gameSessionToken: submission.gameSessionToken,
@@ -381,7 +381,7 @@ Deno.serve(async (req) => {
       // Rate limiting
       if (session.submission_count >= MAX_SUBMISSIONS_PER_SESSION) {
         const msg = 'Maximum submissions reached for this session';
-        await recordFailure(supabaseAdmin, {
+        recordFailure(supabaseAdmin, {
           initials: submission.initials,
           score: submission.score,
           gameSessionToken: submission.gameSessionToken,
@@ -411,7 +411,7 @@ Deno.serve(async (req) => {
 
       if (serverTimePlayedSeconds < MIN_PLAY_TIME_SECONDS) {
         const msg = 'Game duration too short';
-        await recordFailure(supabaseAdmin, {
+        recordFailure(supabaseAdmin, {
           initials: submission.initials,
           score: submission.score,
           gameSessionToken: submission.gameSessionToken,
@@ -433,7 +433,7 @@ Deno.serve(async (req) => {
       if (submission.score > maxScoreForTime) {
         const msg = 'Score too high for game duration';
         console.log(`Plausibility fail: score=${submission.score}, time=${serverTimePlayedSeconds}s, max=${maxScoreForTime}`);
-        await recordFailure(supabaseAdmin, {
+        recordFailure(supabaseAdmin, {
           initials: submission.initials,
           score: submission.score,
           gameSessionToken: submission.gameSessionToken,
@@ -459,7 +459,7 @@ Deno.serve(async (req) => {
         if (submission.score > maxScoreForLevel) {
           const msg = 'Score too high for reported level';
           console.log(`Plausibility fail: score=${submission.score}, level=${submission.level}, max=${maxScoreForLevel}`);
-          await recordFailure(supabaseAdmin, {
+          recordFailure(supabaseAdmin, {
             initials: submission.initials,
             score: submission.score,
             gameSessionToken: submission.gameSessionToken,
@@ -513,9 +513,9 @@ Deno.serve(async (req) => {
         });
 
       if (insertError) {
-        const msg = 'Database error saving score';
+        const dbErrorMsg = insertError.message ?? 'Unknown database error';
         console.error('Database error:', insertError);
-        await recordFailure(supabaseAdmin, {
+        recordFailure(supabaseAdmin, {
           initials: submission.initials,
           score: submission.score,
           gameSessionToken: submission.gameSessionToken,
@@ -525,7 +525,7 @@ Deno.serve(async (req) => {
           sessionAgeSeconds,
           sessionSubmissionCount: session.submission_count,
           errorType: 'database_error',
-          errorMessage: msg,
+          errorMessage: `Database error saving score: ${dbErrorMsg}`,
           source,
           rawSubmission: submission,
           likelyValid: true,

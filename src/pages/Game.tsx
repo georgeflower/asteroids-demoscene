@@ -572,16 +572,10 @@ const Game = () => {
         return true;
       }
 
-      // If no session token exists, try to create one before giving up
-      if (!gameSessionTokenRef.current) {
-        console.warn("No game session token — attempting to create one before submission");
-        await startGameSession();
-      }
-
       if (!gameSessionTokenRef.current) {
         console.error("No game session token available");
         setInitialsError(
-          "Unable to save score: no active game session.\n\nPlease try refreshing the page and playing again."
+          "Unable to save score: no active game session.\n\nPlease refresh the page and play again."
         );
         return false;
       }
@@ -662,7 +656,7 @@ const Game = () => {
         return false;
       }
     },
-    [loadLeaderboard, startGameSession],
+    [loadLeaderboard],
   );
 
   const isHighScore = useCallback(
