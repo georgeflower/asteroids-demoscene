@@ -1045,7 +1045,7 @@ const Game = () => {
     setTimeout(() => {
       canvasRef.current?.focus();
     }, 50);
-  }, [startGameSession]);
+  }, [startGameSession, startHeartbeatInterval]);
 
   const initDuel = useCallback(() => {
     const asteroids: Asteroid[] = [];
