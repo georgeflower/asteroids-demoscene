@@ -148,6 +148,44 @@ export type Database = {
           },
         ]
       }
+      submission_flags: {
+        Row: {
+          id: string
+          score_id: string
+          flag_type: string
+          severity: string
+          reasoning: string | null
+          admin_override: boolean
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          score_id: string
+          flag_type: string
+          severity: string
+          reasoning?: string | null
+          admin_override?: boolean
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          score_id?: string
+          flag_type?: string
+          severity?: string
+          reasoning?: string | null
+          admin_override?: boolean
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "submission_flags_score_id_fkey"
+            columns: ["score_id"]
+            isOneToOne: false
+            referencedRelation: "current_high_scores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
