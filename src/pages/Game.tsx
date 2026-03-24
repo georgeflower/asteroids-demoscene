@@ -564,6 +564,45 @@ const Game = () => {
     }
   }, []);
 
+  const sendHeartbeat = useCallback(async () => {
+    const token = gameSessionTokenRef.current;
+    const state = gameStateRef.current;
+    if (!token || !state || state.gameOver || state.paused) return;
+    try {
+      await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/submit/heartbeat`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          },
+          body: JSON.stringify({
+            gameSessionToken: token,
+            score: state.score,
+            level: state.wave,
+          }),
+        }
+      );
+    } catch (_) {
+      // Non-blocking: heartbeat failure doesn't affect gameplay
+    }
+  }, []);
+
+  const startHeartbeatInterval = useCallback(() => {
+    if (heartbeatIntervalRef.current) {
+      clearInterval(heartbeatIntervalRef.current);
+    }
+    heartbeatIntervalRef.current = setInterval(sendHeartbeat, 30000);
+  }, [sendHeartbeat]);
+
+  const stopHeartbeatInterval = useCallback(() => {
+    if (heartbeatIntervalRef.current) {
+      clearInterval(heartbeatIntervalRef.current);
+      heartbeatIntervalRef.current = null;
+    }
+  }, []);
+
   const saveToLeaderboard = useCallback(
     async (playerInitials: string, score: number): Promise<boolean> => {
       // Trainer mode: don't save scores
