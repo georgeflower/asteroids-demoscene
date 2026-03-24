@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.1] - 2026-03-24
+
+### Fixed
+
+- **Keyboard State Persistence**: Fixed bug where keyboard state from the previous game persisted into new games, causing ships to automatically move without key input (e.g., thrusting forward as if holding Up key). Now properly clears `keysRef.current` in all game initialization functions (`initGame`, `initDuel`, `initOnline`)
+
 ## [0.1.9] - 2026-03-15
 
 ### Changed
