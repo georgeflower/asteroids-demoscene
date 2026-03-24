@@ -1039,6 +1039,7 @@ const Game = () => {
     // Start a new game session for secure score submission
     startGameSession();
     gameStartTimeRef.current = Date.now();
+    startHeartbeatInterval();
     // Game started
     // Focus canvas for input capture
     setTimeout(() => {
