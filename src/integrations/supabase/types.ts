@@ -44,6 +44,30 @@ export type Database = {
         }
         Relationships: []
       }
+      game_session_checkpoints: {
+        Row: {
+          id: string
+          level: number
+          reported_at: string
+          score: number
+          session_token: string
+        }
+        Insert: {
+          id?: string
+          level?: number
+          reported_at?: string
+          score?: number
+          session_token: string
+        }
+        Update: {
+          id?: string
+          level?: number
+          reported_at?: string
+          score?: number
+          session_token?: string
+        }
+        Relationships: []
+      }
       game_sessions: {
         Row: {
           expired: boolean
