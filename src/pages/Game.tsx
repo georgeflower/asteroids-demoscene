@@ -987,6 +987,7 @@ const Game = () => {
   }, []);
 
   const initGame = useCallback(() => {
+    keysRef.current = {};
     const asteroids: Asteroid[] = [];
     for (let i = 0; i < 4; i++) {
       const x = Math.random() * CANVAS_WIDTH;
@@ -1048,6 +1049,7 @@ const Game = () => {
   }, [startGameSession, startHeartbeatInterval]);
 
   const initDuel = useCallback(() => {
+    keysRef.current = {};
     const asteroids: Asteroid[] = [];
     for (let i = 0; i < 3; i++) {
       let x: number, y: number;
@@ -1198,6 +1200,7 @@ const Game = () => {
   }, []);
 
   const initOnline = useCallback((isHost: boolean) => {
+    keysRef.current = {};
     duelStateRef.current = {
       ship1: createShip(CANVAS_WIDTH * 0.25, CANVAS_HEIGHT / 2),
       ship2: createShip(CANVAS_WIDTH * 0.75, CANVAS_HEIGHT / 2),
