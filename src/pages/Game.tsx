@@ -343,6 +343,7 @@ const Game = () => {
   const showLifeLostRef = useRef(false);
   const gameSessionTokenRef = useRef<string | null>(null);
   const gameStartTimeRef = useRef<number>(Date.now());
+  const heartbeatIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [isTouchDevice, setIsTouchDevice] = useState(false);
   const [nowPlaying, setNowPlaying] = useState<{ artist: string; title: string } | null>(null);
   const nowPlayingRef = useRef<{ artist: string; title: string } | null>(null);
@@ -563,6 +564,45 @@ const Game = () => {
     }
   }, []);
 
+  const sendHeartbeat = useCallback(async () => {
+    const token = gameSessionTokenRef.current;
+    const state = gameStateRef.current;
+    if (!token || !state || state.gameOver || state.paused) return;
+    try {
+      await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/submit/heartbeat`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          },
+          body: JSON.stringify({
+            gameSessionToken: token,
+            score: state.score,
+            level: state.wave,
+          }),
+        }
+      );
+    } catch (_) {
+      // Non-blocking: heartbeat failure doesn't affect gameplay
+    }
+  }, []);
+
+  const startHeartbeatInterval = useCallback(() => {
+    if (heartbeatIntervalRef.current) {
+      clearInterval(heartbeatIntervalRef.current);
+    }
+    heartbeatIntervalRef.current = setInterval(sendHeartbeat, 30000);
+  }, [sendHeartbeat]);
+
+  const stopHeartbeatInterval = useCallback(() => {
+    if (heartbeatIntervalRef.current) {
+      clearInterval(heartbeatIntervalRef.current);
+      heartbeatIntervalRef.current = null;
+    }
+  }, []);
+
   const saveToLeaderboard = useCallback(
     async (playerInitials: string, score: number): Promise<boolean> => {
       // Trainer mode: don't save scores
@@ -571,20 +611,18 @@ const Game = () => {
         // Return true to close dialog and proceed - trainer mode is for practice only
         return true;
       }
-
+      
       if (!gameSessionTokenRef.current) {
         console.error("No game session token available");
-        setInitialsError(
-          "Unable to save score: no active game session.\n\nPlease refresh the page and play again."
-        );
+        setInitialsError("Unable to save score. Please try again.");
         return false;
       }
 
       const timePlayedSeconds = Math.floor((Date.now() - gameStartTimeRef.current) / 1000);
       const currentWave = gameStateRef.current?.wave ?? 1;
 
-      const attemptSubmit = async (token: string): Promise<Response> => {
-        return fetch(
+      try {
+        const response = await fetch(
           `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/submit/submit`,
           {
             method: 'POST',
@@ -595,7 +633,7 @@ const Game = () => {
             body: JSON.stringify({
               initials: playerInitials.toUpperCase(),
               score,
-              gameSessionToken: token,
+              gameSessionToken: gameSessionTokenRef.current,
               timestamp: Date.now(),
               level: currentWave,
               timePlayedSeconds,
@@ -603,56 +641,37 @@ const Game = () => {
             }),
           }
         );
-      };
 
-      try {
-        let response = await attemptSubmit(gameSessionTokenRef.current);
-        let result = await response.json();
-
-        // If the session is expired or invalid, show a clear error instead of retrying with a new session
-        if (
-          response.status === 403 &&
-          (result.error === 'Invalid game session token' ||
-            result.error === 'Game session expired' ||
-            result.error === 'Maximum submissions reached for this session')
-        ) {
-          console.warn("Session issue detected; not retrying with a new session token.", result.error);
-          setInitialsError(
-            "This game session can no longer be submitted (it may have expired or reached the maximum submissions).\n\n" +
-            "Please refresh the page and play another round to submit a new score."
-          );
-          return false;
-        }
-
+        const result = await response.json();
+        
         if (!response.ok) {
           console.error("Failed to save score:", result.error || "Unknown error");
-          // Handle inappropriate initials error — keep form open, no logging message needed
+          // Handle inappropriate initials error
           if (response.status === 400 && result.error === 'Please choose different initials') {
             setInitialsError(result.error);
             setEnteringInitials(true); // Keep the initials entry form open
             return false;
           }
-          // Duplicate score — treat as success
+          // Log duplicate score detection - UI could be enhanced with toast notification
           if (response.status === 409) {
             console.warn("Duplicate score detected:", result.error);
+            // Refresh leaderboard to show current standings
             const board = await loadLeaderboard();
             setLeaderboard(board);
+            // For duplicate scores, consider it successful since the score is already there
             return true;
           }
-          // All other failures: show specific reason and reassurance
-          const reason = result.error || "Unknown error";
-          setInitialsError(
-            `Unable to save score: ${reason}\n\nYour score has been logged and we've been notified. If this is a valid score, we'll debug the error and add it to the leaderboard.`
-          );
+          // Generic error message for other failures
+          setInitialsError("Failed to save score. Please try again.");
           return false;
         }
-
+        
         const board = await loadLeaderboard();
         setLeaderboard(board);
         return true;
       } catch (error) {
         console.error("Error saving score:", error);
-        setInitialsError("Network error. Please check your connection and try again.");
+        setInitialsError("Network error. Please try again.");
         return false;
       }
     },
@@ -967,7 +986,7 @@ const Game = () => {
     }
   }, []);
 
-  const initGame = useCallback(async () => {
+  const initGame = useCallback(() => {
     const asteroids: Asteroid[] = [];
     for (let i = 0; i < 4; i++) {
       const x = Math.random() * CANVAS_WIDTH;
@@ -1018,21 +1037,15 @@ const Game = () => {
     setGameMode("solo");
     checkVersion();
     // Start a new game session for secure score submission
-    const session = await startGameSession();
-    if (!session) {
-      // If we cannot start a secure session, log a warning so score-submission
-      // issues can be diagnosed. Gameplay can still proceed, but secure
-      // high-score submission may be disabled for this run.
-      console.warn("Failed to start secure game session; high-score submission may be unavailable for this run.");
-    } else {
-      gameStartTimeRef.current = Date.now();
-    }
+    startGameSession();
+    gameStartTimeRef.current = Date.now();
+    startHeartbeatInterval();
     // Game started
     // Focus canvas for input capture
     setTimeout(() => {
       canvasRef.current?.focus();
     }, 50);
-  }, [startGameSession]);
+  }, [startGameSession, startHeartbeatInterval]);
 
   const initDuel = useCallback(() => {
     const asteroids: Asteroid[] = [];
@@ -1353,6 +1366,7 @@ const Game = () => {
 
       if (state.lives <= 0) {
         state.gameOver = true;
+        stopHeartbeatInterval();
         setShowGameOver(true);
         // Trainer mode: don't offer score saving
         if (!(DEBUG_ENABLED && trainerModeRef.current) && isHighScore(state.score)) setEnteringInitials(true);
@@ -3924,6 +3938,7 @@ const Game = () => {
     }
     gameStateRef.current = null;
     duelStateRef.current = null;
+    stopHeartbeatInterval();
     setGameMode("menu");
     setShowGameOver(false);
     setShowLifeLost(false);
@@ -4087,6 +4102,7 @@ const Game = () => {
     animationFrameRef.current = requestAnimationFrame(gameLoop);
     return () => {
       if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
+      stopHeartbeatInterval();
     };
   }, [gameLoop]);
 
@@ -4749,7 +4765,7 @@ const Game = () => {
               <div className="mb-4 flex flex-col items-center gap-2">
                 <div className="text-lg font-mono text-[hsl(var(--game-glow))]">NEW HIGH SCORE! ENTER INITIALS:</div>
                 {initialsError && (
-                  <div className="text-sm font-mono text-[hsl(var(--game-danger))] animate-pulse max-w-xs text-center whitespace-pre-line">
+                  <div className="text-sm font-mono text-[hsl(var(--game-danger))] animate-pulse">
                     {initialsError}
                   </div>
                 )}
