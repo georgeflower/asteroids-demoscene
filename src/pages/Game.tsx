@@ -301,18 +301,6 @@ function FpsOverlay() {
   );
 }
 
-// Profanity filter - list of inappropriate initials that should be rejected
-const BANNED_INITIALS = new Set([
-  'ASS', 'FUK', 'FUC', 'FCK', 'SHT', 'DMN', 'HEL', 'DIE',
-  'KKK', 'SEX', 'XXX', 'WTF', 'FAG', 'GAY', 'DIK', 'COK',
-  'PIS', 'CUM', 'TIT', 'VAG', 'PUS', 'CNT', 'FCU', 'FKU',
-  'SHI', 'POO', 'PEE', 'BTH', 'BTC', 'WTH', 'OMG', 'JFC',
-  'GDM', 'SLT', 'HOR', 'BAD', 'EVL', 'HAT', 'KIL'
-]);
-
-function isInitialsAppropriate(initials: string): boolean {
-  return !BANNED_INITIALS.has(initials.toUpperCase());
-}
 
 const Game = () => {
   const navigate = useNavigate();
@@ -508,7 +496,7 @@ const Game = () => {
     const unique: { initials: string; score: number; date: string; rank: number }[] = [];
     allRows.forEach((row, idx) => {
       const key = row.initials.toUpperCase();
-      if (!seen.has(key) && !BANNED_INITIALS.has(key)) {
+      if (!seen.has(key)) {
         seen.add(key);
         unique.push({
           initials: row.initials,
@@ -4440,7 +4428,7 @@ const Game = () => {
               >
                 ★ OLD HIGHSCORES ★
               </div>
-               {oldLeaderboard.filter(e => !BANNED_INITIALS.has(e.initials.toUpperCase())).map((entry, i) => (
+               {oldLeaderboard.map((entry, i) => (
                   <div
                     key={i}
                     className="flex justify-between font-mono text-sm py-0.5 text-[hsl(var(--game-foreground))]"
@@ -4788,21 +4776,12 @@ const Game = () => {
                       const newInitials = e.target.value.toUpperCase().replace(/[^A-Z]/g, "");
                       setInitials(newInitials);
                       setInitialsError(""); // Clear error on change
-                      // Provide immediate feedback for inappropriate initials
-                      if (newInitials.length > 0 && !isInitialsAppropriate(newInitials)) {
-                        setInitialsError("Please choose different initials");
-                      }
                     }}
                     onKeyDown={async (e) => {
                       if (e.key === "Enter" && initials.length > 0) {
-                        // Validate before submission
-                        if (!isInitialsAppropriate(initials)) {
-                          setInitialsError("Please choose different initials");
-                        } else {
-                          const success = await saveToLeaderboard(initials, displayScore);
-                          if (success) {
-                            setEnteringInitials(false);
-                          }
+                        const success = await saveToLeaderboard(initials, displayScore);
+                        if (success) {
+                          setEnteringInitials(false);
                         }
                       }
                       e.stopPropagation();
@@ -4814,14 +4793,9 @@ const Game = () => {
                   <Button
                     onClick={async () => {
                       if (initials.length > 0) {
-                        // Validate before submission
-                        if (!isInitialsAppropriate(initials)) {
-                          setInitialsError("Please choose different initials");
-                        } else {
-                          const success = await saveToLeaderboard(initials, displayScore);
-                          if (success) {
-                            setEnteringInitials(false);
-                          }
+                        const success = await saveToLeaderboard(initials, displayScore);
+                        if (success) {
+                          setEnteringInitials(false);
                         }
                       }
                     }}
