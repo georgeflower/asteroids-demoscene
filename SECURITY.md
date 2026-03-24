@@ -101,7 +101,15 @@ Located in `/supabase/functions/submit/index.ts`
 
 A development-only admin dashboard is available in `src/components/AdminMonitor.tsx`.
 
-**Access:**
+**Access — Debug Mode (recommended):**
+1. Press `Ctrl+Shift+D` on any page to toggle debug mode
+2. A small `⚙ DEBUG` badge appears in the bottom-right corner
+3. Click **OPEN ADMIN** in the debug panel to mount the admin dashboard
+4. Enter your `ADMIN_SECRET_KEY` when prompted
+
+Debug mode state is persisted in `localStorage` (`asteroids_debug` key) so it survives page reloads.
+
+**Access — Manual (console):**
 1. Open browser console on the game site
 2. `localStorage.setItem('asteroids_admin', 'true')`
 3. The `<AdminMonitor />` component renders over the game
