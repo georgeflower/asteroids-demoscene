@@ -1366,6 +1366,7 @@ const Game = () => {
 
       if (state.lives <= 0) {
         state.gameOver = true;
+        stopHeartbeatInterval();
         setShowGameOver(true);
         // Trainer mode: don't offer score saving
         if (!(DEBUG_ENABLED && trainerModeRef.current) && isHighScore(state.score)) setEnteringInitials(true);
