@@ -4102,6 +4102,7 @@ const Game = () => {
     animationFrameRef.current = requestAnimationFrame(gameLoop);
     return () => {
       if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
+      stopHeartbeatInterval();
     };
   }, [gameLoop]);
 
