@@ -2,7 +2,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version, x-admin-key',
 };
 
 interface ScoreSubmission {
@@ -287,8 +287,8 @@ async function handleSubmit(req: Request, supabaseAdmin: ReturnType<typeof creat
 
       // Wave consistency: reject impossible level jumps between checkpoints
       const levelJump = curr.level - prev.level;
-      if (levelJump > MAX_LEVEL_JUMP) {
-        console.log(`Wave jump too large: +${levelJump} levels between checkpoints ${i-1} and ${i}`);
+      if (levelJump > MAX_LEVEL_JUMP || levelJump < 0) {
+        console.log(`Wave jump invalid: ${levelJump} levels between checkpoints ${i-1} and ${i}`);
         return errorResponse('Impossible wave progression detected', 403);
       }
 
@@ -310,7 +310,8 @@ async function handleSubmit(req: Request, supabaseAdmin: ReturnType<typeof creat
       return errorResponse('Final score anomaly', 403);
     }
 
-    // Checkpoint clustering: flag if all checkpoints are bunched in the first 20% of the session
+    // Checkpoint clustering: flag if all checkpoints are bunched in the first 15% of the session,
+    // starting within the first 10% of session time.
     if (checkpoints.length >= 2) {
       const firstCpTime = new Date(checkpoints[0].reported_at).getTime();
       const lastCpTime = new Date(checkpoints[checkpoints.length - 1].reported_at).getTime();
@@ -485,15 +486,15 @@ Deno.serve(async (req) => {
 
     const url = new URL(req.url);
 
-    if (url.pathname.endsWith('/start-session')) {
+    if (url.pathname.endsWith('/start-session') && req.method === 'POST') {
       return await handleStartSession(req, supabaseAdmin);
     }
 
-    if (url.pathname.endsWith('/heartbeat')) {
+    if (url.pathname.endsWith('/heartbeat') && req.method === 'POST') {
       return await handleHeartbeat(req, supabaseAdmin);
     }
 
-    if (url.pathname.endsWith('/submit')) {
+    if (url.pathname.endsWith('/submit') && req.method === 'POST') {
       return await handleSubmit(req, supabaseAdmin);
     }
 

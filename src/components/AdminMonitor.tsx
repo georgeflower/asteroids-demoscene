@@ -12,8 +12,7 @@
  *  - Export suspicious submissions as CSV
  */
 
-import { useState, useEffect, useCallback } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { useState, useEffect, useCallback, Fragment } from "react";
 
 interface Score {
   id: string;
@@ -94,9 +93,12 @@ export function AdminMonitor() {
     }
   }, []);
 
+  // Auto-fetch on mount if a key was previously saved in localStorage.
+  // Intentionally runs once only; subsequent fetches are triggered manually or via the REFRESH button.
   useEffect(() => {
-    if (adminKey) fetchData(adminKey);
-  }, [adminKey, fetchData]);
+    const savedKey = localStorage.getItem("asteroids_admin_key");
+    if (savedKey) fetchData(savedKey);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const deleteScore = async (scoreId: string) => {
     if (!confirm("Remove this score from the leaderboard?")) return;
@@ -288,7 +290,7 @@ export function AdminMonitor() {
               const rowColor = severity ? severityColor[severity] + "18" : "transparent";
               const isSelected = selectedScore === s.id;
               return (
-                <>
+                <Fragment key={s.id}>
                   <tr
                     key={s.id}
                     style={{
@@ -386,7 +388,7 @@ export function AdminMonitor() {
                       </td>
                     </tr>
                   )}
-                </>
+                </Fragment>
               );
             })}
           </tbody>

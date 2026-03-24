@@ -24,17 +24,12 @@ CREATE POLICY "Service role manages submission flags"
   USING (true)
   WITH CHECK (true);
 
--- Public can read flags (admin dashboard uses anon key, filtering done client-side)
-CREATE POLICY "Public can view submission flags"
-  ON public.submission_flags
-  FOR SELECT
-  TO public
-  USING (true);
+-- No public SELECT policy: submission_flags are only accessed via the admin Edge Function using service_role.
 
 -- Add CHECK constraints to current_high_scores for data integrity
 ALTER TABLE public.current_high_scores
   ADD CONSTRAINT check_score_non_negative CHECK (score >= 0),
   ADD CONSTRAINT check_score_max CHECK (score <= 9999999),
   ADD CONSTRAINT check_initials_format CHECK (initials ~ '^[A-Z]{1,3}$'),
-  ADD CONSTRAINT check_level_valid CHECK (level IS NULL OR (level >= 1 AND level <= 30)),
+  ADD CONSTRAINT check_level_valid CHECK (level IS NULL OR level >= 1),
   ADD CONSTRAINT check_time_played CHECK (time_played_seconds IS NULL OR time_played_seconds >= 0);
