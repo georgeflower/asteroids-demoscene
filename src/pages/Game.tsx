@@ -3938,6 +3938,7 @@ const Game = () => {
     }
     gameStateRef.current = null;
     duelStateRef.current = null;
+    stopHeartbeatInterval();
     setGameMode("menu");
     setShowGameOver(false);
     setShowLifeLost(false);
