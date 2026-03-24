@@ -4511,7 +4511,14 @@ const Game = () => {
                 📋 CHANGELOG
               </div>
               <pre className="font-mono text-[11px] text-[hsl(var(--game-foreground))] whitespace-pre-wrap leading-relaxed opacity-90">
-{`[0.2.0] - 2026-03-16
+{`[0.2.1] - 2026-03-24
+
+  Fixed
+  - Keyboard State Persistence: Fixed bug where keyboard
+    state from previous game persisted into new games,
+    causing ships to automatically move without key input
+
+[0.2.0] - 2026-03-16
 
   Changed
   - Removed extra life cap per wave — lives can now
