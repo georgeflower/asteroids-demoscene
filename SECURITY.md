@@ -101,11 +101,26 @@ Located in `/supabase/functions/submit/index.ts`
 
 A development-only admin dashboard is available in `src/components/AdminMonitor.tsx`.
 
+#### Step 0 — Provision the secret in Supabase (required first-time setup)
+
+The admin dashboard is authenticated by an `ADMIN_SECRET_KEY` secret stored in your Supabase Edge Function environment. **You must set this yourself** — it is not automatically generated.
+
+```bash
+# Pick any strong random string as your admin password
+supabase secrets set ADMIN_SECRET_KEY=<your-strong-random-secret>
+```
+
+Or via the Supabase Dashboard:
+1. Go to **Edge Functions → submit → Settings**
+2. Add secret: `ADMIN_SECRET_KEY` = `<your-strong-random-secret>`
+
+The key you set here is what you will type into the **Admin key** prompt in the dashboard.
+
 **Access — Debug Mode (recommended):**
 1. Press `X` on any page to toggle debug mode
 2. A small `⚙ DEBUG` badge appears in the bottom-right corner
 3. Click **OPEN ADMIN** in the debug panel to mount the admin dashboard
-4. Enter your `ADMIN_SECRET_KEY` when prompted
+4. Enter the value you set for `ADMIN_SECRET_KEY` when prompted
 
 Debug mode state is persisted in `localStorage` (`asteroids_debug` key) so it survives page reloads.
 
@@ -113,7 +128,7 @@ Debug mode state is persisted in `localStorage` (`asteroids_debug` key) so it su
 1. Open browser console on the game site
 2. `localStorage.setItem('asteroids_admin', 'true')`
 3. The `<AdminMonitor />` component renders over the game
-4. Enter your `ADMIN_SECRET_KEY` when prompted
+4. Enter the value you set for `ADMIN_SECRET_KEY` when prompted
 
 **Features:**
 - Real-time list of recent scores with flag severity highlighted
