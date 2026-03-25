@@ -161,7 +161,7 @@ async function handleHeartbeat(req: Request, supabaseAdmin: any) {
   return successResponse({ ok: true });
 }
 
-async function handleSubmit(req: Request, supabaseAdmin: ReturnType<typeof createClient>) {
+async function handleSubmit(req: Request, supabaseAdmin: any) {
   if (!validateOrigin(req)) {
     return errorResponse('Forbidden', 403);
   }
