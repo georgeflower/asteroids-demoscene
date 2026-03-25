@@ -255,6 +255,17 @@ const UFO_POINTS = { large: 200, small: 1000 };
 const GAMEPAD_DEADZONE = 0.2;
 const MARQUEE_SPEED = 0.8; // pixels per frame (~48px/sec at 60fps)
 
+// ===== QUALITY SETTINGS =====
+// Three quality levels controlling visual effects and rendering cost.
+// Press Q in-game to cycle through them.  The setting persists in localStorage.
+type QualityLevel = "LOW" | "MEDIUM" | "HIGH";
+const QUALITY_LEVELS: QualityLevel[] = ["LOW", "MEDIUM", "HIGH"];
+// How many stars to render per quality tier (from the full 120-star pool)
+const QUALITY_STAR_COUNTS: Record<QualityLevel, number> = { LOW: 40, MEDIUM: 80, HIGH: 120 };
+// Scanline/vignette visibility per tier
+const QUALITY_SCANLINES: Record<QualityLevel, boolean> = { LOW: false, MEDIUM: false, HIGH: true };
+const QUALITY_VIGNETTE: Record<QualityLevel, boolean> = { LOW: false, MEDIUM: true, HIGH: true };
+
 const P1_COLOR = "#00FFFF";
 const P2_COLOR = "#FF8844";
 
@@ -370,13 +381,32 @@ const Game = () => {
   const marqueeGradientRef = useRef<CanvasGradient | null>(null);
   const olMarqueeGradientRef = useRef<CanvasGradient | null>(null);
   const cachedCanvasSize = useRef<{ w: number; h: number }>({ w: 0, h: 0 });
+  // Tracks which quality level the cached overlays were built for
+  const cachedOverlayQuality = useRef<QualityLevel | null>(null);
 
-  // Build or rebuild cached overlays when canvas size changes
+  // Quality state – initialised from localStorage so it survives page reloads.
+  // qualityRef is the ref that hot-paths (draw loop) read; `quality` drives React UI.
+  const qualityRef = useRef<QualityLevel>(
+    (localStorage.getItem("gameQuality") as QualityLevel) || "HIGH",
+  );
+  const [quality, setQuality] = useState<QualityLevel>(qualityRef.current);
+
+  // Cached 2D context – obtained once with perf hints so we never pay getContext overhead.
+  const ctxRef = useRef<CanvasRenderingContext2D | null>(null);
+
+  // Build or rebuild cached overlays when canvas size or quality changes
   const ensureCachedOverlays = useCallback((ctx: CanvasRenderingContext2D) => {
     const w = CANVAS_WIDTH;
     const h = CANVAS_HEIGHT;
-    if (cachedCanvasSize.current.w === w && cachedCanvasSize.current.h === h && scanlineCanvasRef.current) return;
+    const q = qualityRef.current;
+    if (
+      cachedCanvasSize.current.w === w &&
+      cachedCanvasSize.current.h === h &&
+      cachedOverlayQuality.current === q &&
+      scanlineCanvasRef.current
+    ) return;
     cachedCanvasSize.current = { w, h };
+    cachedOverlayQuality.current = q;
 
     // Main CRT scanline overlay (every 4px)
     const sc = document.createElement("canvas");
@@ -422,6 +452,22 @@ const Game = () => {
     olMarqueeGradientRef.current.addColorStop(0.5, "rgba(255, 180, 0, 0.12)");
     olMarqueeGradientRef.current.addColorStop(1, "rgba(255, 180, 0, 0)");
   }, []);
+
+  // Pre-build the CRT overlays and cache the canvas 2D context as soon as the canvas
+  // element is mounted.  This prevents a first-frame stall (which causes 30 fps at
+  // startup on integrated GPUs) because expensive setup is done before the game loop
+  // runs its first draw.  Using `{ alpha: false }` lets the browser skip alpha
+  // compositing for this canvas, which gives a measurable GPU speedup.
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    if (!ctxRef.current || ctxRef.current.canvas !== canvas) {
+      ctxRef.current = canvas.getContext("2d", { alpha: false }) ?? null;
+    }
+    if (ctxRef.current) {
+      ensureCachedOverlays(ctxRef.current);
+    }
+  });
 
   // Debug system state (only active when DEBUG_ENABLED is true)
   const [debugLogs, setDebugLogs] = useState<DebugLogEntry[]>([]);
@@ -2729,18 +2775,33 @@ const Game = () => {
     ctx.fillStyle = bgColor;
     ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
-    // Parallax starfield
+    // Parallax starfield — rendering strategy varies by quality level.
+    // HIGH: full 120 stars with per-star twinkling, using fillRect (faster than arc).
+    // MEDIUM: first 80 stars, fixed brightness (no twinkling), fillRect.
+    // LOW: first 40 stars, no parallax, no twinkling, fillRect.
+    const q = qualityRef.current;
     const time = Date.now() * 0.001;
-    stars.forEach((star) => {
+    const starCount = QUALITY_STAR_COUNTS[q];
+    ctx.fillStyle = "rgb(200, 220, 255)"; // set once for all stars
+    for (let si = 0; si < starCount; si++) {
+      const star = stars[si];
       const parallaxSpeed = [0.1, 0.3, 0.6][star.layer];
-      const offsetX = (time * parallaxSpeed * 10) % CANVAS_WIDTH;
-      const drawX = (((star.x - offsetX) % CANVAS_WIDTH) + CANVAS_WIDTH) % CANVAS_WIDTH;
-      const twinkle = 0.7 + Math.sin(time * 2 + star.x * 0.1) * 0.3;
-      ctx.fillStyle = `rgba(200, 220, 255, ${star.brightness * twinkle})`;
-      ctx.beginPath();
-      ctx.arc(drawX, star.y, star.size, 0, Math.PI * 2);
-      ctx.fill();
-    });
+      let drawX: number;
+      if (q === "LOW") {
+        drawX = star.x; // static – no parallax scroll
+      } else {
+        const offsetX = (time * parallaxSpeed * 10) % CANVAS_WIDTH;
+        drawX = (((star.x - offsetX) % CANVAS_WIDTH) + CANVAS_WIDTH) % CANVAS_WIDTH;
+      }
+      const brightness =
+        q === "HIGH"
+          ? star.brightness * (0.7 + Math.sin(time * 2 + star.x * 0.1) * 0.3) // twinkle
+          : star.brightness * 0.8; // fixed brightness for MEDIUM / LOW
+      ctx.globalAlpha = brightness;
+      const s = star.size;
+      ctx.fillRect(drawX - s, star.y - s, s * 2, s * 2);
+    }
+    ctx.globalAlpha = 1;
 
     // Particles (no shadow for performance)
     particles.forEach((p) => {
@@ -2971,13 +3032,13 @@ const Game = () => {
       ctx.restore();
     });
 
-    // CRT scanline overlay (cached offscreen canvas)
+    // CRT scanline overlay (cached offscreen canvas) — skipped at lower quality levels
     ctx.save();
-    if (menuScanlineCanvasRef.current) {
+    if (QUALITY_SCANLINES[qualityRef.current] && menuScanlineCanvasRef.current) {
       ctx.globalAlpha = 0.03;
       ctx.drawImage(menuScanlineCanvasRef.current, 0, 0);
     }
-    if (menuVignetteGradientRef.current) {
+    if (QUALITY_VIGNETTE[qualityRef.current] && menuVignetteGradientRef.current) {
       ctx.globalAlpha = 1;
       ctx.fillStyle = menuVignetteGradientRef.current;
       ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
@@ -3007,7 +3068,12 @@ const Game = () => {
   const draw = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext("2d");
+    // Use the cached context (obtained with { alpha: false } for GPU performance).
+    // Re-acquire if canvas was remounted (e.g., after returning from the menu).
+    if (!ctxRef.current || ctxRef.current.canvas !== canvas) {
+      ctxRef.current = canvas.getContext("2d", { alpha: false }) ?? null;
+    }
+    const ctx = ctxRef.current;
     if (!ctx) return;
     ensureCachedOverlays(ctx);
 
@@ -3605,13 +3671,13 @@ const Game = () => {
       ctx.restore();
     }
 
-    // ===== CRT / SCANLINE OVERLAY (cached offscreen canvas) =====
+    // ===== CRT / SCANLINE OVERLAY (cached offscreen canvas) — quality-dependent =====
     ctx.save();
-    if (scanlineCanvasRef.current) {
+    if (QUALITY_SCANLINES[qualityRef.current] && scanlineCanvasRef.current) {
       ctx.globalAlpha = 0.06;
       ctx.drawImage(scanlineCanvasRef.current, 0, 0);
     }
-    if (vignetteGradientRef.current) {
+    if (QUALITY_VIGNETTE[qualityRef.current] && vignetteGradientRef.current) {
       ctx.globalAlpha = 1;
       ctx.fillStyle = vignetteGradientRef.current;
       ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
@@ -3963,6 +4029,25 @@ const Game = () => {
       if (DEBUG_ENABLED && (e.key === "§" || e.key === "Dead")) {
         e.preventDefault();
         setShowDebugPanel((prev) => !prev);
+        return;
+      }
+
+      // Q key – cycle quality settings (LOW → MEDIUM → HIGH → LOW).
+      // In duel/online mode, Q is bound to P2 hyperspace, so skip quality cycling
+      // unless the player's P2 hyperspace binding has been remapped away from Q.
+      if (
+        (e.key === "q" || e.key === "Q") &&
+        gameModeRef.current !== "duel" &&
+        gameModeRef.current !== "online"
+      ) {
+        e.preventDefault();
+        const currentIdx = QUALITY_LEVELS.indexOf(qualityRef.current);
+        const nextQuality = QUALITY_LEVELS[(currentIdx + 1) % QUALITY_LEVELS.length];
+        qualityRef.current = nextQuality;
+        setQuality(nextQuality);
+        localStorage.setItem("gameQuality", nextQuality);
+        // Invalidate overlay cache so it is rebuilt for the new quality level
+        cachedOverlayQuality.current = null;
         return;
       }
 
@@ -4666,6 +4751,13 @@ const Game = () => {
             <span className="text-[#888888] text-[7px]" style={{ textShadow: "none" }}>
               v{GAME_VERSION}
             </span>
+          </div>
+          <div
+            className="text-[7px] opacity-60 hover:opacity-100 transition-opacity cursor-default"
+            style={{ textShadow: "none" }}
+            title="Press Q to cycle quality"
+          >
+            Q:{quality}
           </div>
           {/* Hyperspace charge indicator */}
           <div className="relative w-8 h-8 flex items-center justify-center">
