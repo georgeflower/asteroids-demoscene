@@ -408,7 +408,7 @@ async function handleSubmit(req: Request, supabaseAdmin: any) {
 
 // --- Admin handlers ---
 
-async function handleAdminData(req: Request, supabaseAdmin: ReturnType<typeof createClient>) {
+async function handleAdminData(req: Request, supabaseAdmin: any) {
   const adminKey = req.headers.get('x-admin-key') || '';
   const expectedKey = Deno.env.get('ADMIN_SECRET_KEY') || '';
   if (!expectedKey || adminKey !== expectedKey) {
