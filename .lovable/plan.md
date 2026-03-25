@@ -1,16 +1,41 @@
 
 
-# Fix: Increase Score Plausibility Cap
+# Fix: Build Errors in Edge Function + Admin Monitor Network Error
 
-## Problem
+## Two Issues
 
-`MAX_SCORE_PER_SECOND = 150` in `supabase/functions/submit/index.ts` is too low. A legitimate player on wave 8 scored 109,400 in ~600s (~183 pts/sec). With score multipliers, boss bonuses, and dense enemy waves at higher levels, 150/sec is easily exceeded.
+1. **Build errors**: All 34 TypeScript errors stem from the Supabase client being strongly typed with no schema knowledge. `createClient()` without a type parameter infers `never` for all table operations. Fix: explicitly type the client as `any` schema.
+
+2. **Admin Monitor "NetworkError"**: The edge function fails to deploy because of the build errors above. Once deployed, admin login will work.
 
 ## Plan
 
-1. **Increase `MAX_SCORE_PER_SECOND`** from `150` to `300` in `supabase/functions/submit/index.ts`. This accommodates multiplier power-ups (2x scoring), boss kill bonuses, and dense late-game waves while still catching obvious cheats.
+### 1. Fix Supabase client typing in `supabase/functions/submit/index.ts`
 
-2. **Increase `MAX_SCORE_PER_LEVEL`** from `20000` to `40000` — same reasoning; higher waves with multipliers can exceed 20k per level.
+Change the `createClient` call to disable strict typing by passing a generic `any` type, and update all handler function signatures to accept `any` instead of `ReturnType<typeof createClient>`:
 
-One file changed: `supabase/functions/submit/index.ts` (two constant values).
+```typescript
+// At the top, define a type alias
+type SupabaseAdmin = ReturnType<typeof createClient>;
+
+// In the main handler, create with explicit any schema:
+const supabaseAdmin = createClient<any>(
+  Deno.env.get('SUPABASE_URL') ?? '',
+  Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+);
+```
+
+And update each handler signature from:
+```typescript
+async function handleStartSession(req: Request, supabaseAdmin: ReturnType<typeof createClient>)
+```
+to:
+```typescript
+async function handleStartSession(req: Request, supabaseAdmin: any)
+```
+
+This applies to all 6 handler functions: `handleStartSession`, `handleHeartbeat`, `handleSubmit`, `handleAdminData`, `handleAdminDelete`, plus any other handlers.
+
+### Files changed
+- `supabase/functions/submit/index.ts` — fix client typing (one `createClient<any>` call + `any` param type on all handlers)
 
