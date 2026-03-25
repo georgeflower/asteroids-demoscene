@@ -448,7 +448,7 @@ async function handleAdminData(req: Request, supabaseAdmin: any) {
   return successResponse({ scores, flags, auditLogs });
 }
 
-async function handleAdminDelete(req: Request, supabaseAdmin: ReturnType<typeof createClient>) {
+async function handleAdminDelete(req: Request, supabaseAdmin: any) {
   const adminKey = req.headers.get('x-admin-key') || '';
   const expectedKey = Deno.env.get('ADMIN_SECRET_KEY') || '';
   if (!expectedKey || adminKey !== expectedKey) {
