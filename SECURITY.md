@@ -102,7 +102,7 @@ Located in `/supabase/functions/submit/index.ts`
 A development-only admin dashboard is available in `src/components/AdminMonitor.tsx`.
 
 **Access — Debug Mode (recommended):**
-1. Press `Ctrl+Shift+D` on any page to toggle debug mode
+1. Press `X` on any page to toggle debug mode
 2. A small `⚙ DEBUG` badge appears in the bottom-right corner
 3. Click **OPEN ADMIN** in the debug panel to mount the admin dashboard
 4. Enter your `ADMIN_SECRET_KEY` when prompted

@@ -52,7 +52,7 @@ const App = () => {
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement)?.tagName;
-      if (e.ctrlKey && e.shiftKey && e.key === "D" && tag !== "INPUT" && tag !== "TEXTAREA") {
+      if ((e.key === "x" || e.key === "X") && tag !== "INPUT" && tag !== "TEXTAREA") {
         e.preventDefault();
         toggleDebug();
       }
