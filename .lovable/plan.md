@@ -1,41 +1,52 @@
 
 
-# Fix: Build Errors in Edge Function + Admin Monitor Network Error
+# Fix: RPC Function Callable by Anyone (The Actual Exploit)
 
-## Two Issues
+## What ZOI Did
 
-1. **Build errors**: All 34 TypeScript errors stem from the Supabase client being strongly typed with no schema knowledge. `createClient()` without a type parameter infers `never` for all table operations. Fix: explicitly type the client as `any` schema.
+The attacker used the **public anon key** (which is intentionally public in every Supabase+Vite app — it ships in the browser bundle) to call the `insert_score_with_audit` database function directly:
 
-2. **Admin Monitor "NetworkError"**: The edge function fails to deploy because of the build errors above. Once deployed, admin login will work.
-
-## Plan
-
-### 1. Fix Supabase client typing in `supabase/functions/submit/index.ts`
-
-Change the `createClient` call to disable strict typing by passing a generic `any` type, and update all handler function signatures to accept `any` instead of `ReturnType<typeof createClient>`:
-
-```typescript
-// At the top, define a type alias
-type SupabaseAdmin = ReturnType<typeof createClient>;
-
-// In the main handler, create with explicit any schema:
-const supabaseAdmin = createClient<any>(
-  Deno.env.get('SUPABASE_URL') ?? '',
-  Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
-);
+```javascript
+supabase.rpc('insert_score_with_audit', {
+  p_initials: 'ZOI',
+  p_score: 999999,
+  p_level: 1,
+  p_time_played_seconds: 10,
+  p_source: 'fake',
+  p_session_token: 'anything'
+})
 ```
 
-And update each handler signature from:
-```typescript
-async function handleStartSession(req: Request, supabaseAdmin: ReturnType<typeof createClient>)
-```
-to:
-```typescript
-async function handleStartSession(req: Request, supabaseAdmin: any)
+This bypasses the edge function entirely — no session validation, no heartbeat checks, no rate limiting. The function is `SECURITY DEFINER`, so it runs with full owner privileges regardless of who calls it.
+
+**The anon key is not the problem.** It is always public. The problem is that the RPC function has `EXECUTE` granted to `PUBLIC`.
+
+## Fix
+
+One database migration to revoke public access:
+
+```sql
+REVOKE EXECUTE ON FUNCTION public.insert_score_with_audit FROM PUBLIC, anon, authenticated;
 ```
 
-This applies to all 6 handler functions: `handleStartSession`, `handleHeartbeat`, `handleSubmit`, `handleAdminData`, `handleAdminDelete`, plus any other handlers.
+After this, only the **service role** (used by the edge function) can call the function. Anyone trying `supabase.rpc('insert_score_with_audit', ...)` with the anon key will get a permission error.
+
+Also revoke the cleanup function for good measure:
+
+```sql
+REVOKE EXECUTE ON FUNCTION public.cleanup_old_sessions FROM PUBLIC, anon, authenticated;
+```
 
 ### Files changed
-- `supabase/functions/submit/index.ts` — fix client typing (one `createClient<any>` call + `any` param type on all handlers)
+- New migration — two `REVOKE EXECUTE` statements
+
+## Technical Details
+
+| Before | After |
+|--------|-------|
+| `insert_score_with_audit` callable by anyone via `supabase.rpc()` | Only service role (edge function) can call it |
+| Attacker bypasses all validation | RPC calls from browser return permission denied |
+| Heartbeats, session checks irrelevant | All submissions must go through edge function |
+
+No code changes needed. The edge function already uses the service role key, so it will continue working.
 
