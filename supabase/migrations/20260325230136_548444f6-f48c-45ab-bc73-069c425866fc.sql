@@ -1,0 +1,2 @@
+REVOKE EXECUTE ON FUNCTION public.insert_score_with_audit(text, integer, integer, integer, text, text) FROM PUBLIC, anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.cleanup_old_sessions() FROM PUBLIC, anon, authenticated;
