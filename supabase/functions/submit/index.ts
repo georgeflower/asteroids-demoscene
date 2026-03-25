@@ -73,7 +73,7 @@ function successResponse(data: Record<string, unknown>) {
 
 // --- Handlers ---
 
-async function handleStartSession(req: Request, supabaseAdmin: ReturnType<typeof createClient>) {
+async function handleStartSession(req: Request, supabaseAdmin: any) {
   if (!validateOrigin(req)) {
     return errorResponse('Forbidden', 403);
   }
@@ -90,7 +90,7 @@ async function handleStartSession(req: Request, supabaseAdmin: ReturnType<typeof
   return successResponse({ sessionToken: token });
 }
 
-async function handleHeartbeat(req: Request, supabaseAdmin: ReturnType<typeof createClient>) {
+async function handleHeartbeat(req: Request, supabaseAdmin: any) {
   if (!validateOrigin(req)) {
     return errorResponse('Forbidden', 403);
   }
@@ -161,7 +161,7 @@ async function handleHeartbeat(req: Request, supabaseAdmin: ReturnType<typeof cr
   return successResponse({ ok: true });
 }
 
-async function handleSubmit(req: Request, supabaseAdmin: ReturnType<typeof createClient>) {
+async function handleSubmit(req: Request, supabaseAdmin: any) {
   if (!validateOrigin(req)) {
     return errorResponse('Forbidden', 403);
   }
@@ -408,7 +408,7 @@ async function handleSubmit(req: Request, supabaseAdmin: ReturnType<typeof creat
 
 // --- Admin handlers ---
 
-async function handleAdminData(req: Request, supabaseAdmin: ReturnType<typeof createClient>) {
+async function handleAdminData(req: Request, supabaseAdmin: any) {
   const adminKey = req.headers.get('x-admin-key') || '';
   const expectedKey = Deno.env.get('ADMIN_SECRET_KEY') || '';
   if (!expectedKey || adminKey !== expectedKey) {
@@ -448,7 +448,7 @@ async function handleAdminData(req: Request, supabaseAdmin: ReturnType<typeof cr
   return successResponse({ scores, flags, auditLogs });
 }
 
-async function handleAdminDelete(req: Request, supabaseAdmin: ReturnType<typeof createClient>) {
+async function handleAdminDelete(req: Request, supabaseAdmin: any) {
   const adminKey = req.headers.get('x-admin-key') || '';
   const expectedKey = Deno.env.get('ADMIN_SECRET_KEY') || '';
   if (!expectedKey || adminKey !== expectedKey) {
