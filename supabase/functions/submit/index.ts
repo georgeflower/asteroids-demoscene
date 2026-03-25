@@ -90,7 +90,7 @@ async function handleStartSession(req: Request, supabaseAdmin: any) {
   return successResponse({ sessionToken: token });
 }
 
-async function handleHeartbeat(req: Request, supabaseAdmin: ReturnType<typeof createClient>) {
+async function handleHeartbeat(req: Request, supabaseAdmin: any) {
   if (!validateOrigin(req)) {
     return errorResponse('Forbidden', 403);
   }
