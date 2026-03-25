@@ -73,7 +73,7 @@ function successResponse(data: Record<string, unknown>) {
 
 // --- Handlers ---
 
-async function handleStartSession(req: Request, supabaseAdmin: ReturnType<typeof createClient>) {
+async function handleStartSession(req: Request, supabaseAdmin: any) {
   if (!validateOrigin(req)) {
     return errorResponse('Forbidden', 403);
   }
