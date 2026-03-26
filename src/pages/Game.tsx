@@ -671,6 +671,15 @@ const Game = () => {
       const timePlayedSeconds = Math.floor((Date.now() - gameStartTimeRef.current) / 1000);
       const currentWave = gameStateRef.current?.wave ?? 1;
 
+      // Compute HMAC for submission
+      let hmac: string | undefined;
+      if (sessionNonceRef.current) {
+        hmac = await computeHMAC(
+          sessionNonceRef.current,
+          `${gameSessionTokenRef.current}|${score}|${currentWave}`
+        );
+      }
+
       try {
         const response = await fetch(
           `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/submit/submit`,
@@ -688,6 +697,8 @@ const Game = () => {
               level: currentWave,
               timePlayedSeconds,
               source: 'game_client',
+              powNonce: powSolutionRef.current,
+              hmac,
             }),
           }
         );
