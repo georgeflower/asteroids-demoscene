@@ -332,6 +332,9 @@ const Game = () => {
   const gameSessionTokenRef = useRef<string | null>(null);
   const gameStartTimeRef = useRef<number>(Date.now());
   const heartbeatIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const powSolutionRef = useRef<number | null>(null);
+  const sessionNonceRef = useRef<string | null>(null);
+  const gameStatsRef = useRef({ asteroidsDestroyed: 0, bulletsFired: 0 });
   const [isTouchDevice, setIsTouchDevice] = useState(false);
   const [nowPlaying, setNowPlaying] = useState<{ artist: string; title: string } | null>(null);
   const nowPlayingRef = useRef<{ artist: string; title: string } | null>(null);
@@ -525,6 +528,41 @@ const Game = () => {
     return [];
   }, []);
 
+  // --- Crypto helpers for anti-cheat ---
+  const solvePoW = useCallback(async (challenge: string, difficulty: number): Promise<number> => {
+    let nonce = 0;
+    while (true) {
+      const data = new TextEncoder().encode(challenge + nonce.toString());
+      const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+      const hashArray = new Uint8Array(hashBuffer);
+      let zeroBits = 0;
+      let found = false;
+      for (const byte of hashArray) {
+        if (byte === 0) { zeroBits += 8; }
+        else {
+          for (let bit = 7; bit >= 0; bit--) {
+            if ((byte & (1 << bit)) === 0) zeroBits++;
+            else { found = true; break; }
+          }
+        }
+        if (found || zeroBits >= difficulty) break;
+      }
+      if (zeroBits >= difficulty) return nonce;
+      nonce++;
+      // Yield to main thread every 1000 iterations
+      if (nonce % 1000 === 0) await new Promise(r => setTimeout(r, 0));
+    }
+  }, []);
+
+  const computeHMAC = useCallback(async (key: string, message: string): Promise<string> => {
+    const enc = new TextEncoder();
+    const cryptoKey = await crypto.subtle.importKey(
+      'raw', enc.encode(key), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']
+    );
+    const sig = await crypto.subtle.sign('HMAC', cryptoKey, enc.encode(message));
+    return Array.from(new Uint8Array(sig)).map(b => b.toString(16).padStart(2, '0')).join('');
+  }, []);
+
   const startGameSession = useCallback(async () => {
     try {
       const response = await fetch(
@@ -545,18 +583,39 @@ const Game = () => {
       
       const data = await response.json();
       gameSessionTokenRef.current = data.sessionToken;
+      sessionNonceRef.current = data.sessionNonce || null;
+      gameStatsRef.current = { asteroidsDestroyed: 0, bulletsFired: 0 };
+      powSolutionRef.current = null;
+
+      // Solve PoW challenge in background
+      if (data.challenge && data.difficulty) {
+        solvePoW(data.challenge, data.difficulty).then(nonce => {
+          powSolutionRef.current = nonce;
+        });
+      }
+
       return data.sessionToken;
     } catch (error) {
       console.error("Error starting game session:", error);
       return null;
     }
-  }, []);
+  }, [solvePoW]);
 
   const sendHeartbeat = useCallback(async () => {
     const token = gameSessionTokenRef.current;
     const state = gameStateRef.current;
     if (!token || !state || state.gameOver || state.paused) return;
     try {
+      const score = state.score;
+      const level = state.wave;
+      const { asteroidsDestroyed, bulletsFired } = gameStatsRef.current;
+
+      // Compute HMAC if we have a session nonce
+      let hmac: string | undefined;
+      if (sessionNonceRef.current) {
+        hmac = await computeHMAC(sessionNonceRef.current, `${token}|${score}|${level}`);
+      }
+
       await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/submit/heartbeat`,
         {
@@ -567,15 +626,18 @@ const Game = () => {
           },
           body: JSON.stringify({
             gameSessionToken: token,
-            score: state.score,
-            level: state.wave,
+            score,
+            level,
+            asteroidsDestroyed,
+            bulletsFired,
+            hmac,
           }),
         }
       );
     } catch (_) {
       // Non-blocking: heartbeat failure doesn't affect gameplay
     }
-  }, []);
+  }, [computeHMAC]);
 
   const startHeartbeatInterval = useCallback(() => {
     if (heartbeatIntervalRef.current) {
@@ -609,6 +671,15 @@ const Game = () => {
       const timePlayedSeconds = Math.floor((Date.now() - gameStartTimeRef.current) / 1000);
       const currentWave = gameStateRef.current?.wave ?? 1;
 
+      // Compute HMAC for submission
+      let hmac: string | undefined;
+      if (sessionNonceRef.current) {
+        hmac = await computeHMAC(
+          sessionNonceRef.current,
+          `${gameSessionTokenRef.current}|${score}|${currentWave}`
+        );
+      }
+
       try {
         const response = await fetch(
           `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/submit/submit`,
@@ -626,6 +697,8 @@ const Game = () => {
               level: currentWave,
               timePlayedSeconds,
               source: 'game_client',
+              powNonce: powSolutionRef.current,
+              hmac,
             }),
           }
         );
@@ -663,7 +736,7 @@ const Game = () => {
         return false;
       }
     },
-    [loadLeaderboard],
+    [loadLeaderboard, computeHMAC],
   );
 
   const isHighScore = useCallback(
@@ -1392,6 +1465,7 @@ const Game = () => {
       });
       soundEffects.shoot();
       haptics.light();
+      gameStatsRef.current.bulletsFired++;
     }
   }, []);
 
@@ -2482,6 +2556,7 @@ const Game = () => {
           const pts = ASTEROID_POINTS[asteroid.size] * multiplier;
           state.score += pts;
           setDisplayScore(state.score);
+          gameStatsRef.current.asteroidsDestroyed++;
 
           const aColor = theme.asteroids[asteroid.size === "large" ? 0 : asteroid.size === "medium" ? 1 : 2];
           spawnFloatingText(asteroid.pos, `+${pts}`, aColor, 14);

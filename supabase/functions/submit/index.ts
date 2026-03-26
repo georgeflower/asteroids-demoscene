@@ -14,12 +14,17 @@ interface ScoreSubmission {
   level?: number;
   timePlayedSeconds?: number;
   source?: string;
+  powNonce?: number;
+  hmac?: string;
 }
 
 interface HeartbeatPayload {
   gameSessionToken: string;
   score: number;
   level: number;
+  asteroidsDestroyed?: number;
+  bulletsFired?: number;
+  hmac?: string;
 }
 
 // --- Constants ---
@@ -31,16 +36,31 @@ const MAX_SCORE_PER_SECOND = 1000;
 const MAX_SCORE_PER_LEVEL = 75000;
 const MAX_LEVEL = 30;
 const MIN_PLAY_TIME_SECONDS = 10;
-const MIN_HEARTBEAT_INTERVAL_MS = 10000; // 10 seconds minimum between heartbeats
-const HEARTBEAT_SCORE_THRESHOLD = 50000; // Require heartbeats for scores above this
-const MIN_CHECKPOINTS_FOR_HIGH_SCORE = 2; // Minimum checkpoints needed for high scores
-const MAX_CHECKPOINT_GAP_SECONDS = 90; // Max allowed gap between checkpoints
-const MAX_SCORE_JUMP_PER_SECOND = 1000; // Max score increase between checkpoints
-const MAX_LEVEL_JUMP = 5; // Max wave jump between consecutive checkpoints
-const HIGH_SCORE_MIN_PLAY_SECONDS = 300; // 50k+ scores require at least 300s of play
-const HIGH_SCORE_DURATION_THRESHOLD = 50000; // Score threshold requiring extended play
-const MAX_CHECKPOINT_SPAN_RATIO = 0.15; // Flag if checkpoints span < 15% of session duration
-const MAX_CHECKPOINT_START_RATIO = 0.10; // Flag if checkpoints start within first 10% of session
+const MIN_HEARTBEAT_INTERVAL_MS = 10000;
+const HEARTBEAT_SCORE_THRESHOLD = 50000;
+const MAX_CHECKPOINT_GAP_SECONDS = 90;
+const MAX_SCORE_JUMP_PER_SECOND = 1000;
+const MAX_LEVEL_JUMP = 5;
+const HIGH_SCORE_MIN_PLAY_SECONDS = 300;
+const HIGH_SCORE_DURATION_THRESHOLD = 50000;
+const MAX_CHECKPOINT_SPAN_RATIO = 0.15;
+const MAX_CHECKPOINT_START_RATIO = 0.10;
+const POW_DIFFICULTY = 18; // Number of leading zero bits required
+
+// Scaled checkpoint requirements
+const CHECKPOINT_REQUIREMENTS = [
+  { minScore: 500000, minCheckpoints: 20 },
+  { minScore: 200000, minCheckpoints: 10 },
+  { minScore: 100000, minCheckpoints: 6 },
+  { minScore: 50000, minCheckpoints: 3 },
+];
+
+function getMinCheckpoints(score: number): number {
+  for (const req of CHECKPOINT_REQUIREMENTS) {
+    if (score >= req.minScore) return req.minCheckpoints;
+  }
+  return 0;
+}
 
 const ALLOWED_ORIGINS = [
   'https://asteroids-demoscene.lovable.app',
@@ -71,6 +91,46 @@ function successResponse(data: Record<string, unknown>) {
   );
 }
 
+// --- Crypto helpers ---
+
+async function verifyPoW(challenge: string, nonce: number, difficulty: number): Promise<boolean> {
+  const data = new TextEncoder().encode(challenge + nonce.toString());
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  const hashArray = new Uint8Array(hashBuffer);
+  // Check leading zero bits
+  let zeroBits = 0;
+  for (const byte of hashArray) {
+    if (byte === 0) {
+      zeroBits += 8;
+    } else {
+      // Count leading zeros in this byte
+      for (let bit = 7; bit >= 0; bit--) {
+        if ((byte & (1 << bit)) === 0) {
+          zeroBits++;
+        } else {
+          return zeroBits >= difficulty;
+        }
+      }
+    }
+    if (zeroBits >= difficulty) return true;
+  }
+  return zeroBits >= difficulty;
+}
+
+async function computeHMAC(key: string, message: string): Promise<string> {
+  const enc = new TextEncoder();
+  const cryptoKey = await crypto.subtle.importKey(
+    'raw', enc.encode(key), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']
+  );
+  const sig = await crypto.subtle.sign('HMAC', cryptoKey, enc.encode(message));
+  return Array.from(new Uint8Array(sig)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+async function verifyHMAC(key: string, message: string, expectedHmac: string): Promise<boolean> {
+  const computed = await computeHMAC(key, message);
+  return computed === expectedHmac;
+}
+
 // --- Handlers ---
 
 async function handleStartSession(req: Request, supabaseAdmin: any) {
@@ -79,15 +139,29 @@ async function handleStartSession(req: Request, supabaseAdmin: any) {
   }
 
   const token = crypto.randomUUID();
+  const challenge = crypto.randomUUID() + crypto.randomUUID(); // 64-char random challenge
+  const sessionNonce = crypto.randomUUID(); // For HMAC signing
+  const difficulty = POW_DIFFICULTY;
+
   try { await supabaseAdmin.rpc('cleanup_old_sessions'); } catch (_) { /* ignore */ }
 
-  const { error } = await supabaseAdmin.from('game_sessions').insert({ token });
+  const { error } = await supabaseAdmin.from('game_sessions').insert({
+    token,
+    pow_challenge: challenge,
+    pow_difficulty: difficulty,
+    session_nonce: sessionNonce,
+  });
   if (error) {
     console.error('Failed to create session:', error);
     return errorResponse('Failed to create session', 500);
   }
 
-  return successResponse({ sessionToken: token });
+  return successResponse({
+    sessionToken: token,
+    challenge,
+    difficulty,
+    sessionNonce,
+  });
 }
 
 async function handleHeartbeat(req: Request, supabaseAdmin: any) {
@@ -124,10 +198,23 @@ async function handleHeartbeat(req: Request, supabaseAdmin: any) {
     return errorResponse('Session expired', 403);
   }
 
+  // Verify HMAC signature
+  if (session.session_nonce) {
+    if (!payload.hmac) {
+      return errorResponse('Missing signature', 400);
+    }
+    const message = `${payload.gameSessionToken}|${payload.score}|${payload.level}`;
+    const valid = await verifyHMAC(session.session_nonce, message, payload.hmac);
+    if (!valid) {
+      console.log(`HMAC verification failed for heartbeat: token=${payload.gameSessionToken}`);
+      return errorResponse('Invalid signature', 403);
+    }
+  }
+
   // Rate limit heartbeats
   const { data: lastCheckpoint } = await supabaseAdmin
     .from('game_session_checkpoints')
-    .select('reported_at, score')
+    .select('reported_at, score, asteroids_destroyed, bullets_fired')
     .eq('session_token', payload.gameSessionToken)
     .order('reported_at', { ascending: false })
     .limit(1)
@@ -142,15 +229,28 @@ async function handleHeartbeat(req: Request, supabaseAdmin: any) {
     if (payload.score < lastCheckpoint.score) {
       return errorResponse('Invalid score progression', 400);
     }
+    // Enriched metrics must be monotonically increasing
+    if (payload.asteroidsDestroyed !== undefined && lastCheckpoint.asteroids_destroyed !== null) {
+      if (payload.asteroidsDestroyed < lastCheckpoint.asteroids_destroyed) {
+        return errorResponse('Invalid metric progression', 400);
+      }
+    }
+    if (payload.bulletsFired !== undefined && lastCheckpoint.bullets_fired !== null) {
+      if (payload.bulletsFired < lastCheckpoint.bullets_fired) {
+        return errorResponse('Invalid metric progression', 400);
+      }
+    }
   }
 
-  // Insert checkpoint
+  // Insert checkpoint with enriched data
   const { error: insertError } = await supabaseAdmin
     .from('game_session_checkpoints')
     .insert({
       session_token: payload.gameSessionToken,
       score: payload.score,
       level: payload.level,
+      asteroids_destroyed: payload.asteroidsDestroyed ?? 0,
+      bullets_fired: payload.bulletsFired ?? 0,
     });
 
   if (insertError) {
@@ -223,6 +323,31 @@ async function handleSubmit(req: Request, supabaseAdmin: any) {
     }
   }
 
+  // --- Proof-of-Work verification ---
+  if (session.pow_challenge && session.pow_difficulty) {
+    if (submission.powNonce === undefined || submission.powNonce === null) {
+      return errorResponse('Missing proof-of-work solution', 403);
+    }
+    const powValid = await verifyPoW(session.pow_challenge, submission.powNonce, session.pow_difficulty);
+    if (!powValid) {
+      console.log(`PoW verification failed: token=${submission.gameSessionToken}, nonce=${submission.powNonce}`);
+      return errorResponse('Invalid proof-of-work solution', 403);
+    }
+  }
+
+  // --- HMAC verification ---
+  if (session.session_nonce) {
+    if (!submission.hmac) {
+      return errorResponse('Missing signature', 400);
+    }
+    const message = `${submission.gameSessionToken}|${submission.score}|${submission.level ?? 1}`;
+    const valid = await verifyHMAC(session.session_nonce, message, submission.hmac);
+    if (!valid) {
+      console.log(`HMAC verification failed for submit: token=${submission.gameSessionToken}`);
+      return errorResponse('Invalid signature', 403);
+    }
+  }
+
   // --- Score plausibility ---
   const serverTimePlayedSeconds = Math.floor(sessionAge / 1000);
 
@@ -230,7 +355,6 @@ async function handleSubmit(req: Request, supabaseAdmin: any) {
     return errorResponse('Game duration too short', 403);
   }
 
-  // High-score minimum play duration: scores of 50k+ require at least 300s of play
   if (submission.score >= HIGH_SCORE_DURATION_THRESHOLD && serverTimePlayedSeconds < HIGH_SCORE_MIN_PLAY_SECONDS) {
     console.log(`High-score duration fail: score=${submission.score}, time=${serverTimePlayedSeconds}s, min=${HIGH_SCORE_MIN_PLAY_SECONDS}s`);
     return errorResponse('Insufficient play duration for this score', 403);
@@ -255,8 +379,9 @@ async function handleSubmit(req: Request, supabaseAdmin: any) {
 
   // --- Heartbeat checkpoint validation ---
   const suspiciousFlags: Array<{ flag_type: string; severity: string; reasoning: string }> = [];
+  const minCheckpoints = getMinCheckpoints(submission.score);
 
-  if (submission.score >= HEARTBEAT_SCORE_THRESHOLD) {
+  if (minCheckpoints > 0) {
     const { data: checkpoints, error: cpError } = await supabaseAdmin
       .from('game_session_checkpoints')
       .select('*')
@@ -268,9 +393,9 @@ async function handleSubmit(req: Request, supabaseAdmin: any) {
       return errorResponse('Validation error', 500);
     }
 
-    // Require minimum checkpoints for high scores
-    if (!checkpoints || checkpoints.length < MIN_CHECKPOINTS_FOR_HIGH_SCORE) {
-      console.log(`Checkpoint fail: score=${submission.score}, checkpoints=${checkpoints?.length ?? 0}`);
+    // Scaled checkpoint requirement
+    if (!checkpoints || checkpoints.length < minCheckpoints) {
+      console.log(`Checkpoint fail: score=${submission.score}, checkpoints=${checkpoints?.length ?? 0}, required=${minCheckpoints}`);
       return errorResponse('Insufficient gameplay data', 403);
     }
 
@@ -280,25 +405,30 @@ async function handleSubmit(req: Request, supabaseAdmin: any) {
       const curr = checkpoints[i];
       const gapSeconds = (new Date(curr.reported_at).getTime() - new Date(prev.reported_at).getTime()) / 1000;
 
-      // Check for too-large gaps (player should be sending heartbeats)
       if (gapSeconds > MAX_CHECKPOINT_GAP_SECONDS) {
         console.log(`Checkpoint gap too large: ${gapSeconds}s between checkpoints ${i-1} and ${i}`);
         return errorResponse('Gameplay data gap detected', 403);
       }
 
-      // Wave consistency: reject impossible level jumps between checkpoints
       const levelJump = curr.level - prev.level;
       if (levelJump > MAX_LEVEL_JUMP || levelJump < 0) {
         console.log(`Wave jump invalid: ${levelJump} levels between checkpoints ${i-1} and ${i}`);
         return errorResponse('Impossible wave progression detected', 403);
       }
 
-      // Check score jump between checkpoints
       const scoreDelta = curr.score - prev.score;
       const maxJump = gapSeconds * MAX_SCORE_JUMP_PER_SECOND;
       if (scoreDelta > maxJump) {
         console.log(`Score jump too large: +${scoreDelta} in ${gapSeconds}s (max ${maxJump})`);
         return errorResponse('Score progression anomaly', 403);
+      }
+
+      // Validate enriched metrics monotonicity
+      if (curr.asteroids_destroyed < prev.asteroids_destroyed) {
+        return errorResponse('Invalid metric progression in checkpoints', 403);
+      }
+      if (curr.bullets_fired < prev.bullets_fired) {
+        return errorResponse('Invalid metric progression in checkpoints', 403);
       }
     }
 
@@ -311,8 +441,21 @@ async function handleSubmit(req: Request, supabaseAdmin: any) {
       return errorResponse('Final score anomaly', 403);
     }
 
-    // Checkpoint clustering: flag if all checkpoints are bunched in the first 15% of the session,
-    // starting within the first 10% of session time.
+    // Enriched metric consistency: score should correlate with asteroids destroyed
+    const totalAsteroidsDestroyed = lastCp.asteroids_destroyed || 0;
+    if (totalAsteroidsDestroyed > 0 && submission.score > 0) {
+      // Average points per asteroid should be within reasonable bounds (20-2000)
+      const avgPointsPerAsteroid = submission.score / totalAsteroidsDestroyed;
+      if (avgPointsPerAsteroid > 2000) {
+        suspiciousFlags.push({
+          flag_type: 'score_metric_mismatch',
+          severity: 'medium',
+          reasoning: `Score/asteroid ratio ${avgPointsPerAsteroid.toFixed(0)} exceeds reasonable max of 2000`,
+        });
+      }
+    }
+
+    // Checkpoint clustering check
     if (checkpoints.length >= 2) {
       const firstCpTime = new Date(checkpoints[0].reported_at).getTime();
       const lastCpTime = new Date(checkpoints[checkpoints.length - 1].reported_at).getTime();
@@ -328,7 +471,7 @@ async function handleSubmit(req: Request, supabaseAdmin: any) {
       }
     }
 
-    // Temporal anomaly: same initials+score submitted from different sessions recently
+    // Temporal anomaly
     const fiveMinutesAgo = new Date(Date.now() - 300000).toISOString();
     const { data: recentSame } = await supabaseAdmin
       .from('current_high_scores')
