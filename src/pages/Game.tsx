@@ -528,6 +528,41 @@ const Game = () => {
     return [];
   }, []);
 
+  // --- Crypto helpers for anti-cheat ---
+  const solvePoW = useCallback(async (challenge: string, difficulty: number): Promise<number> => {
+    let nonce = 0;
+    while (true) {
+      const data = new TextEncoder().encode(challenge + nonce.toString());
+      const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+      const hashArray = new Uint8Array(hashBuffer);
+      let zeroBits = 0;
+      let found = false;
+      for (const byte of hashArray) {
+        if (byte === 0) { zeroBits += 8; }
+        else {
+          for (let bit = 7; bit >= 0; bit--) {
+            if ((byte & (1 << bit)) === 0) zeroBits++;
+            else { found = true; break; }
+          }
+        }
+        if (found || zeroBits >= difficulty) break;
+      }
+      if (zeroBits >= difficulty) return nonce;
+      nonce++;
+      // Yield to main thread every 1000 iterations
+      if (nonce % 1000 === 0) await new Promise(r => setTimeout(r, 0));
+    }
+  }, []);
+
+  const computeHMAC = useCallback(async (key: string, message: string): Promise<string> => {
+    const enc = new TextEncoder();
+    const cryptoKey = await crypto.subtle.importKey(
+      'raw', enc.encode(key), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']
+    );
+    const sig = await crypto.subtle.sign('HMAC', cryptoKey, enc.encode(message));
+    return Array.from(new Uint8Array(sig)).map(b => b.toString(16).padStart(2, '0')).join('');
+  }, []);
+
   const startGameSession = useCallback(async () => {
     try {
       const response = await fetch(
@@ -548,12 +583,23 @@ const Game = () => {
       
       const data = await response.json();
       gameSessionTokenRef.current = data.sessionToken;
+      sessionNonceRef.current = data.sessionNonce || null;
+      gameStatsRef.current = { asteroidsDestroyed: 0, bulletsFired: 0 };
+      powSolutionRef.current = null;
+
+      // Solve PoW challenge in background
+      if (data.challenge && data.difficulty) {
+        solvePoW(data.challenge, data.difficulty).then(nonce => {
+          powSolutionRef.current = nonce;
+        });
+      }
+
       return data.sessionToken;
     } catch (error) {
       console.error("Error starting game session:", error);
       return null;
     }
-  }, []);
+  }, [solvePoW]);
 
   const sendHeartbeat = useCallback(async () => {
     const token = gameSessionTokenRef.current;
