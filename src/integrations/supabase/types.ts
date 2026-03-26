@@ -46,6 +46,8 @@ export type Database = {
       }
       game_session_checkpoints: {
         Row: {
+          asteroids_destroyed: number | null
+          bullets_fired: number | null
           id: string
           level: number
           reported_at: string
@@ -53,6 +55,8 @@ export type Database = {
           session_token: string
         }
         Insert: {
+          asteroids_destroyed?: number | null
+          bullets_fired?: number | null
           id?: string
           level?: number
           reported_at?: string
@@ -60,6 +64,8 @@ export type Database = {
           session_token: string
         }
         Update: {
+          asteroids_destroyed?: number | null
+          bullets_fired?: number | null
           id?: string
           level?: number
           reported_at?: string
@@ -73,6 +79,9 @@ export type Database = {
           expired: boolean
           id: string
           last_submission_at: string | null
+          pow_challenge: string | null
+          pow_difficulty: number | null
+          session_nonce: string | null
           started_at: string
           submission_count: number
           token: string
@@ -81,6 +90,9 @@ export type Database = {
           expired?: boolean
           id?: string
           last_submission_at?: string | null
+          pow_challenge?: string | null
+          pow_difficulty?: number | null
+          session_nonce?: string | null
           started_at?: string
           submission_count?: number
           token: string
@@ -89,6 +101,9 @@ export type Database = {
           expired?: boolean
           id?: string
           last_submission_at?: string | null
+          pow_challenge?: string | null
+          pow_difficulty?: number | null
+          session_nonce?: string | null
           started_at?: string
           submission_count?: number
           token?: string
