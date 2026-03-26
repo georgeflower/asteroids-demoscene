@@ -12,7 +12,8 @@ dist
 dist-ssr
 *.local
 
-# Environment variables - keep local overrides private, but commit .env (public Vite vars)
+# Environment variables
+.env
 .env.local
 .env.*.local
 
