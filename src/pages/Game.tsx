@@ -332,6 +332,9 @@ const Game = () => {
   const gameSessionTokenRef = useRef<string | null>(null);
   const gameStartTimeRef = useRef<number>(Date.now());
   const heartbeatIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const powSolutionRef = useRef<number | null>(null);
+  const sessionNonceRef = useRef<string | null>(null);
+  const gameStatsRef = useRef({ asteroidsDestroyed: 0, bulletsFired: 0 });
   const [isTouchDevice, setIsTouchDevice] = useState(false);
   const [nowPlaying, setNowPlaying] = useState<{ artist: string; title: string } | null>(null);
   const nowPlayingRef = useRef<{ artist: string; title: string } | null>(null);
