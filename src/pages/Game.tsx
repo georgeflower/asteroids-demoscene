@@ -606,6 +606,16 @@ const Game = () => {
     const state = gameStateRef.current;
     if (!token || !state || state.gameOver || state.paused) return;
     try {
+      const score = state.score;
+      const level = state.wave;
+      const { asteroidsDestroyed, bulletsFired } = gameStatsRef.current;
+
+      // Compute HMAC if we have a session nonce
+      let hmac: string | undefined;
+      if (sessionNonceRef.current) {
+        hmac = await computeHMAC(sessionNonceRef.current, `${token}|${score}|${level}`);
+      }
+
       await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/submit/heartbeat`,
         {
@@ -616,15 +626,18 @@ const Game = () => {
           },
           body: JSON.stringify({
             gameSessionToken: token,
-            score: state.score,
-            level: state.wave,
+            score,
+            level,
+            asteroidsDestroyed,
+            bulletsFired,
+            hmac,
           }),
         }
       );
     } catch (_) {
       // Non-blocking: heartbeat failure doesn't affect gameplay
     }
-  }, []);
+  }, [computeHMAC]);
 
   const startHeartbeatInterval = useCallback(() => {
     if (heartbeatIntervalRef.current) {
