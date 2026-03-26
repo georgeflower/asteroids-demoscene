@@ -1465,6 +1465,7 @@ const Game = () => {
       });
       soundEffects.shoot();
       haptics.light();
+      gameStatsRef.current.bulletsFired++;
     }
   }, []);
 
