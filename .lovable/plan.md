@@ -18,7 +18,7 @@ Re-create the `.env` file with the original contents:
 
 ```env
 VITE_SUPABASE_PROJECT_ID="ctrucihctxgwzprpaylb"
-VITE_SUPABASE_PUBLISHABLE_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN0cnVjaWhjdHhnd3pwcnBheWxiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMwMDMzMTAsImV4cCI6MjA4ODU3OTMxMH0.Pq0Wsa-eiWusRDcJE2FhmoBauZaZGOiMoLR8rKh-uOI"
+VITE_SUPABASE_PUBLISHABLE_KEY="<your-supabase-anon-key>"
 VITE_SUPABASE_URL="https://ctrucihctxgwzprpaylb.supabase.co"
 ```
 
