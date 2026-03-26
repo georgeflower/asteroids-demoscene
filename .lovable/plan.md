@@ -14,7 +14,7 @@ Restore the `.env` file with the three public variables. These are not secrets �
 
 ### Step 1: Restore `.env` file
 
-Re-create the `.env` file with the original contents:
+Re-create the `.env` file with the following contents, replacing `<your-supabase-anon-key>` with your actual Supabase anon key (found in the Supabase dashboard under **Project Settings → API → Project API keys → anon / public**):
 
 ```env
 VITE_SUPABASE_PROJECT_ID="ctrucihctxgwzprpaylb"
