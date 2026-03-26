@@ -116,6 +116,17 @@ Or via the Supabase Dashboard:
 
 The key you set here is what you will type into the **Admin key** prompt in the dashboard.
 
+#### Authentication Model
+
+The admin dashboard uses **server-side session tokens** for authentication:
+
+1. Admin enters the key → `POST /admin-login` on the Edge Function validates it and issues a short-lived token (1-hour TTL).
+2. The raw admin key is **never stored** — it is discarded immediately after login.
+3. The session token is kept **in React state only** (not in `localStorage` or cookies), so it is not accessible to other scripts and does not survive page reloads.
+4. On logout, `POST /admin-logout` invalidates the token server-side.
+
+This prevents the admin key from being stolen via XSS attacks.
+
 **Access — Debug Mode (recommended):**
 1. Press `X` on any page to toggle debug mode
 2. A small `⚙ DEBUG` badge appears in the bottom-right corner

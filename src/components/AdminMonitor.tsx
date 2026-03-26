@@ -1,9 +1,9 @@
 /**
  * AdminMonitor — Development-only admin dashboard for leaderboard oversight.
  *
- * Access is gated by two localStorage keys:
- *   localStorage.setItem('asteroids_admin', 'true')
- *   localStorage.setItem('asteroids_admin_key', '<ADMIN_SECRET_KEY env value>')
+ * Access is gated by the localStorage flag 'asteroids_admin' = 'true'.
+ * Authentication uses a server-side session token (never stored in localStorage).
+ * The raw admin key is only used once during login and never persisted.
  *
  * Features:
  *  - Real-time submission log with severity-highlighted flags
@@ -12,7 +12,8 @@
  *  - Export suspicious submissions as CSV
  */
 
-import { useState, useEffect, useCallback, Fragment } from "react";
+import { useState, useCallback, Fragment } from "react";
+import { adminLogin, adminLogout, adminHeaders, SUBMIT_URL } from "@/utils/adminAuth";
 
 interface Score {
   id: string;
@@ -41,10 +42,6 @@ interface AuditLog {
   created_at: string;
 }
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
-const SUBMIT_URL = `${SUPABASE_URL}/functions/v1/submit`;
-const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
-
 const severityColor: Record<string, string> = {
   low: "#90EE90",
   medium: "#FFD700",
@@ -52,9 +49,9 @@ const severityColor: Record<string, string> = {
 };
 
 export function AdminMonitor() {
-  const [adminKey, setAdminKey] = useState<string>(() =>
-    localStorage.getItem("asteroids_admin_key") || ""
-  );
+  // Session token is stored in React state only — never in localStorage or sessionStorage.
+  // The raw admin key is discarded immediately after the server issues this token.
+  const [sessionToken, setSessionToken] = useState<string>("");
   const [keyInput, setKeyInput] = useState("");
   const [scores, setScores] = useState<Score[]>([]);
   const [flags, setFlags] = useState<Flag[]>([]);
@@ -64,18 +61,19 @@ export function AdminMonitor() {
   const [filter, setFilter] = useState<"all" | "flagged">("all");
   const [selectedScore, setSelectedScore] = useState<string | null>(null);
 
-  const fetchData = useCallback(async (key: string) => {
+  const fetchData = useCallback(async (token: string) => {
     setLoading(true);
     setError(null);
     try {
       const res = await fetch(`${SUBMIT_URL}/admin-data`, {
-        headers: {
-          Authorization: `Bearer ${SUPABASE_KEY}`,
-          "x-admin-key": key,
-        },
+        headers: adminHeaders(token),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({ error: res.statusText }));
+        if (res.status === 401) {
+          // Session expired or invalid; force re-authentication
+          setSessionToken("");
+        }
         setError(body.error || "Failed to fetch data");
         setLoading(false);
         return;
@@ -84,8 +82,6 @@ export function AdminMonitor() {
       setScores(s || []);
       setFlags(f || []);
       setAuditLogs(a || []);
-      localStorage.setItem("asteroids_admin_key", key);
-      setAdminKey(key);
     } catch (e) {
       setError(String(e));
     } finally {
@@ -93,12 +89,31 @@ export function AdminMonitor() {
     }
   }, []);
 
-  // Auto-fetch on mount if a key was previously saved in localStorage.
-  // Intentionally runs once only; subsequent fetches are triggered manually or via the REFRESH button.
-  useEffect(() => {
-    const savedKey = localStorage.getItem("asteroids_admin_key");
-    if (savedKey) fetchData(savedKey);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const handleAuthenticate = useCallback(async () => {
+    if (!keyInput.trim()) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const token = await adminLogin(keyInput);
+      setKeyInput(""); // Clear the raw key from state immediately
+      setSessionToken(token);
+      await fetchData(token);
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setLoading(false);
+    }
+  }, [keyInput, fetchData]);
+
+  const handleLogout = useCallback(async () => {
+    if (sessionToken) {
+      await adminLogout(sessionToken);
+    }
+    setSessionToken("");
+    setScores([]);
+    setFlags([]);
+    setAuditLogs([]);
+  }, [sessionToken]);
 
   const deleteScore = async (scoreId: string) => {
     if (!confirm("Remove this score from the leaderboard?")) return;
@@ -107,12 +122,12 @@ export function AdminMonitor() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${SUPABASE_KEY}`,
-          "x-admin-key": adminKey,
+          ...adminHeaders(sessionToken),
         },
         body: JSON.stringify({ scoreId }),
       });
       if (!res.ok) {
+        if (res.status === 401) setSessionToken("");
         alert("Failed to delete score");
         return;
       }
@@ -165,7 +180,7 @@ export function AdminMonitor() {
     return null;
   };
 
-  if (!adminKey) {
+  if (!sessionToken) {
     return (
       <div
         style={{
@@ -188,7 +203,7 @@ export function AdminMonitor() {
           placeholder="Admin key"
           value={keyInput}
           onChange={(e) => setKeyInput(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && fetchData(keyInput)}
+          onKeyDown={(e) => e.key === "Enter" && handleAuthenticate()}
           style={{
             background: "transparent",
             border: "1px solid #FFD700",
@@ -201,7 +216,8 @@ export function AdminMonitor() {
           autoFocus
         />
         <button
-          onClick={() => fetchData(keyInput)}
+          onClick={handleAuthenticate}
+          disabled={loading}
           style={{
             background: "#FFD700",
             color: "#000",
@@ -209,10 +225,11 @@ export function AdminMonitor() {
             padding: "6px 18px",
             fontFamily: "monospace",
             fontSize: 14,
-            cursor: "pointer",
+            cursor: loading ? "not-allowed" : "pointer",
+            opacity: loading ? 0.7 : 1,
           }}
         >
-          AUTHENTICATE
+          {loading ? "AUTHENTICATING…" : "AUTHENTICATE"}
         </button>
       </div>
     );
@@ -248,14 +265,11 @@ export function AdminMonitor() {
         <button onClick={exportCSV} style={btnStyle("#555")}>
           EXPORT CSV
         </button>
-        <button onClick={() => fetchData(adminKey)} style={btnStyle("#555")}>
+        <button onClick={() => fetchData(sessionToken)} style={btnStyle("#555")}>
           ↻ REFRESH
         </button>
         <button
-          onClick={() => {
-            localStorage.removeItem("asteroids_admin_key");
-            setAdminKey("");
-          }}
+          onClick={handleLogout}
           style={btnStyle("#555")}
         >
           LOGOUT

@@ -3,7 +3,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version, x-admin-key',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version, x-admin-session',
 };
 
 interface ScoreSubmission {
@@ -551,10 +551,83 @@ async function handleSubmit(req: Request, supabaseAdmin: any) {
 
 // --- Admin handlers ---
 
-async function handleAdminData(req: Request, supabaseAdmin: any) {
-  const adminKey = req.headers.get('x-admin-key') || '';
+/** Validate an admin session token. Returns the session row or null. */
+async function validateAdminSession(req: Request, supabaseAdmin: any): Promise<boolean> {
+  const sessionToken = req.headers.get('x-admin-session') || '';
+  if (!sessionToken) return false;
+
+  const { data: session, error } = await supabaseAdmin
+    .from('admin_sessions')
+    .select('id, expires_at, invalidated')
+    .eq('token', sessionToken)
+    .single();
+
+  if (error || !session) return false;
+  if (session.invalidated) return false;
+  if (new Date(session.expires_at) < new Date()) return false;
+  return true;
+}
+
+/** Log a security event to the audit table. */
+async function logSecurityEvent(
+  supabaseAdmin: any,
+  eventType: string,
+  req: Request,
+  details: Record<string, unknown> = {},
+): Promise<void> {
+  try {
+    await supabaseAdmin.from('security_audit_log').insert({
+      event_type: eventType,
+      ip_address: req.headers.get('x-forwarded-for') || req.headers.get('cf-connecting-ip') || null,
+      user_agent: req.headers.get('user-agent') || null,
+      details,
+    });
+  } catch (_e) { console.error('Audit log error:', _e); /* best-effort audit logging */ }
+}
+
+async function handleAdminLogin(req: Request, supabaseAdmin: any) {
+  const { adminKey } = await req.json().catch(() => ({}));
+  if (!adminKey) {
+    return errorResponse('Missing adminKey', 400);
+  }
+
   const expectedKey = Deno.env.get('ADMIN_SECRET_KEY') || '';
   if (!expectedKey || adminKey !== expectedKey) {
+    await logSecurityEvent(supabaseAdmin, 'admin_login_failed', req);
+    return errorResponse('Unauthorized', 401);
+  }
+
+  // Generate a cryptographically secure 256-bit random session token encoded as hex
+  const tokenBytes = new Uint8Array(32);
+  crypto.getRandomValues(tokenBytes);
+  const token = Array.from(tokenBytes).map(b => b.toString(16).padStart(2, '0')).join('');
+  const expiresAt = new Date(Date.now() + 3600000).toISOString(); // 1 hour
+
+  const { error } = await supabaseAdmin.from('admin_sessions').insert({ token, expires_at: expiresAt });
+  if (error) {
+    console.error('Failed to create admin session:', error);
+    return errorResponse('Failed to create session', 500);
+  }
+
+  await logSecurityEvent(supabaseAdmin, 'admin_login_success', req);
+  return successResponse({ sessionToken: token });
+}
+
+async function handleAdminLogout(req: Request, supabaseAdmin: any) {
+  const sessionToken = req.headers.get('x-admin-session') || '';
+  if (sessionToken) {
+    await supabaseAdmin
+      .from('admin_sessions')
+      .update({ invalidated: true })
+      .eq('token', sessionToken);
+    await logSecurityEvent(supabaseAdmin, 'admin_logout', req);
+  }
+  return successResponse({ success: true });
+}
+
+async function handleAdminData(req: Request, supabaseAdmin: any) {
+  const authorized = await validateAdminSession(req, supabaseAdmin);
+  if (!authorized) {
     return errorResponse('Unauthorized', 401);
   }
 
@@ -592,9 +665,8 @@ async function handleAdminData(req: Request, supabaseAdmin: any) {
 }
 
 async function handleAdminDelete(req: Request, supabaseAdmin: any) {
-  const adminKey = req.headers.get('x-admin-key') || '';
-  const expectedKey = Deno.env.get('ADMIN_SECRET_KEY') || '';
-  if (!expectedKey || adminKey !== expectedKey) {
+  const authorized = await validateAdminSession(req, supabaseAdmin);
+  if (!authorized) {
     return errorResponse('Unauthorized', 401);
   }
 
@@ -613,6 +685,7 @@ async function handleAdminDelete(req: Request, supabaseAdmin: any) {
     return errorResponse('Failed to delete score', 500);
   }
 
+  await logSecurityEvent(supabaseAdmin, 'admin_score_deleted', req, { scoreId });
   return successResponse({ success: true, message: 'Score removed' });
 }
 
@@ -640,6 +713,14 @@ Deno.serve(async (req) => {
 
     if (url.pathname.endsWith('/submit') && req.method === 'POST') {
       return await handleSubmit(req, supabaseAdmin);
+    }
+
+    if (url.pathname.endsWith('/admin-login') && req.method === 'POST') {
+      return await handleAdminLogin(req, supabaseAdmin);
+    }
+
+    if (url.pathname.endsWith('/admin-logout') && req.method === 'POST') {
+      return await handleAdminLogout(req, supabaseAdmin);
     }
 
     if (url.pathname.endsWith('/admin-data') && req.method === 'GET') {
