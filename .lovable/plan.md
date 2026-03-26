@@ -1,34 +1,36 @@
 
 
-# Fix: White Screen / App Not Loading
+# Fix: White Screen on Published Game — Missing Environment Variables
 
-## Diagnosis
+## Root Cause
 
-The app shows a blank white page with zero console logs and zero network requests. This indicates the Vite development server failed to compile the application — the JavaScript bundle never loads.
+PR #52 removed the `.env` file from the repository to "protect credentials." However, the `VITE_*` variables in that file are **public client-side values** that Vite must bundle at build time. Without them, `createClient()` throws `Error: supabaseUrl is required.` and the app crashes to a white screen.
 
-The most likely cause is a **type compatibility issue** introduced when the database types file (`src/integrations/supabase/types.ts`) was auto-regenerated after the last migration. The regenerated file includes a newer `__InternalSupabase` type block with `PostgrestVersion: "14.1"` that may be incompatible with the currently installed `@supabase/supabase-js@^2.98.0`.
+The preview environment works because Lovable auto-injects these variables. The published build does not have this injection — it relies on the `.env` file being present in the repo.
 
-Since both `types.ts` and `client.ts` are auto-generated and cannot be edited directly, the fix is to **update the Supabase JS client package** to the latest version that supports this types format.
+## Fix
 
-## Plan
+Restore the `.env` file with the three public variables. These are not secrets — the anon key is a public identifier designed to be shipped in browser code, and RLS + the edge function provide the actual security layer.
 
-### 1. Update `@supabase/supabase-js` to latest
+### Step 1: Restore `.env` file
 
-In `package.json`, bump the version to ensure compatibility with the new types format:
+Re-create the `.env` file with the original contents:
 
-```json
-"@supabase/supabase-js": "^2.49.1"
+```env
+VITE_SUPABASE_PROJECT_ID="ctrucihctxgwzprpaylb"
+VITE_SUPABASE_PUBLISHABLE_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN0cnVjaWhjdHhnd3pwcnBheWxiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMwMDMzMTAsImV4cCI6MjA4ODU3OTMxMH0.Pq0Wsa-eiWusRDcJE2FhmoBauZaZGOiMoLR8rKh-uOI"
+VITE_SUPABASE_URL="https://ctrucihctxgwzprpaylb.supabase.co"
 ```
 
-(The resolved version in `node_modules` needs to match or exceed what the type generator expects.)
+This file is auto-managed by Lovable Cloud and should not be manually edited or removed.
 
-### 2. If the package is already compatible — force rebuild
+### Files changed
+- `.env` — restore the three `VITE_*` environment variables
 
-If updating the package doesn't resolve it, the issue may be a stale build cache. A clean reinstall of dependencies would fix it.
+## Why this is safe
 
-## Files changed
-- `package.json` — update `@supabase/supabase-js` version constraint if needed
-
-## Note
-If the white screen persists after this change, I'll need to use browser tools to capture the actual build error from the preview to diagnose further.
+The anon key is a public API key. It ships in every browser bundle. Security comes from:
+- RLS policies restricting what the `anon` role can do
+- The `REVOKE EXECUTE` migration we applied (blocking direct RPC calls)
+- The edge function using the private service role key for privileged operations
 
