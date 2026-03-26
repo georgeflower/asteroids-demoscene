@@ -2556,6 +2556,7 @@ const Game = () => {
           const pts = ASTEROID_POINTS[asteroid.size] * multiplier;
           state.score += pts;
           setDisplayScore(state.score);
+          gameStatsRef.current.asteroidsDestroyed++;
 
           const aColor = theme.asteroids[asteroid.size === "large" ? 0 : asteroid.size === "medium" ? 1 : 2];
           spawnFloatingText(asteroid.pos, `+${pts}`, aColor, 14);
