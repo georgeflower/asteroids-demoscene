@@ -12,10 +12,9 @@ dist
 dist-ssr
 *.local
 
-# Environment variables - never commit secrets
-.env
-.env.*
-!.env.example
+# Environment variables - keep local overrides private, but commit .env (public Vite vars)
+.env.local
+.env.*.local
 
 # Editor directories and files
 .vscode/*
