@@ -736,7 +736,7 @@ const Game = () => {
         return false;
       }
     },
-    [loadLeaderboard],
+    [loadLeaderboard, computeHMAC],
   );
 
   const isHighScore = useCallback(
