@@ -214,7 +214,6 @@ interface GameState {
   alienSpawnTimer: number;
   bossDefeated: boolean;
   pendingNextWave: boolean;
-  
 }
 
 interface DuelState {
@@ -269,7 +268,11 @@ const getSpeedScale = (wave: number): number => 1.0 + (wave - 1) * 0.05;
 // Plain object (no React state) so there is zero overhead in Game itself.
 const _fps = { frames: 0, updates: 0, lastTime: 0 };
 
-interface FpsDisplayData { fps: number; ups: number; frameTime: number; }
+interface FpsDisplayData {
+  fps: number;
+  ups: number;
+  frameTime: number;
+}
 
 function FpsOverlay() {
   const [data, setData] = useState<FpsDisplayData>({ fps: 0, ups: 0, frameTime: 0 });
@@ -300,7 +303,6 @@ function FpsOverlay() {
     </div>
   );
 }
-
 
 const Game = () => {
   const navigate = useNavigate();
@@ -486,13 +488,18 @@ const Game = () => {
   const loadHallOfFame = useCallback(async () => {
     // Fetch from both tables in parallel
     const [oldRes, currentRes] = await Promise.all([
-      supabase.from("high_scores").select("initials, score, created_at").order("score", { ascending: false }).limit(1000),
-      supabase.from("current_high_scores").select("initials, score, created_at").order("score", { ascending: false }).limit(1000),
+      supabase
+        .from("high_scores")
+        .select("initials, score, created_at")
+        .order("score", { ascending: false })
+        .limit(1000),
+      supabase
+        .from("current_high_scores")
+        .select("initials, score, created_at")
+        .order("score", { ascending: false })
+        .limit(1000),
     ]);
-    const allRows = [
-      ...(oldRes.data || []),
-      ...(currentRes.data || []),
-    ].sort((a, b) => b.score - a.score);
+    const allRows = [...(oldRes.data || []), ...(currentRes.data || [])].sort((a, b) => b.score - a.score);
 
     // Deduplicate: best score per initials, with overall rank
     const seen = new Set<string>();
@@ -533,16 +540,20 @@ const Game = () => {
     let nonce = 0;
     while (true) {
       const data = new TextEncoder().encode(challenge + nonce.toString());
-      const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+      const hashBuffer = await crypto.subtle.digest("SHA-256", data);
       const hashArray = new Uint8Array(hashBuffer);
       let zeroBits = 0;
       let found = false;
       for (const byte of hashArray) {
-        if (byte === 0) { zeroBits += 8; }
-        else {
+        if (byte === 0) {
+          zeroBits += 8;
+        } else {
           for (let bit = 7; bit >= 0; bit--) {
             if ((byte & (1 << bit)) === 0) zeroBits++;
-            else { found = true; break; }
+            else {
+              found = true;
+              break;
+            }
           }
         }
         if (found || zeroBits >= difficulty) break;
@@ -550,37 +561,36 @@ const Game = () => {
       if (zeroBits >= difficulty) return nonce;
       nonce++;
       // Yield to main thread every 1000 iterations
-      if (nonce % 1000 === 0) await new Promise(r => setTimeout(r, 0));
+      if (nonce % 1000 === 0) await new Promise((r) => setTimeout(r, 0));
     }
   }, []);
 
   const computeHMAC = useCallback(async (key: string, message: string): Promise<string> => {
     const enc = new TextEncoder();
-    const cryptoKey = await crypto.subtle.importKey(
-      'raw', enc.encode(key), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']
-    );
-    const sig = await crypto.subtle.sign('HMAC', cryptoKey, enc.encode(message));
-    return Array.from(new Uint8Array(sig)).map(b => b.toString(16).padStart(2, '0')).join('');
+    const cryptoKey = await crypto.subtle.importKey("raw", enc.encode(key), { name: "HMAC", hash: "SHA-256" }, false, [
+      "sign",
+    ]);
+    const sig = await crypto.subtle.sign("HMAC", cryptoKey, enc.encode(message));
+    return Array.from(new Uint8Array(sig))
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
   }, []);
 
   const startGameSession = useCallback(async () => {
     try {
-      const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/submit/start-session`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-          },
-        }
-      );
-      
+      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/submit/start-session`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+        },
+      });
+
       if (!response.ok) {
         console.error("Failed to start game session");
         return null;
       }
-      
+
       const data = await response.json();
       gameSessionTokenRef.current = data.sessionToken;
       sessionNonceRef.current = data.sessionNonce || null;
@@ -589,7 +599,7 @@ const Game = () => {
 
       // Solve PoW challenge in background
       if (data.challenge && data.difficulty) {
-        solvePoW(data.challenge, data.difficulty).then(nonce => {
+        solvePoW(data.challenge, data.difficulty).then((nonce) => {
           powSolutionRef.current = nonce;
         });
       }
@@ -616,24 +626,21 @@ const Game = () => {
         hmac = await computeHMAC(sessionNonceRef.current, `${token}|${score}|${level}`);
       }
 
-      await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/submit/heartbeat`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-          },
-          body: JSON.stringify({
-            gameSessionToken: token,
-            score,
-            level,
-            asteroidsDestroyed,
-            bulletsFired,
-            hmac,
-          }),
-        }
-      );
+      await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/submit/heartbeat`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+        },
+        body: JSON.stringify({
+          gameSessionToken: token,
+          score,
+          level,
+          asteroidsDestroyed,
+          bulletsFired,
+          hmac,
+        }),
+      });
     } catch (_) {
       // Non-blocking: heartbeat failure doesn't affect gameplay
     }
@@ -661,7 +668,7 @@ const Game = () => {
         // Return true to close dialog and proceed - trainer mode is for practice only
         return true;
       }
-      
+
       if (!gameSessionTokenRef.current) {
         console.error("No game session token available");
         setInitialsError("Unable to save score. Please try again.");
@@ -674,41 +681,35 @@ const Game = () => {
       // Compute HMAC for submission
       let hmac: string | undefined;
       if (sessionNonceRef.current) {
-        hmac = await computeHMAC(
-          sessionNonceRef.current,
-          `${gameSessionTokenRef.current}|${score}|${currentWave}`
-        );
+        hmac = await computeHMAC(sessionNonceRef.current, `${gameSessionTokenRef.current}|${score}|${currentWave}`);
       }
 
       try {
-        const response = await fetch(
-          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/submit/submit`,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-            },
-            body: JSON.stringify({
-              initials: playerInitials.toUpperCase(),
-              score,
-              gameSessionToken: gameSessionTokenRef.current,
-              timestamp: Date.now(),
-              level: currentWave,
-              timePlayedSeconds,
-              source: 'game_client',
-              powNonce: powSolutionRef.current,
-              hmac,
-            }),
-          }
-        );
+        const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/submit/submit`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          },
+          body: JSON.stringify({
+            initials: playerInitials.toUpperCase(),
+            score,
+            gameSessionToken: gameSessionTokenRef.current,
+            timestamp: Date.now(),
+            level: currentWave,
+            timePlayedSeconds,
+            source: "game_client",
+            powNonce: powSolutionRef.current,
+            hmac,
+          }),
+        });
 
         const result = await response.json();
-        
+
         if (!response.ok) {
           console.error("Failed to save score:", result.error || "Unknown error");
           // Handle inappropriate initials error
-          if (response.status === 400 && result.error === 'Please choose different initials') {
+          if (response.status === 400 && result.error === "Please choose different initials") {
             setInitialsError(result.error);
             setEnteringInitials(true); // Keep the initials entry form open
             return false;
@@ -726,7 +727,7 @@ const Game = () => {
           setInitialsError("Failed to save score. Please try again.");
           return false;
         }
-        
+
         const board = await loadLeaderboard();
         setLeaderboard(board);
         return true;
@@ -888,26 +889,44 @@ const Game = () => {
       return {
         pos: { x: side, y: 30 + Math.random() * (CANVAS_HEIGHT - 60) },
         vel: { x: dir * speed, y: (Math.random() - 0.5) * speed },
-        rotation: 0, type, hp: 1, moveTimer: 0,
-        shootTimer: 9999, zigzagPhase: Math.random() * Math.PI * 2,
-        dashTimer: 400 + Math.random() * 200, isDashing: false, orbitAngle: Math.random() * Math.PI * 2,
+        rotation: 0,
+        type,
+        hp: 1,
+        moveTimer: 0,
+        shootTimer: 9999,
+        zigzagPhase: Math.random() * Math.PI * 2,
+        dashTimer: 400 + Math.random() * 200,
+        isDashing: false,
+        orbitAngle: Math.random() * Math.PI * 2,
       };
     }
     if (type === "blueSentinel") {
       return {
         pos: { x: side, y: 30 + Math.random() * (CANVAS_HEIGHT - 60) },
         vel: { x: dir * 0.5, y: 0 },
-        rotation: 0, type, hp: 2, moveTimer: 0,
-        shootTimer: 60 + Math.random() * 40, zigzagPhase: 0,
-        invisTimer: 0, isInvisible: false, burstCount: 0, teleportCooldown: 90 + Math.random() * 60, chargeTimer: 0,
+        rotation: 0,
+        type,
+        hp: 2,
+        moveTimer: 0,
+        shootTimer: 60 + Math.random() * 40,
+        zigzagPhase: 0,
+        invisTimer: 0,
+        isInvisible: false,
+        burstCount: 0,
+        teleportCooldown: 90 + Math.random() * 60,
+        chargeTimer: 0,
       };
     }
     if (type === "purpleSwarm") {
       return {
         pos: { x: side, y: 30 + Math.random() * (CANVAS_HEIGHT - 60) },
         vel: { x: dir * (0.4 + Math.random() * 0.3) * getSpeedScale(wave), y: (Math.random() - 0.5) * 1 },
-        rotation: 0, type, hp: 1, moveTimer: 0,
-        shootTimer: 9999, zigzagPhase: Math.random() * Math.PI * 2,
+        rotation: 0,
+        type,
+        hp: 1,
+        moveTimer: 0,
+        shootTimer: 9999,
+        zigzagPhase: Math.random() * Math.PI * 2,
         flockId: Math.floor(Math.random() * 1000),
       };
     }
@@ -920,7 +939,8 @@ const Game = () => {
     return {
       pos: { x: side, y: 30 + Math.random() * (CANVAS_HEIGHT - 60) },
       vel: { x: dir * speed, y: (Math.random() - 0.5) * speed * 0.5 },
-      rotation: 0, type,
+      rotation: 0,
+      type,
       hp: type === "brown" ? 1 : 2,
       moveTimer: 0,
       shootTimer: type === "greenMan" ? 90 + Math.random() * 60 : 9999,
@@ -946,7 +966,7 @@ const Game = () => {
 
   const createBoss = (wave: number): Boss => {
     // Determine boss type based on wave: 5=amigaBall, 10=flyingSaucer, 15=tentacle, 20=borgCube, then cycle
-    const bossIndex = ((wave / 5) - 1) % 4; // 0,1,2,3
+    const bossIndex = (wave / 5 - 1) % 4; // 0,1,2,3
     const bossTypes: Boss["bossType"][] = ["amigaBall", "flyingSaucer", "tentacle", "borgCube"];
     const bossType = bossTypes[bossIndex] || "tentacle";
     const baseHp = 3 + wave;
@@ -1082,7 +1102,6 @@ const Game = () => {
       alienSpawnTimer: 600,
       bossDefeated: false,
       pendingNextWave: false,
-      
     };
 
     duelStateRef.current = null;
@@ -1306,7 +1325,7 @@ const Game = () => {
     const state = gameStateRef.current;
 
     state.wave++;
-    
+
     addDebugLog("wave", `Wave ${state.wave} started`);
     const isBossWave = state.wave % 5 === 0;
 
@@ -1322,8 +1341,13 @@ const Game = () => {
 
       const theme = getTheme(state.wave);
       spawnFloatingText({ x: CANVAS_WIDTH / 2, y: CANVAS_HEIGHT / 2 - 40 }, `WAVE ${state.wave}`, theme.ship, 28);
-      const bossNames: Record<string, string> = { tentacle: "BOSS", amigaBall: "AMIGA BALL", flyingSaucer: "FLYING SAUCER", borgCube: "BORG CUBE" };
-      const bType = ((state.wave / 5 - 1) % 4);
+      const bossNames: Record<string, string> = {
+        tentacle: "BOSS",
+        amigaBall: "AMIGA BALL",
+        flyingSaucer: "FLYING SAUCER",
+        borgCube: "BORG CUBE",
+      };
+      const bType = (state.wave / 5 - 1) % 4;
       const bTypes = ["amigaBall", "flyingSaucer", "tentacle", "borgCube"];
       const bossLabel = bossNames[bTypes[bType]] || "BOSS";
       spawnFloatingText({ x: CANVAS_WIDTH / 2, y: CANVAS_HEIGHT / 2 + 10 }, `⚠ ${bossLabel} INCOMING ⚠`, "#FF4444", 22);
@@ -2076,8 +2100,12 @@ const Game = () => {
           alien.shootTimer = Math.max(40, 80 - state.wave * 2) + Math.random() * 40;
           const angle = Math.atan2(state.ship.pos.y - alien.pos.y, state.ship.pos.x - alien.pos.x);
           state.bullets.push({
-            pos: { ...alien.pos }, vel: { x: Math.cos(angle) * 6, y: Math.sin(angle) * 6 },
-            rotation: angle, lifetime: BULLET_LIFETIME, isAlien: true, color: "#44FF44",
+            pos: { ...alien.pos },
+            vel: { x: Math.cos(angle) * 6, y: Math.sin(angle) * 6 },
+            rotation: angle,
+            lifetime: BULLET_LIFETIME,
+            isAlien: true,
+            color: "#44FF44",
           });
         }
       } else if (alien.type === "redDrone") {
@@ -2131,8 +2159,12 @@ const Game = () => {
             const angle = Math.atan2(state.ship.pos.y - alien.pos.y, state.ship.pos.x - alien.pos.x);
             const spread = (alien.burstCount! - 2) * 0.15;
             state.bullets.push({
-              pos: { ...alien.pos }, vel: { x: Math.cos(angle + spread) * 3.5, y: Math.sin(angle + spread) * 3.5 },
-              rotation: angle + spread, lifetime: BULLET_LIFETIME, isAlien: true, color: "#4488FF",
+              pos: { ...alien.pos },
+              vel: { x: Math.cos(angle + spread) * 3.5, y: Math.sin(angle + spread) * 3.5 },
+              rotation: angle + spread,
+              lifetime: BULLET_LIFETIME,
+              isAlien: true,
+              color: "#4488FF",
             });
             if (alien.burstCount! >= 3) {
               alien.burstCount = 0;
@@ -2168,8 +2200,11 @@ const Game = () => {
         }
       } else if (alien.type === "purpleSwarm") {
         // Boids-like flocking toward centroid of same flock, chase player
-        const flockMates = state.aliens.filter(a => a.type === "purpleSwarm" && a.flockId === alien.flockId && a !== alien);
-        let cx = state.ship.pos.x, cy = state.ship.pos.y;
+        const flockMates = state.aliens.filter(
+          (a) => a.type === "purpleSwarm" && a.flockId === alien.flockId && a !== alien,
+        );
+        let cx = state.ship.pos.x,
+          cy = state.ship.pos.y;
         if (flockMates.length > 0) {
           cx = flockMates.reduce((s, a) => s + a.pos.x, alien.pos.x) / (flockMates.length + 1);
           cy = flockMates.reduce((s, a) => s + a.pos.y, alien.pos.y) / (flockMates.length + 1);
@@ -2181,11 +2216,11 @@ const Game = () => {
         alien.vel.x += Math.cos(toTarget) * 0.015;
         alien.vel.y += Math.sin(toTarget) * 0.015;
         // Separation from close flockmates
-        flockMates.forEach(mate => {
+        flockMates.forEach((mate) => {
           const d = Math.hypot(mate.pos.x - alien.pos.x, mate.pos.y - alien.pos.y);
           if (d < 25 && d > 0) {
-            alien.vel.x -= (mate.pos.x - alien.pos.x) / d * 0.3;
-            alien.vel.y -= (mate.pos.y - alien.pos.y) / d * 0.3;
+            alien.vel.x -= ((mate.pos.x - alien.pos.x) / d) * 0.3;
+            alien.vel.y -= ((mate.pos.y - alien.pos.y) / d) * 0.3;
           }
         });
         const curSpd = Math.hypot(alien.vel.x, alien.vel.y);
@@ -2239,7 +2274,10 @@ const Game = () => {
             state.bullets.push({
               pos: { ...boss.pos },
               vel: { x: Math.cos(baseAngle + i * 0.3) * 4, y: Math.sin(baseAngle + i * 0.3) * 4 },
-              rotation: baseAngle + i * 0.3, lifetime: BULLET_LIFETIME * 1.5, isUFO: true, color: "#FF66FF",
+              rotation: baseAngle + i * 0.3,
+              lifetime: BULLET_LIFETIME * 1.5,
+              isUFO: true,
+              color: "#FF66FF",
             });
           }
         }
@@ -2248,7 +2286,7 @@ const Game = () => {
         boss.rotAngle = (boss.rotAngle ?? 0) + 0.015;
         const gravity = 0.025;
         boss.bounceVelY = (boss.bounceVelY ?? 0) + gravity;
-        boss.bounceVelX = boss.bounceVelX ?? (1 + Math.random() * 1.5);
+        boss.bounceVelX = boss.bounceVelX ?? 1 + Math.random() * 1.5;
         boss.pos.x += boss.bounceVelX;
         boss.pos.y += boss.bounceVelY;
         boss.lastBounceFrame = (boss.lastBounceFrame ?? 0) + 1;
@@ -2270,7 +2308,10 @@ const Game = () => {
               state.particles.push({
                 pos: { x: boss.pos.x, y: boss.pos.y + 50 },
                 vel: { x: Math.cos(ang) * 4, y: Math.sin(ang) * 1.5 },
-                lifetime: 30, maxLifetime: 30, color: "#FF4444", size: 3,
+                lifetime: 30,
+                maxLifetime: 30,
+                color: "#FF4444",
+                size: 3,
               });
             }
             soundEffects.explode();
@@ -2291,7 +2332,10 @@ const Game = () => {
             state.bullets.push({
               pos: { ...boss.pos },
               vel: { x: Math.cos(ang) * 2, y: Math.sin(ang) * 2 },
-              rotation: ang, lifetime: BULLET_LIFETIME * 2.5, isUFO: true, color: "#CC0000",
+              rotation: ang,
+              lifetime: BULLET_LIFETIME * 2.5,
+              isUFO: true,
+              color: "#CC0000",
             });
           }
         }
@@ -2316,13 +2360,15 @@ const Game = () => {
         if (boss.miniSaucerTimer <= 0 && boss.miniSaucers.length < 3) {
           boss.miniSaucerTimer = 250 + Math.random() * 100;
           boss.miniSaucers.push({
-            pos: { ...boss.pos }, vel: { x: (Math.random() - 0.5) * 3, y: 1 + Math.random() * 2 },
-            hp: 1, shootTimer: 60 + Math.random() * 40,
+            pos: { ...boss.pos },
+            vel: { x: (Math.random() - 0.5) * 3, y: 1 + Math.random() * 2 },
+            hp: 1,
+            shootTimer: 60 + Math.random() * 40,
           });
         }
 
         // Update mini-saucers
-        boss.miniSaucers = boss.miniSaucers.filter(ms => {
+        boss.miniSaucers = boss.miniSaucers.filter((ms) => {
           ms.pos.x += ms.vel.x;
           ms.pos.y += ms.vel.y;
           ms.shootTimer--;
@@ -2330,8 +2376,12 @@ const Game = () => {
             ms.shootTimer = 80 + Math.random() * 40;
             const ang = Math.atan2(state.ship.pos.y - ms.pos.y, state.ship.pos.x - ms.pos.x);
             state.bullets.push({
-              pos: { ...ms.pos }, vel: { x: Math.cos(ang) * 4, y: Math.sin(ang) * 4 },
-              rotation: ang, lifetime: BULLET_LIFETIME, isUFO: true, color: "#88FFAA",
+              pos: { ...ms.pos },
+              vel: { x: Math.cos(ang) * 4, y: Math.sin(ang) * 4 },
+              rotation: ang,
+              lifetime: BULLET_LIFETIME,
+              isUFO: true,
+              color: "#88FFAA",
             });
           }
           return ms.pos.y < CANVAS_HEIGHT + 30 && ms.pos.x > -30 && ms.pos.x < CANVAS_WIDTH + 30;
@@ -2346,7 +2396,10 @@ const Game = () => {
             state.bullets.push({
               pos: { x: boss.pos.x + Math.cos(laserAngle) * d, y: boss.pos.y + Math.sin(laserAngle) * d },
               vel: { x: Math.cos(laserAngle) * 3.5, y: Math.sin(laserAngle) * 3.5 },
-              rotation: laserAngle, lifetime: 20, isUFO: true, color: "#00FF88",
+              rotation: laserAngle,
+              lifetime: 20,
+              isUFO: true,
+              color: "#00FF88",
             });
           }
         }
@@ -2378,7 +2431,10 @@ const Game = () => {
             state.bullets.push({
               pos: { ...boss.pos },
               vel: { x: Math.cos(ang) * 2.5, y: Math.sin(ang) * 2.5 },
-              rotation: ang, lifetime: BULLET_LIFETIME * 1.5, isUFO: true, color: "#44FF44",
+              rotation: ang,
+              lifetime: BULLET_LIFETIME * 1.5,
+              isUFO: true,
+              color: "#44FF44",
             });
           }
         }
@@ -2390,8 +2446,11 @@ const Game = () => {
           const ang = Math.atan2(state.ship.pos.y - boss.pos.y, state.ship.pos.x - boss.pos.x);
           state.bullets.push({
             pos: { ...boss.pos },
-              vel: { x: Math.cos(ang) * 2.8, y: Math.sin(ang) * 2.8 },
-            rotation: ang, lifetime: BULLET_LIFETIME * 1.5, isUFO: true, color: "#00CC00",
+            vel: { x: Math.cos(ang) * 2.8, y: Math.sin(ang) * 2.8 },
+            rotation: ang,
+            lifetime: BULLET_LIFETIME * 1.5,
+            isUFO: true,
+            color: "#00CC00",
           });
         }
 
@@ -2403,14 +2462,17 @@ const Game = () => {
           const ang = Math.random() * Math.PI * 2;
           boss.miniCubes.push({
             pos: { x: boss.pos.x, y: boss.pos.y },
-            vel: { x: Math.cos(ang) * 0.8 + (state.ship.pos.x - boss.pos.x) * 0.003, y: Math.sin(ang) * 0.8 + (state.ship.pos.y - boss.pos.y) * 0.003 },
+            vel: {
+              x: Math.cos(ang) * 0.8 + (state.ship.pos.x - boss.pos.x) * 0.003,
+              y: Math.sin(ang) * 0.8 + (state.ship.pos.y - boss.pos.y) * 0.003,
+            },
             hp: 1,
             rotAngle: Math.random() * Math.PI * 2,
           });
         }
 
         // Update mini cubes
-        boss.miniCubes = boss.miniCubes.filter(mc => {
+        boss.miniCubes = boss.miniCubes.filter((mc) => {
           mc.pos.x += mc.vel.x;
           mc.pos.y += mc.vel.y;
           mc.rotAngle += 0.03;
@@ -2422,8 +2484,10 @@ const Game = () => {
         });
 
         // Mini cube collision with player bullets
-        boss.miniCubes = boss.miniCubes.filter(mc => {
-          const hitIdx = state.bullets.findIndex(b => !b.isUFO && !b.isAlien && Math.hypot(b.pos.x - mc.pos.x, b.pos.y - mc.pos.y) < 12);
+        boss.miniCubes = boss.miniCubes.filter((mc) => {
+          const hitIdx = state.bullets.findIndex(
+            (b) => !b.isUFO && !b.isAlien && Math.hypot(b.pos.x - mc.pos.x, b.pos.y - mc.pos.y) < 12,
+          );
           if (hitIdx >= 0) {
             state.bullets.splice(hitIdx, 1);
             spawnExplosion(mc.pos, "#00FF44", 4);
@@ -2434,22 +2498,22 @@ const Game = () => {
         });
 
         // Mini cube collision with player ship
-        boss.miniCubes.forEach(mc => {
+        boss.miniCubes.forEach((mc) => {
           if (Math.hypot(mc.pos.x - state.ship.pos.x, mc.pos.y - state.ship.pos.y) < 18 && !state.ship.invulnerable) {
             // Damage player (handled by existing ship hit logic elsewhere, just remove the cube)
             mc.hp = 0;
           }
         });
-        boss.miniCubes = boss.miniCubes.filter(mc => mc.hp > 0);
+        boss.miniCubes = boss.miniCubes.filter((mc) => mc.hp > 0);
       }
     }
 
     // Update flying saucer mini-saucer collisions with player bullets
     if (state.boss?.bossType === "flyingSaucer" && state.boss.miniSaucers) {
-      state.bullets = state.bullets.filter(bullet => {
+      state.bullets = state.bullets.filter((bullet) => {
         if (bullet.isUFO || bullet.isAlien) return true;
         let alive = true;
-        state.boss!.miniSaucers = state.boss!.miniSaucers!.filter(ms => {
+        state.boss!.miniSaucers = state.boss!.miniSaucers!.filter((ms) => {
           if (checkCollision(bullet.pos, 2, ms.pos, 10)) {
             alive = false;
             ms.hp--;
@@ -2620,17 +2684,30 @@ const Game = () => {
       let bulletAlive = true;
       state.aliens = state.aliens.filter((alien) => {
         if (alien.isInvisible) return true; // Can't hit invisible sentinels
-        const radius = alien.type === "brown" ? 12 : alien.type === "redDrone" ? 10 : alien.type === "purpleSwarm" ? 8 : 14;
+        const radius =
+          alien.type === "brown" ? 12 : alien.type === "redDrone" ? 10 : alien.type === "purpleSwarm" ? 8 : 14;
         if (checkCollision(bullet.pos, 2, alien.pos, radius)) {
           bulletAlive = false;
           alien.hp--;
           if (alien.hp <= 0) {
-            const ptsMap: Record<string, number> = { brown: 300, greenMan: 500, redDrone: 200, blueSentinel: 600, purpleSwarm: 100 };
+            const ptsMap: Record<string, number> = {
+              brown: 300,
+              greenMan: 500,
+              redDrone: 200,
+              blueSentinel: 600,
+              purpleSwarm: 100,
+            };
             const pts = (ptsMap[alien.type] ?? 300) * (state.powerUpActive.multiplier > 0 ? 2 : 1);
             state.score += pts;
             setDisplayScore(state.score);
             soundEffects.explode();
-            const colorMap: Record<string, string> = { brown: "#AA6633", greenMan: "#44FF44", redDrone: "#FF4444", blueSentinel: "#4488FF", purpleSwarm: "#AA44FF" };
+            const colorMap: Record<string, string> = {
+              brown: "#AA6633",
+              greenMan: "#44FF44",
+              redDrone: "#FF4444",
+              blueSentinel: "#4488FF",
+              purpleSwarm: "#AA44FF",
+            };
             const color = colorMap[alien.type] ?? "#FFFFFF";
             spawnFloatingText(alien.pos, `+${pts}`, color, 16);
             spawnExplosion(alien.pos, color, 12);
@@ -2651,7 +2728,14 @@ const Game = () => {
       state.bullets = state.bullets.filter((bullet) => {
         if (!state.boss) return true; // Boss defeated mid-filter, keep remaining bullets
         if (bullet.isUFO || bullet.isAlien) return true;
-        const bossHitRadius = state.boss!.bossType === "amigaBall" ? 50 : state.boss!.bossType === "flyingSaucer" ? 55 : state.boss!.bossType === "borgCube" ? 50 : 60;
+        const bossHitRadius =
+          state.boss!.bossType === "amigaBall"
+            ? 50
+            : state.boss!.bossType === "flyingSaucer"
+              ? 55
+              : state.boss!.bossType === "borgCube"
+                ? 50
+                : 60;
         if (checkCollision(bullet.pos, 2, state.boss!.pos, bossHitRadius)) {
           state.boss!.hp--;
           state.boss!.hitFlash = 10;
@@ -2730,7 +2814,14 @@ const Game = () => {
     // Collision: Ship vs Boss
     if (state.boss && state.boss.entered && !state.ship.invulnerable && state.powerUpActive.shield === 0) {
       const boss = state.boss;
-      const bossRadius = boss.bossType === "amigaBall" ? 50 : boss.bossType === "flyingSaucer" ? 55 : boss.bossType === "borgCube" ? 50 : 65;
+      const bossRadius =
+        boss.bossType === "amigaBall"
+          ? 50
+          : boss.bossType === "flyingSaucer"
+            ? 55
+            : boss.bossType === "borgCube"
+              ? 50
+              : 65;
       if (boss && checkCollision(state.ship.pos, SHIP_SIZE, boss.pos, bossRadius)) {
         addDebugLog("collision", "Ship hit boss");
         loseLife(state);
@@ -3194,14 +3285,15 @@ const Game = () => {
         ctx.beginPath();
         ctx.arc(0, -5, 6, 0, Math.PI * 2);
         ctx.fill();
-
       } else if (boss.bossType === "amigaBall") {
         // Procedural Amiga checkered bouncing ball
         const radius = 50;
         const rotAngle = boss.rotAngle ?? 0;
         const lightDir = { x: -0.5, y: -0.7, z: 0.5 }; // upper-left light
         const lightLen = Math.hypot(lightDir.x, lightDir.y, lightDir.z);
-        lightDir.x /= lightLen; lightDir.y /= lightLen; lightDir.z /= lightLen;
+        lightDir.x /= lightLen;
+        lightDir.y /= lightLen;
+        lightDir.z /= lightLen;
 
         // Draw sphere scanline by scanline using checkerboard + lighting
         const step = 3; // pixel step for performance
@@ -3218,8 +3310,8 @@ const Game = () => {
             const phi = Math.asin(Math.min(1, Math.max(-1, nz))); // latitude
 
             // Apply rotation offset
-            const u = ((theta + rotAngle) / Math.PI * 4 + 100) % 1;
-            const v = ((phi + Math.PI / 2) / Math.PI * 4 + 100) % 1;
+            const u = (((theta + rotAngle) / Math.PI) * 4 + 100) % 1;
+            const v = (((phi + Math.PI / 2) / Math.PI) * 4 + 100) % 1;
 
             // Checkerboard
             const checkerU = Math.floor(u * 2) % 2;
@@ -3247,7 +3339,11 @@ const Game = () => {
               b = Math.min(255, Math.floor(255 * diffuse + spec * 255));
             }
 
-            if (boss.hitFlash > 0) { r = 255; g = 255; b = 255; }
+            if (boss.hitFlash > 0) {
+              r = 255;
+              g = 255;
+              b = 255;
+            }
 
             ctx.fillStyle = `rgb(${r},${g},${b})`;
             ctx.fillRect(px - step / 2, py - step / 2, step, step);
@@ -3263,7 +3359,6 @@ const Game = () => {
         ctx.arc(0, 0, radius * 0.8, 0, Math.PI * 2);
         ctx.fill();
         ctx.restore();
-
       } else if (boss.bossType === "flyingSaucer") {
         // Flying saucer
         const flash = boss.hitFlash > 0;
@@ -3315,7 +3410,7 @@ const Game = () => {
 
         // Draw mini-saucers
         if (boss.miniSaucers) {
-          boss.miniSaucers.forEach(ms => {
+          boss.miniSaucers.forEach((ms) => {
             ctx.save();
             ctx.translate(ms.pos.x - boss.pos.x, ms.pos.y - boss.pos.y);
             ctx.fillStyle = "#556677";
@@ -3332,7 +3427,6 @@ const Game = () => {
             ctx.restore();
           });
         }
-
       } else if (boss.bossType === "borgCube") {
         // 3D wireframe rotating cube
         const flash = boss.hitFlash > 0;
@@ -3342,8 +3436,14 @@ const Game = () => {
 
         // Define cube vertices
         const verts = [
-          [-1,-1,-1],[1,-1,-1],[1,1,-1],[-1,1,-1],
-          [-1,-1,1],[1,-1,1],[1,1,1],[-1,1,1],
+          [-1, -1, -1],
+          [1, -1, -1],
+          [1, 1, -1],
+          [-1, 1, -1],
+          [-1, -1, 1],
+          [1, -1, 1],
+          [1, 1, 1],
+          [-1, 1, 1],
         ].map(([x, y, z]) => {
           // Rotate around Y
           let x2 = x * Math.cos(rotY) - z * Math.sin(rotY);
@@ -3356,7 +3456,20 @@ const Game = () => {
           return { x: x2 * cubeSize * scale, y: y2 * cubeSize * scale };
         });
 
-        const edges = [[0,1],[1,2],[2,3],[3,0],[4,5],[5,6],[6,7],[7,4],[0,4],[1,5],[2,6],[3,7]];
+        const edges = [
+          [0, 1],
+          [1, 2],
+          [2, 3],
+          [3, 0],
+          [4, 5],
+          [5, 6],
+          [6, 7],
+          [7, 4],
+          [0, 4],
+          [1, 5],
+          [2, 6],
+          [3, 7],
+        ];
         const cubeColor = flash ? "#FFFFFF" : "#00FF44";
 
         // Glow effect
@@ -3380,7 +3493,7 @@ const Game = () => {
 
         // Draw vertices as bright dots
         ctx.fillStyle = flash ? "#FFFFFF" : "#88FF88";
-        verts.forEach(v => {
+        verts.forEach((v) => {
           ctx.beginPath();
           ctx.arc(v.x, v.y, 3, 0, Math.PI * 2);
           ctx.fill();
@@ -3423,19 +3536,21 @@ const Game = () => {
 
         // Draw mini cubes
         if (boss.miniCubes) {
-          boss.miniCubes.forEach(mc => {
+          boss.miniCubes.forEach((mc) => {
             ctx.save();
             ctx.translate(mc.pos.x - boss.pos.x, mc.pos.y - boss.pos.y);
             ctx.rotate(mc.rotAngle);
             ctx.strokeStyle = "#00FF44";
             ctx.lineWidth = 1;
             const s = 8;
-            ctx.strokeRect(-s/2, -s/2, s, s);
+            ctx.strokeRect(-s / 2, -s / 2, s, s);
             // Inner cross
             ctx.strokeStyle = "rgba(0,255,68,0.4)";
             ctx.beginPath();
-            ctx.moveTo(-s/2, 0); ctx.lineTo(s/2, 0);
-            ctx.moveTo(0, -s/2); ctx.lineTo(0, s/2);
+            ctx.moveTo(-s / 2, 0);
+            ctx.lineTo(s / 2, 0);
+            ctx.moveTo(0, -s / 2);
+            ctx.lineTo(0, s / 2);
             ctx.stroke();
             ctx.restore();
           });
@@ -3452,7 +3567,12 @@ const Game = () => {
       const barY = CANVAS_HEIGHT - 30;
       const hpFrac = boss.hp / boss.maxHp;
       ctx.globalAlpha = 0.7;
-      const bossBarColors: Record<string, string> = { tentacle: "#FF44CC", amigaBall: "#CC0000", flyingSaucer: "#00FF88", borgCube: "#00FF44" };
+      const bossBarColors: Record<string, string> = {
+        tentacle: "#FF44CC",
+        amigaBall: "#CC0000",
+        flyingSaucer: "#00FF88",
+        borgCube: "#00FF44",
+      };
       const barColor = bossBarColors[boss.bossType] || "#FF44CC";
       ctx.strokeStyle = barColor;
       ctx.lineWidth = 1;
@@ -3463,7 +3583,12 @@ const Game = () => {
       ctx.font = "8px 'Press Start 2P', monospace";
       ctx.fillStyle = "#FFFFFF";
       ctx.textAlign = "center";
-      const bossNames: Record<string, string> = { tentacle: "BOSS", amigaBall: "AMIGA BALL", flyingSaucer: "FLYING SAUCER", borgCube: "BORG CUBE" };
+      const bossNames: Record<string, string> = {
+        tentacle: "BOSS",
+        amigaBall: "AMIGA BALL",
+        flyingSaucer: "FLYING SAUCER",
+        borgCube: "BORG CUBE",
+      };
       ctx.fillText(bossNames[boss.bossType] || "BOSS", CANVAS_WIDTH / 2, barY - 4);
       ctx.restore();
     }
@@ -3694,75 +3819,81 @@ const Game = () => {
     ctx.restore();
   }, []);
 
-  const gameLoop = useCallback((currentTime: number) => {
-    // --- 60 FPS render cap ---
-    if (lastFrameTimeRef.current !== 0 && currentTime - lastFrameTimeRef.current < FRAME_MIN_TIME - FRAME_TIME_TOLERANCE) {
-      animationFrameRef.current = requestAnimationFrame(gameLoop);
-      return;
-    }
+  const gameLoop = useCallback(
+    (currentTime: number) => {
+      // --- 60 FPS render cap ---
+      if (
+        lastFrameTimeRef.current !== 0 &&
+        currentTime - lastFrameTimeRef.current < FRAME_MIN_TIME - FRAME_TIME_TOLERANCE
+      ) {
+        animationFrameRef.current = requestAnimationFrame(gameLoop);
+        return;
+      }
 
-    const deltaTime = currentTime - lastTimeRef.current;
-    lastTimeRef.current = currentTime;
-    lastFrameTimeRef.current = currentTime;
+      const deltaTime = currentTime - lastTimeRef.current;
+      lastTimeRef.current = currentTime;
+      lastFrameTimeRef.current = currentTime;
 
-    // Cap delta to prevent "spiral of death" after pauses / tab switches
-    const cappedDelta = Math.min(deltaTime, 250);
+      // Cap delta to prevent "spiral of death" after pauses / tab switches
+      const cappedDelta = Math.min(deltaTime, 250);
 
-    let updatesThisFrame = 0;
+      let updatesThisFrame = 0;
 
-    if (gameModeRef.current === "online") {
-      // Online: the worker owns game physics; we just send inputs and render
-      if (isHostRef.current && workerRef.current) {
-        const keys = keysRef.current;
-        const gp0 = readGamepad(0);
-        const b = controlBindingsRef.current;
-        workerRef.current.postMessage({
-          type: "inputs",
-          p1: {
+      if (gameModeRef.current === "online") {
+        // Online: the worker owns game physics; we just send inputs and render
+        if (isHostRef.current && workerRef.current) {
+          const keys = keysRef.current;
+          const gp0 = readGamepad(0);
+          const b = controlBindingsRef.current;
+          workerRef.current.postMessage({
+            type: "inputs",
+            p1: {
+              left: keys[b.p1.left] || gp0.left,
+              right: keys[b.p1.right] || gp0.right,
+              up: keys[b.p1.thrust] || gp0.up,
+              fire: keys[b.p1.fire] || gp0.fire,
+            },
+            p2: multiplayer.remoteInputRef.current,
+          });
+        }
+        if (!isHostRef.current && isConnectedRef.current) {
+          const keys = keysRef.current;
+          const gp0 = readGamepad(0);
+          const b = controlBindingsRef.current;
+          multiplayer.sendInputs({
             left: keys[b.p1.left] || gp0.left,
             right: keys[b.p1.right] || gp0.right,
             up: keys[b.p1.thrust] || gp0.up,
             fire: keys[b.p1.fire] || gp0.fire,
-          },
-          p2: multiplayer.remoteInputRef.current,
-        });
-      }
-      if (!isHostRef.current && isConnectedRef.current) {
-        const keys = keysRef.current;
-        const gp0 = readGamepad(0);
-        const b = controlBindingsRef.current;
-        multiplayer.sendInputs({
-          left: keys[b.p1.left] || gp0.left,
-          right: keys[b.p1.right] || gp0.right,
-          up: keys[b.p1.thrust] || gp0.up,
-          fire: keys[b.p1.fire] || gp0.fire,
-        });
-      }
-      updateOnlineVisuals();
-      // Physics run in the worker; don't count as local updates
-      updatesThisFrame = 0;
-    } else {
-      // Solo / Duel: fixed timestep accumulator – game logic always runs at 60 Hz
-      accumulatorRef.current += cappedDelta;
-      while (accumulatorRef.current >= FIXED_TIMESTEP) {
-        if (gameModeRef.current === "duel") {
-          updateDuel();
-        } else if (gameModeRef.current === "solo") {
-          update();
+          });
         }
-        accumulatorRef.current -= FIXED_TIMESTEP;
-        updatesThisFrame++;
+        updateOnlineVisuals();
+        // Physics run in the worker; don't count as local updates
+        updatesThisFrame = 0;
+      } else {
+        // Solo / Duel: fixed timestep accumulator – game logic always runs at 60 Hz
+        accumulatorRef.current += cappedDelta;
+        while (accumulatorRef.current >= FIXED_TIMESTEP) {
+          if (gameModeRef.current === "duel") {
+            updateDuel();
+          } else if (gameModeRef.current === "solo") {
+            update();
+          }
+          accumulatorRef.current -= FIXED_TIMESTEP;
+          updatesThisFrame++;
+        }
       }
-    }
 
-    draw();
+      draw();
 
-    // FPS tracking for overlay – writes to module-level counters (no setState)
-    _fps.frames++;
-    _fps.updates += updatesThisFrame;
+      // FPS tracking for overlay – writes to module-level counters (no setState)
+      _fps.frames++;
+      _fps.updates += updatesThisFrame;
 
-    animationFrameRef.current = requestAnimationFrame(gameLoop);
-  }, [update, updateDuel, draw, updateOnlineVisuals, multiplayer.sendInputs]);
+      animationFrameRef.current = requestAnimationFrame(gameLoop);
+    },
+    [update, updateDuel, draw, updateOnlineVisuals, multiplayer.sendInputs],
+  );
 
   useEffect(() => {
     enteringInitialsRef.current = enteringInitials;
@@ -4103,8 +4234,12 @@ const Game = () => {
           e.preventDefault();
           setPauseSelection((s) => {
             if (s === 0) resumeGame();
-            else if (s === 1) { setShowSettings(true); }
-            else { resumeGame(); quitToMenu(); }
+            else if (s === 1) {
+              setShowSettings(true);
+            } else {
+              resumeGame();
+              quitToMenu();
+            }
             return s;
           });
         }
@@ -4123,10 +4258,21 @@ const Game = () => {
       // Prevent default browser behavior for game control keys during gameplay
       const b = controlBindingsRef.current;
       const allGameKeys = new Set([
-        b.p1.left, b.p1.right, b.p1.thrust, b.p1.fire, b.p1.hyperspace,
-        b.p2.left, b.p2.right, b.p2.thrust, b.p2.fire, b.p2.hyperspace,
-        b.p2.left.toUpperCase(), b.p2.right.toUpperCase(), b.p2.thrust.toUpperCase(),
-        b.p2.fire.toUpperCase(), b.p2.hyperspace.toUpperCase(),
+        b.p1.left,
+        b.p1.right,
+        b.p1.thrust,
+        b.p1.fire,
+        b.p1.hyperspace,
+        b.p2.left,
+        b.p2.right,
+        b.p2.thrust,
+        b.p2.fire,
+        b.p2.hyperspace,
+        b.p2.left.toUpperCase(),
+        b.p2.right.toUpperCase(),
+        b.p2.thrust.toUpperCase(),
+        b.p2.fire.toUpperCase(),
+        b.p2.hyperspace.toUpperCase(),
         "ArrowDown", // always prevent
       ]);
       if (!showGameOver && allGameKeys.has(e.key)) {
@@ -4222,8 +4368,12 @@ const Game = () => {
             if (justA) {
               setPauseSelection((s) => {
                 if (s === 0) resumeGame();
-                else if (s === 1) { setShowSettings(true); }
-                else { resumeGame(); quitToMenu(); }
+                else if (s === 1) {
+                  setShowSettings(true);
+                } else {
+                  resumeGame();
+                  quitToMenu();
+                }
                 return s;
               });
             }
@@ -4427,7 +4577,7 @@ const Game = () => {
               ★ HALL OF FAME ★
             </div>
             <div className="border border-[#FFD700]/30 p-2">
-               {hallOfFame.slice(0, 3).map((entry, i) => {
+              {hallOfFame.slice(0, 3).map((entry, i) => {
                 const initialsDisplay = entry.initials.padEnd(3, " ");
                 return (
                   <div
@@ -4503,17 +4653,17 @@ const Game = () => {
               >
                 ★ OLD HIGHSCORES ★
               </div>
-               {oldLeaderboard.map((entry, i) => (
-                  <div
-                    key={i}
-                    className="flex justify-between font-mono text-sm py-0.5 text-[hsl(var(--game-foreground))]"
-                  >
-                    <span style={{ whiteSpace: "pre" }}>
-                      {(i + 1).toString().padStart(2, " ")}. {entry.initials.padEnd(3, " ")}
-                    </span>
-                    <span>{entry.score.toString().padStart(8, "0")}</span>
-                  </div>
-                ))}
+              {oldLeaderboard.map((entry, i) => (
+                <div
+                  key={i}
+                  className="flex justify-between font-mono text-sm py-0.5 text-[hsl(var(--game-foreground))]"
+                >
+                  <span style={{ whiteSpace: "pre" }}>
+                    {(i + 1).toString().padStart(2, " ")}. {entry.initials.padEnd(3, " ")}
+                  </span>
+                  <span>{entry.score.toString().padStart(8, "0")}</span>
+                </div>
+              ))}
               <button
                 onClick={() => setShowOldLeaderboard(false)}
                 className="w-full mt-4 font-mono text-xs text-[hsl(var(--game-foreground))] opacity-60 hover:opacity-100 transition-opacity uppercase tracking-widest text-center py-2 border border-[hsl(var(--game-foreground))]/30"
@@ -4525,8 +4675,22 @@ const Game = () => {
         )}
 
         <div className="text-[hsl(var(--game-foreground))] font-mono text-xs space-y-1 opacity-60 text-center">
-          <div>SOLO: {displayKeyName(controlBindingsRef.current.p1.left)}{displayKeyName(controlBindingsRef.current.p1.right)}{displayKeyName(controlBindingsRef.current.p1.thrust)} + {displayKeyName(controlBindingsRef.current.p1.fire)} + {displayKeyName(controlBindingsRef.current.p1.hyperspace)} | Gamepad supported</div>
-          <div>DUEL: P1 {displayKeyName(controlBindingsRef.current.p1.left)}{displayKeyName(controlBindingsRef.current.p1.right)}{displayKeyName(controlBindingsRef.current.p1.thrust)}+{displayKeyName(controlBindingsRef.current.p1.fire)} | P2 {displayKeyName(controlBindingsRef.current.p2.left)}{displayKeyName(controlBindingsRef.current.p2.right)}{displayKeyName(controlBindingsRef.current.p2.thrust)}+{displayKeyName(controlBindingsRef.current.p2.fire)} | Gamepads 1 & 2</div>
+          <div>
+            SOLO: {displayKeyName(controlBindingsRef.current.p1.left)}
+            {displayKeyName(controlBindingsRef.current.p1.right)}
+            {displayKeyName(controlBindingsRef.current.p1.thrust)} +{" "}
+            {displayKeyName(controlBindingsRef.current.p1.fire)} +{" "}
+            {displayKeyName(controlBindingsRef.current.p1.hyperspace)} | Gamepad supported
+          </div>
+          <div>
+            DUEL: P1 {displayKeyName(controlBindingsRef.current.p1.left)}
+            {displayKeyName(controlBindingsRef.current.p1.right)}
+            {displayKeyName(controlBindingsRef.current.p1.thrust)}+{displayKeyName(controlBindingsRef.current.p1.fire)}{" "}
+            | P2 {displayKeyName(controlBindingsRef.current.p2.left)}
+            {displayKeyName(controlBindingsRef.current.p2.right)}
+            {displayKeyName(controlBindingsRef.current.p2.thrust)}+{displayKeyName(controlBindingsRef.current.p2.fire)}{" "}
+            | Gamepads 1 & 2
+          </div>
           <div>ONLINE: Create or join a room to duel remotely</div>
         </div>
 
@@ -4570,11 +4734,14 @@ const Game = () => {
               >
                 ✕
               </button>
-              <div className="text-center font-mono text-lg text-[#FFD700] mb-4" style={{ textShadow: "0 0 10px #FFD700" }}>
+              <div
+                className="text-center font-mono text-lg text-[#FFD700] mb-4"
+                style={{ textShadow: "0 0 10px #FFD700" }}
+              >
                 📋 CHANGELOG
               </div>
               <pre className="font-mono text-[11px] text-[hsl(var(--game-foreground))] whitespace-pre-wrap leading-relaxed opacity-90">
-{`[0.2.1] - 2026-03-24
+                {`[0.2.1] - 2026-03-24
 
   Fixed
   - Keyboard State Persistence: Fixed bug where keyboard
@@ -4780,7 +4947,10 @@ const Game = () => {
         </div>
       )}
       {(gameMode === "duel" || gameMode === "online") && (
-        <div className="mb-2 sm:mb-4 flex flex-wrap gap-2 sm:gap-6 text-[8px] sm:text-xs tracking-wide justify-center" style={{ fontFamily: "'Press Start 2P', monospace" }}>
+        <div
+          className="mb-2 sm:mb-4 flex flex-wrap gap-2 sm:gap-6 text-[8px] sm:text-xs tracking-wide justify-center"
+          style={{ fontFamily: "'Press Start 2P', monospace" }}
+        >
           <div style={{ color: P1_COLOR, textShadow: `0 0 10px ${P1_COLOR}` }}>
             P1{gameMode === "online" && multiplayer.isHost ? " (YOU)" : ""} K:{duelKills[0]} D:{duelDeaths[0]}
           </div>
@@ -4810,7 +4980,9 @@ const Game = () => {
 
         {showLifeLost && !showGameOver && gameMode === "solo" && (
           <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/70">
-            <div className="text-2xl sm:text-4xl font-mono text-[hsl(var(--game-danger))] mb-4 sm:mb-6 animate-pulse">LIFE LOST!</div>
+            <div className="text-2xl sm:text-4xl font-mono text-[hsl(var(--game-danger))] mb-4 sm:mb-6 animate-pulse">
+              LIFE LOST!
+            </div>
             <Button
               onClick={continueAfterLifeLost}
               onTouchEnd={(e) => {
@@ -4829,7 +5001,9 @@ const Game = () => {
 
         {showGameOver && gameMode === "solo" && (
           <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/80 overflow-auto py-4">
-            <div className="text-3xl sm:text-5xl font-mono text-[hsl(var(--game-danger))] mb-3 sm:mb-4 animate-pulse">GAME OVER</div>
+            <div className="text-3xl sm:text-5xl font-mono text-[hsl(var(--game-danger))] mb-3 sm:mb-4 animate-pulse">
+              GAME OVER
+            </div>
             <div className="text-base sm:text-2xl font-mono text-[hsl(var(--game-foreground))] mb-3 sm:mb-4">
               FINAL SCORE: {displayScore.toString().padStart(8, "0")}
             </div>
@@ -4838,9 +5012,7 @@ const Game = () => {
               <div className="mb-4 flex flex-col items-center gap-2">
                 <div className="text-lg font-mono text-[hsl(var(--game-glow))]">NEW HIGH SCORE! ENTER INITIALS:</div>
                 {initialsError && (
-                  <div className="text-sm font-mono text-[hsl(var(--game-danger))] animate-pulse">
-                    {initialsError}
-                  </div>
+                  <div className="text-sm font-mono text-[hsl(var(--game-danger))] animate-pulse">{initialsError}</div>
                 )}
                 <div className="flex gap-2 items-center">
                   <input
@@ -5203,6 +5375,37 @@ const Game = () => {
         >
           🎵 NECTARINE DEMOSCENE RADIO
         </a>
+        <div className="flex justify-center mt-2">
+          <a
+            href="https://supaexplorer.com"
+            target="_blank"
+            rel="noopener"
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "8px",
+              background: "#ffffff",
+              padding: "7px 12px",
+              borderRadius: "999px",
+              textDecoration: "none",
+              fontFamily: "system-ui,-apple-system,sans-serif",
+              border: "1px solid #e2e8f0",
+              boxShadow: "0 1px 3px rgba(0,0,0,0.08)",
+              transition: "box-shadow 0.2s ease",
+            }}
+            onMouseOver={(e) => (e.currentTarget.style.boxShadow = "0 0 12px rgba(62,207,142,0.4)")}
+            onMouseOut={(e) => (e.currentTarget.style.boxShadow = "0 1px 3px rgba(0,0,0,0.08)")}
+          >
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path
+                d="M0 6h16v2A8 8 0 1 1 0 8V6zm2 2a6 6 0 1 0 12 0H2zm0-7h2v4H2V1zm5-1h2v4H7V0zm5 1h2v4h-2V1z"
+                fill="#0f172a"
+                fillRule="evenodd"
+              />
+            </svg>
+            <span style={{ fontSize: "12px", fontWeight: "600", color: "#0f172a" }}>Verified by SupaExplorer</span>
+          </a>
+        </div>
         <audio
           ref={audioRef}
           controls
