@@ -211,3 +211,100 @@ If you discover a security vulnerability in the highscore system or any other pa
 - Updated database policies to restrict direct INSERT
 - Updated client to use secure submission flow
 
+---
+
+## Secret Scanning & Credential Management
+
+### Overview
+
+Automated secret scanning prevents credentials from being accidentally committed to the repository.
+
+### CI/CD Scanning Workflows
+
+| Workflow | Trigger | Tools |
+|----------|---------|-------|
+| `secret-scan.yml` | Every push to main/develop, every PR | Gitleaks, TruffleHog, git-secrets |
+| `credentials-audit.yml` | Weekly (Mon 02:00 UTC), manual | TruffleHog deep scan, Gitleaks historical, pattern audit |
+
+### Local Pre-Commit Protection
+
+Install git-secrets to catch issues before they reach GitHub:
+
+```bash
+# macOS
+brew install git-secrets && git secrets --register-aws --install
+
+# Linux
+git clone https://github.com/awslabs/git-secrets /tmp/git-secrets
+cd /tmp/git-secrets && sudo make install && cd -
+git secrets --register-aws --install
+```
+
+See `docs/SECRET_SCANNING.md` for full setup instructions.
+
+### Running the Credential Audit
+
+```bash
+# Full history scan
+npm run audit:credentials
+
+# Or directly
+bash scripts/audit-credentials.sh
+```
+
+### Environment Variables
+
+| Variable | Bundle | Sensitivity | Notes |
+|----------|--------|-------------|-------|
+| `VITE_SUPABASE_URL` | Client | Low | Public project URL |
+| `VITE_SUPABASE_PUBLISHABLE_KEY` | Client | Low | Anon key — designed to be public |
+| `VITE_SCORE_HMAC_SECRET` | Client (obfuscated) | Medium | Rotate monthly; also validated server-side |
+| `SUPABASE_SERVICE_ROLE_KEY` | Edge Function only | **Critical** | Never in client code |
+| `ADMIN_SECRET_KEY` | Edge Function only | **High** | Admin dashboard authentication |
+
+### Rotating the HMAC Secret
+
+```bash
+# Generate a new secret
+openssl rand -hex 32
+
+# Update Supabase Edge Function
+supabase secrets set VITE_SCORE_HMAC_SECRET=<new-secret>
+
+# Update local .env (never commit)
+```
+
+---
+
+## Client Bundle Obfuscation
+
+### Overview
+
+The production build uses terser with aggressive settings to obfuscate the client bundle, making it significantly harder to extract the HMAC secret or reverse-engineer game logic.
+
+### Obfuscation Features
+
+- **Console stripping** — All `console.log`, `console.debug`, and `console.info` calls removed
+- **Dead code elimination** — Unreachable code paths removed
+- **Aggressive compression** — 3-pass terser compression
+- **Name mangling** — Top-level identifiers shortened and renamed
+- **No source maps** — Source maps disabled in production
+- **Hashed filenames** — Chunk names include content hash for cache-busting and unpredictability
+
+### Verification Scripts
+
+```bash
+# Verify obfuscation quality after build
+npm run verify:obfuscation
+
+# Attempt to extract HMAC from bundle (should fail)
+npm run test:secret-extraction
+
+# Audit bundle size (ensure obfuscation didn't cause bloat)
+npm run audit:bundle-size
+```
+
+### Limitations
+
+⚠️ The `VITE_SCORE_HMAC_SECRET` is inherently accessible in the client bundle because it must be evaluated at runtime. Terser obfuscation raises the cost of extraction but does not make it impossible for a determined attacker. The primary security guarantee remains the **server-side validation** in the Supabase Edge Function.
+

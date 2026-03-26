@@ -8,7 +8,11 @@
     "build": "vite build",
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "verify:obfuscation": "node scripts/verify-obfuscation.js",
+    "test:secret-extraction": "node scripts/test-secret-extraction.js",
+    "audit:bundle-size": "node scripts/audit-bundle-size.js",
+    "audit:credentials": "bash scripts/audit-credentials.sh"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
@@ -77,6 +81,7 @@
     "lovable-tagger": "^1.1.13",
     "postcss": "^8.5.6",
     "tailwindcss": "^3.4.17",
+    "terser": "^5.46.1",
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.38.0",
     "vite": "^5.4.19"
