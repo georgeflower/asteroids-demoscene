@@ -468,10 +468,15 @@ async function handleSubmit(req: Request, supabaseAdmin: any) {
     return errorResponse('Forbidden', 403);
   }
 
-  const submission: ScoreSubmission = await req.json();
+  const rawSubmission: ScoreSubmission = await req.json();
+
+  // Robust field-name parsing
+  const sessionToken = rawSubmission.gameSessionToken ?? rawSubmission.k;
+  const powNonce = rawSubmission.powNonce ?? rawSubmission.S;
+  const submission = { ...rawSubmission, gameSessionToken: sessionToken, powNonce };
 
   // --- Basic field validation ---
-  if (!submission.initials || submission.score === undefined || !submission.gameSessionToken) {
+  if (!submission.initials || submission.score === undefined || !sessionToken) {
     return errorResponse('Missing required fields', 400);
   }
 
