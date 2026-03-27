@@ -1,38 +1,48 @@
 
 
-# Plan: Delete Fake Scores, Secure Docs, Harden Credentials
+# Plan: Add Session Token to High Scores & Detect Stagnant Checkpoints
 
-## Actions
+## Summary
 
-### 1. Delete the 3 fake scores
-Remove via the admin edge function endpoint (or data operation):
-- `86f3edae-03da-400e-bcd3-67a92e27b190` (PR, 133333)
-- `778391f7-ef47-4cdb-898d-0c4e7e258551` (HY, 133335)
-- `814a0664-807e-4e5e-a361-681bb1a4530b` (ZOI, 133337)
+Two changes: (1) store the `session_token` on each high score for traceability, and (2) add server-side detection for suspicious checkpoint patterns like duplicate scores and stagnant metrics within a session.
 
-Also delete their associated `score_audit_log` and `game_session_checkpoints` entries.
+## Observations from the CSV
 
-### 2. Add `.lovable/` to `.gitignore`
-Prevents `plan.md` (which contains anti-cheat implementation details) from being visible in the Git repository.
+- Session `fc852d9a`: score `11220` reported twice (lines 4-5), `asteroids_destroyed` stuck at `100`, `bullets_fired` stuck at `223` — player idle or paused, metrics frozen.
+- Session `d07339fe`: `asteroids_destroyed` stuck at `476` for two consecutive heartbeats (lines 21-22) while score still climbed — suspicious.
+- Sessions `af20d77a` and `3df0f0f7` (lines 25-28): identical checkpoint patterns (100→200, 5→10 asteroids, 20→40 bullets) — likely same person using different sessions (the attacker's test runs).
 
-### 3. Remove credentials from documentation files
-- **`SECURITY.md`**: Remove any references to specific project URLs, Supabase refs, or key formats
-- **`.env.example`**: Already safe (uses placeholders) — no change needed
-- **`scripts/check-highscore-legitimacy.ts`**: References `SUPABASE_SERVICE_ROLE_KEY` by name only (safe) — no change needed
+## Changes
 
-### 4. Important note on the anon key
-The Supabase anon key is **public by design** — it ships in the browser JavaScript bundle to every visitor. It cannot be "hidden." Your security comes from:
-- ✅ RLS policies blocking direct INSERT/UPDATE/DELETE on score tables
-- ✅ Edge function validation (PoW, HMAC, heartbeat consistency)
-- ✅ `insert_score_with_audit` function restricted to `SECURITY DEFINER`
+### 1. Database Migration — Add `session_token` column to `current_high_scores`
 
-The attacker's claim about "exposed credentials" is misleading — the anon key is always visible, but it **cannot** bypass RLS or the edge function. The newly deployed anti-cheat (PoW + HMAC) will block their automated submissions going forward.
+```sql
+ALTER TABLE public.current_high_scores 
+  ADD COLUMN session_token text;
+```
 
-## Files Changed
+### 2. Update `insert_score_with_audit` function
+
+Modify the function to also store the session token on the score row:
+
+```sql
+CREATE OR REPLACE FUNCTION public.insert_score_with_audit(...)
+  -- add session_token to the INSERT into current_high_scores
+```
+
+### 3. Edge Function — Detect stagnant/duplicate checkpoints
+
+Add validation in `handleSubmit` before accepting a score:
+
+- **Duplicate score detection**: If consecutive checkpoints have identical `score` values, flag as suspicious (player paused or replaying cached data).
+- **Stagnant metrics detection**: If `asteroids_destroyed` or `bullets_fired` remain unchanged across 2+ consecutive heartbeats while score increases, reject or flag.
+- **Cross-session pattern detection**: Before accepting, check if another session in the last 30 minutes has an identical checkpoint fingerprint (same score sequence pattern).
+
+### 4. Files Changed
 
 | File | Change |
 |------|--------|
-| `.gitignore` | Add `.lovable/` entry |
-| `SECURITY.md` | Remove specific URLs and implementation thresholds |
-| **Data operation** | Delete 3 fake scores + related audit/checkpoint data |
+| Migration SQL | Add `session_token` column to `current_high_scores` |
+| Migration SQL | Update `insert_score_with_audit` to store session_token |
+| `supabase/functions/submit/index.ts` | Add stagnant checkpoint + duplicate score detection logic |
 
