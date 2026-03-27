@@ -241,6 +241,13 @@ async function handleHeartbeat(req: Request, supabaseAdmin: any) {
         return errorResponse('Invalid metric progression', 400);
       }
     }
+    // Sequence validation: must be strictly incrementing
+    if (payload.seq !== undefined && lastCheckpoint.seq !== null && lastCheckpoint.seq !== undefined) {
+      if (payload.seq <= lastCheckpoint.seq) {
+        console.log(`Seq replay detected: got seq=${payload.seq}, last was ${lastCheckpoint.seq}`);
+        return errorResponse('Replay detected', 403);
+      }
+    }
   }
 
   // Insert checkpoint with enriched data
