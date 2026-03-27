@@ -250,7 +250,7 @@ async function handleHeartbeat(req: Request, supabaseAdmin: any) {
     }
   }
 
-  // Insert checkpoint with enriched data
+  // Insert checkpoint with enriched data + seq
   const { error: insertError } = await supabaseAdmin
     .from('game_session_checkpoints')
     .insert({
@@ -259,11 +259,41 @@ async function handleHeartbeat(req: Request, supabaseAdmin: any) {
       level: payload.level,
       asteroids_destroyed: payload.asteroidsDestroyed ?? 0,
       bullets_fired: payload.bulletsFired ?? 0,
+      seq: payload.seq ?? 0,
     });
 
   if (insertError) {
     console.error('Failed to insert checkpoint:', insertError);
     return errorResponse('Failed to save checkpoint', 500);
+  }
+
+  // Burst detection: check timing jitter across all checkpoints for this session
+  const { data: allCheckpoints } = await supabaseAdmin
+    .from('game_session_checkpoints')
+    .select('reported_at')
+    .eq('session_token', payload.gameSessionToken)
+    .order('reported_at', { ascending: true });
+
+  if (allCheckpoints && allCheckpoints.length >= 5) {
+    const intervals: number[] = [];
+    for (let i = 1; i < allCheckpoints.length; i++) {
+      const gap = new Date(allCheckpoints[i].reported_at).getTime() - new Date(allCheckpoints[i - 1].reported_at).getTime();
+      intervals.push(gap);
+    }
+    const meanInterval = intervals.reduce((a, b) => a + b, 0) / intervals.length;
+    const intervalVariance = intervals.reduce((sum, g) => sum + (g - meanInterval) ** 2, 0) / intervals.length;
+    const intervalStdDev = Math.sqrt(intervalVariance);
+    // Real 30s heartbeats have natural jitter (1-5s std dev).
+    // Burst-sent heartbeats at exactly MIN_HEARTBEAT_INTERVAL have < 500ms std dev.
+    if (intervalStdDev < 500 && meanInterval < 15000) {
+      console.log(`Burst detection: stdDev=${intervalStdDev.toFixed(0)}ms, mean=${meanInterval.toFixed(0)}ms for token=${payload.gameSessionToken}`);
+      // Don't hard-reject yet — just expire the session to prevent submission
+      await supabaseAdmin
+        .from('game_sessions')
+        .update({ expired: true })
+        .eq('token', payload.gameSessionToken);
+      return errorResponse('Suspicious timing pattern', 403);
+    }
   }
 
   return successResponse({ ok: true });
