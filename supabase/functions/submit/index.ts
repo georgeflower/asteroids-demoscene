@@ -215,7 +215,7 @@ async function handleHeartbeat(req: Request, supabaseAdmin: any) {
   // Rate limit heartbeats
   const { data: lastCheckpoint } = await supabaseAdmin
     .from('game_session_checkpoints')
-    .select('reported_at, score, asteroids_destroyed, bullets_fired')
+    .select('reported_at, score, asteroids_destroyed, bullets_fired, seq')
     .eq('session_token', payload.gameSessionToken)
     .order('reported_at', { ascending: false })
     .limit(1)
