@@ -28,7 +28,7 @@ interface HeartbeatPayload {
 }
 
 // --- Constants ---
-const MAX_SUBMISSIONS_PER_SESSION = 10;
+const MAX_SUBMISSIONS_PER_SESSION = 1;
 const SESSION_TIMEOUT_MS = 3600000; // 1 hour
 const MIN_SUBMISSION_INTERVAL_MS = 5000;
 const MAX_VALID_SCORE = 9999999;
@@ -504,12 +504,13 @@ async function handleSubmit(req: Request, supabaseAdmin: any) {
     return errorResponse('Duplicate score detected', 409);
   }
 
-  // --- Update session counters ---
+  // --- Expire session after single submission ---
   await supabaseAdmin
     .from('game_sessions')
     .update({
       submission_count: session.submission_count + 1,
       last_submission_at: new Date().toISOString(),
+      expired: true,
     })
     .eq('id', session.id);
 
