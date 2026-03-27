@@ -70,32 +70,7 @@ Game Client (Browser)
 ### Implementation Details
 
 #### Edge Function: `submit`
-Located in `/supabase/functions/submit/index.ts`
-
-**Endpoints:**
-- `POST /start-session` — Creates a new game session and returns a token
-- `POST /heartbeat` — Records a gameplay checkpoint (score + wave)
-- `POST /submit` — Validates and submits a score with session token
-- `GET /admin-data` — Returns scores, flags, and audit logs (requires `x-admin-key`)
-- `POST /admin-delete` — Removes a score by ID (requires `x-admin-key`)
-
-**Request Format (submit):**
-```json
-{
-  "initials": "ABC",
-  "score": 12345,
-  "gameSessionToken": "uuid-token",
-  "timestamp": 1234567890,
-  "level": 5,
-  "source": "game_client"
-}
-```
-
-**Error Responses:**
-- `400` — Invalid request format or missing fields
-- `403` — Invalid session token, session expired, or score plausibility failure
-- `409` — Duplicate score detected
-- `500` — Server error
+Handled by the secure edge function with session validation, PoW verification, and HMAC signature checks. Implementation details are kept server-side.
 
 ### Admin Monitoring Dashboard
 
