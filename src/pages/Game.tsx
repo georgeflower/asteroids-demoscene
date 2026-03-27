@@ -245,6 +245,10 @@ const FRAME_MIN_TIME = FIXED_TIMESTEP; // 60 FPS render cap (tied to fixed times
 const FRAME_TIME_TOLERANCE = 1;
 
 const GAME_VERSION = "0.2.1";
+
+// Set to true to re-enable the high scores system.
+const HIGH_SCORES_ENABLED = false;
+
 const SHIP_SIZE = 10;
 const BULLET_SPEED = 7;
 const BULLET_LIFETIME = 60;
@@ -1468,7 +1472,7 @@ const Game = () => {
         stopHeartbeatInterval();
         setShowGameOver(true);
         // Trainer mode: don't offer score saving
-        if (!(DEBUG_ENABLED && trainerModeRef.current) && isHighScore(state.score)) setEnteringInitials(true);
+        if (HIGH_SCORES_ENABLED && !(DEBUG_ENABLED && trainerModeRef.current) && isHighScore(state.score)) setEnteringInitials(true);
         loadLeaderboard().then(setLeaderboard);
         // Game over
         haptics.gameOver();
@@ -4533,7 +4537,7 @@ const Game = () => {
         </div>
 
         {/* Top 3 High Scores (current) */}
-        {leaderboard.length > 0 && (
+        {HIGH_SCORES_ENABLED && leaderboard.length > 0 && (
           <div className="mb-4 w-72">
             <div
               className="text-sm font-mono text-[hsl(var(--game-glow))] text-center mb-2 tracking-wider"
@@ -4578,7 +4582,7 @@ const Game = () => {
         )}
 
         {/* Hall of Fame (top 3 from old/archive high_scores) */}
-        {hallOfFame.length > 0 && (
+        {HIGH_SCORES_ENABLED && hallOfFame.length > 0 && (
           <div className="mb-8 w-72">
             <div
               className="text-sm font-mono text-[#FFD700] text-center mb-2 tracking-wider cursor-help"
@@ -4611,8 +4615,26 @@ const Game = () => {
           </div>
         )}
 
+        {/* High scores disabled message */}
+        {!HIGH_SCORES_ENABLED && (
+          <div className="mb-8 w-72 text-center">
+            <div
+              className="text-sm font-mono text-[hsl(var(--game-glow))] mb-1 tracking-wider"
+              style={{ textShadow: "0 0 10px hsl(var(--game-glow))" }}
+            >
+              ★ HIGH SCORES ARE DISABLED ★
+            </div>
+            <div
+              className="text-sm font-mono tracking-wider"
+              style={{ color: "#FFD700", textShadow: "0 0 10px #FFD700" }}
+            >
+              MDB IS THE GRAND CHAMPION!
+            </div>
+          </div>
+        )}
+
         {/* Full leaderboard overlay (current scores) */}
-        {showFullLeaderboard && (
+        {HIGH_SCORES_ENABLED && showFullLeaderboard && (
           <div
             className="fixed inset-0 z-50 flex items-center justify-center bg-black/85"
             onClick={() => setShowFullLeaderboard(false)}
@@ -4649,7 +4671,7 @@ const Game = () => {
         )}
 
         {/* Old highscores overlay */}
-        {showOldLeaderboard && (
+        {HIGH_SCORES_ENABLED && showOldLeaderboard && (
           <div
             className="fixed inset-0 z-50 flex items-center justify-center bg-black/85"
             onClick={() => setShowOldLeaderboard(false)}
@@ -5019,7 +5041,7 @@ const Game = () => {
               FINAL SCORE: {displayScore.toString().padStart(8, "0")}
             </div>
 
-            {enteringInitials && (
+            {HIGH_SCORES_ENABLED && enteringInitials && (
               <div className="mb-4 flex flex-col items-center gap-2">
                 <div className="text-lg font-mono text-[hsl(var(--game-glow))]">NEW HIGH SCORE! ENTER INITIALS:</div>
                 {initialsError && (
@@ -5066,7 +5088,7 @@ const Game = () => {
               </div>
             )}
 
-            {leaderboard.length > 0 && (
+            {HIGH_SCORES_ENABLED && leaderboard.length > 0 && (
               <div className="mb-4 w-72">
                 <div className="text-lg font-mono text-[hsl(var(--game-glow))] text-center mb-2">TOP SCORES</div>
                 <div className="border border-[hsl(var(--game-foreground))] p-2">
