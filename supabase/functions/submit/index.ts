@@ -25,6 +25,7 @@ interface HeartbeatPayload {
   asteroidsDestroyed?: number;
   bulletsFired?: number;
   hmac?: string;
+  seq?: number;
 }
 
 // --- Constants ---
