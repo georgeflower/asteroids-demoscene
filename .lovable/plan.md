@@ -1,76 +1,97 @@
 
 
-# Plan: Server-Side Heartbeat Timing Validation, HMAC Hardening & Build Obfuscation
+# Plan: Server-Side Session State & Delta Validation Hardening
 
-## Summary
+## Current State
 
-Three changes: (1) add server-side timing validation to detect burst-sent heartbeats, (2) include `asteroidsDestroyed` and `bulletsFired` in the HMAC signature so attackers can't tamper with them, and (3) add code obfuscation to the Vite build.
+Most of what the user requested is **already implemented**:
+- ✅ RLS on both `current_high_scores` and `high_scores` — SELECT only, no client writes
+- ✅ `game_sessions` table with token, PoW, HMAC nonce, expiry, submission_count
+- ✅ Heartbeat HMAC covers all fields, seq monotonicity enforced
+- ✅ PoW verification on submit
+- ✅ Single-submission-per-session enforcement
+- ✅ Origin/Referer validation, entropy checks, burst detection
 
-## Problem Assessment
+**What's missing** (the real gaps):
 
-The security researcher's analysis is accurate on two points:
+1. **No server-authoritative session state** — heartbeat validation queries `game_session_checkpoints` table each time instead of storing last-known values directly in `game_sessions`. This means an extra DB query per heartbeat and no per-minute rate limiting.
 
-1. **HMAC signs only `token|score|level`** — `asteroidsDestroyed` and `bulletsFired` are unsigned, so an attacker can modify them freely without invalidating the signature.
-2. **Session nonce is delivered to client** — this is inherent to client-side games. The HMAC serves as session binding (proving the submission came from the session that received the nonce), not as a secret. The real protection is the server-side behavioral validation (entropy checks, plausibility caps, checkpoint analysis).
+2. **No delta-per-second validation** — heartbeats check monotonicity but don't enforce `scoreDelta <= MAX_SCORE_PER_SEC × dtSec`.
 
-The existing `MIN_HEARTBEAT_INTERVAL_MS = 10000` check already rate-limits heartbeats, but it doesn't detect burst patterns (e.g., 10 heartbeats sent 11s apart but all in 2 minutes to fake a long session).
+3. **Submit doesn't verify `finalScore ≤ last_score`** — the submit handler checks against checkpoints but doesn't enforce that the submitted score matches the last heartbeat's score.
+
+4. **No minimum-heartbeat requirement on submit** — low scores can submit without any heartbeats.
 
 ## Changes
 
-### 1. Expand HMAC to include all validated fields
+### 1. Database Migration — Add session state columns to `game_sessions`
 
-**Client** (`src/pages/Game.tsx`): Change HMAC message to include all fields:
-```
-`${token}|${score}|${level}|${asteroidsDestroyed}|${bulletsFired}`
-```
-
-**Server** (`supabase/functions/submit/index.ts`): Update HMAC verification in `handleHeartbeat` to verify the expanded message. Also update the submit HMAC to match.
-
-This prevents attackers from modifying `asteroidsDestroyed`/`bulletsFired` without invalidating the signature.
-
-### 2. Server-side heartbeat timing validation
-
-Add to `handleHeartbeat` in the edge function:
-
-- **Burst detection**: After inserting a checkpoint, query all checkpoints for this session. If 5+ checkpoints exist, check the time span from first to last. If the average interval is suspiciously close to the minimum (e.g., all exactly 10-11s apart with no variance), flag the session. Real 30-second intervals have natural jitter.
-- **Server timestamp enforcement**: Already using `reported_at` (server-side `now()`), so the attacker can't fake timestamps. The existing `MIN_HEARTBEAT_INTERVAL_MS` check uses server timestamps.
-- **Add sequence number**: Add a `seq` field to heartbeats. Client sends incrementing seq (1, 2, 3...). Server validates `seq = last_seq + 1`. This prevents replay of individual heartbeats.
-
-### 3. Vite build obfuscation
-
-Update `vite.config.ts` to add Terser-based obfuscation:
-
-```typescript
-build: {
-  minify: 'terser',
-  terserOptions: {
-    mangle: {
-      toplevel: true,
-      properties: {
-        regex: /^(gameSessionToken|sessionNonce|asteroidsDestroyed|bulletsFired|powSolution|heartbeat)/,
-      },
-    },
-    compress: {
-      drop_console: false, // keep for debugging
-      passes: 2,
-    },
-  },
-}
+Add columns to existing `game_sessions` table:
+```sql
+ALTER TABLE game_sessions ADD COLUMN last_heartbeat_at timestamptz;
+ALTER TABLE game_sessions ADD COLUMN last_seq integer DEFAULT 0;
+ALTER TABLE game_sessions ADD COLUMN last_score integer DEFAULT 0;
+ALTER TABLE game_sessions ADD COLUMN last_level integer DEFAULT 1;
+ALTER TABLE game_sessions ADD COLUMN last_asteroids integer DEFAULT 0;
+ALTER TABLE game_sessions ADD COLUMN last_bullets integer DEFAULT 0;
+ALTER TABLE game_sessions ADD COLUMN heartbeat_count_minute integer DEFAULT 0;
+ALTER TABLE game_sessions ADD COLUMN heartbeat_window_start timestamptz;
 ```
 
-This mangles property names matching game-specific patterns, making the minified code harder to reverse-engineer. It won't stop a determined attacker but raises the bar significantly.
+No new table needed — extend existing `game_sessions`.
 
-### 4. Add `seq` column to `game_session_checkpoints`
+### 2. Edge Function — Rewrite `handleHeartbeat` with delta validation
 
-Database migration to add a `seq` integer column for replay protection.
+Replace checkpoint-query approach with session-state approach:
+
+- Read session row (already done) — now includes `last_score`, `last_level`, etc.
+- **Rate limit**: if `heartbeat_window_start` is within current minute, check `heartbeat_count_minute < 6` (max 6 per minute for 30s intervals). Reset window if minute elapsed.
+- **Timing**: reject if `now - last_heartbeat_at < 5s`
+- **Seq**: enforce `payload.seq > session.last_seq`
+- **Delta validation** (the core new logic):
+  - `dtSec = (now - last_heartbeat_at) / 1000`
+  - `scoreDelta = score - last_score` must be `≥ 0` and `≤ MAX_SCORE_PER_SEC × dtSec`
+  - `asteroidsDelta = l - last_asteroids` must be `≥ 0` and `≤ MAX_ASTEROIDS_PER_SEC × dtSec`
+  - `bulletsDelta = u - last_bullets` must be `≥ 0` and `≤ MAX_BULLETS_PER_SEC × dtSec`
+  - Level cannot decrease; max level jump = 5
+- **Update session**: set `last_heartbeat_at`, `last_seq`, `last_score`, `last_level`, `last_asteroids`, `last_bullets`, increment `heartbeat_count_minute`
+- Still insert into `game_session_checkpoints` for audit trail
+
+**Threshold values** (generous for Asteroids):
+| Constant | Value | Rationale |
+|----------|-------|-----------|
+| `MAX_SCORE_PER_SEC` | 1000 | Wave 8+ with 2x multiplier: ~32k/wave ÷ ~45s ≈ 700/s. 1000 is generous. |
+| `MAX_ASTEROIDS_PER_SEC` | 5 | Max ~20 asteroids/wave × 7 fragments = 140 total; killing 5/s is very fast |
+| `MAX_BULLETS_PER_SEC` | 10 | Rapid-fire powerup allows ~6-8 shots/s |
+| `MAX_HEARTBEATS_PER_MINUTE` | 6 | Client sends every 30s; 6/min allows some jitter |
+| `MIN_HEARTBEAT_GAP_MS` | 5000 | Absolute floor between heartbeats |
+
+### 3. Edge Function — Tighten `handleSubmit`
+
+- **Require `last_heartbeat_at` exists** (at least 1 heartbeat)
+- **Enforce `finalScore ≤ last_score + (dtSinceLastHeartbeat × MAX_SCORE_PER_SEC)`**
+- **Enforce `finalScore == last_score` for scores > 50k** (high scores must match last heartbeat exactly)
+
+### 4. No client changes needed
+
+The client already sends `gameSessionToken`, `score`, `level`, `asteroidsDestroyed`, `bulletsFired`, `hmac`, `seq` in heartbeats, and the submit payload is already correct. No frontend changes required.
 
 ## Files Changed
 
 | File | Change |
 |------|--------|
-| `src/pages/Game.tsx` | Expand HMAC message to include all fields; add seq counter to heartbeats |
-| `supabase/functions/submit/index.ts` | Verify expanded HMAC; validate seq monotonicity; add burst pattern detection |
-| `vite.config.ts` | Add Terser minification with property mangling |
-| Migration SQL | Add `seq` column to `game_session_checkpoints` |
-| `package.json` | Add `terser` dev dependency |
+| **Migration SQL** | Add 8 columns to `game_sessions` |
+| `supabase/functions/submit/index.ts` | Rewrite heartbeat to use session-state delta validation; tighten submit to enforce `finalScore ≤ last_score` |
+
+## Verification Checklist (post-deploy)
+
+- [ ] `INSERT INTO current_high_scores ...` via anon key → permission denied
+- [ ] `INSERT INTO high_scores ...` via anon key → permission denied
+- [ ] Heartbeat with `seq ≤ last_seq` → rejected (replay)
+- [ ] Heartbeat with `scoreDelta > MAX_SCORE_PER_SEC × dt` → rejected (delta)
+- [ ] Heartbeat arriving < 5s after previous → rejected (rate limit)
+- [ ] Submit with `score > last_score` → rejected (final score mismatch)
+- [ ] Submit without any heartbeats → rejected
+- [ ] Duplicate submit on same session → rejected (session expired)
+- [ ] Normal gameplay → works without false positives
 
