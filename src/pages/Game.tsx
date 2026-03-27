@@ -337,6 +337,7 @@ const Game = () => {
   const powSolutionRef = useRef<number | null>(null);
   const sessionNonceRef = useRef<string | null>(null);
   const gameStatsRef = useRef({ asteroidsDestroyed: 0, bulletsFired: 0 });
+  const heartbeatSeqRef = useRef(0);
   const [isTouchDevice, setIsTouchDevice] = useState(false);
   const [nowPlaying, setNowPlaying] = useState<{ artist: string; title: string } | null>(null);
   const nowPlayingRef = useRef<{ artist: string; title: string } | null>(null);
@@ -595,6 +596,7 @@ const Game = () => {
       gameSessionTokenRef.current = data.sessionToken;
       sessionNonceRef.current = data.sessionNonce || null;
       gameStatsRef.current = { asteroidsDestroyed: 0, bulletsFired: 0 };
+      heartbeatSeqRef.current = 0;
       powSolutionRef.current = null;
 
       // Solve PoW challenge in background
@@ -620,11 +622,14 @@ const Game = () => {
       const level = state.wave;
       const { asteroidsDestroyed, bulletsFired } = gameStatsRef.current;
 
-      // Compute HMAC if we have a session nonce
+      // Compute HMAC if we have a session nonce — sign ALL validated fields
       let hmac: string | undefined;
       if (sessionNonceRef.current) {
-        hmac = await computeHMAC(sessionNonceRef.current, `${token}|${score}|${level}`);
+        hmac = await computeHMAC(sessionNonceRef.current, `${token}|${score}|${level}|${asteroidsDestroyed}|${bulletsFired}`);
       }
+
+      heartbeatSeqRef.current += 1;
+      const seq = heartbeatSeqRef.current;
 
       await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/submit/heartbeat`, {
         method: "POST",
@@ -639,6 +644,7 @@ const Game = () => {
           asteroidsDestroyed,
           bulletsFired,
           hmac,
+          seq,
         }),
       });
     } catch (_) {
@@ -678,10 +684,11 @@ const Game = () => {
       const timePlayedSeconds = Math.floor((Date.now() - gameStartTimeRef.current) / 1000);
       const currentWave = gameStateRef.current?.wave ?? 1;
 
-      // Compute HMAC for submission
+      // Compute HMAC for submission — sign ALL validated fields
       let hmac: string | undefined;
       if (sessionNonceRef.current) {
-        hmac = await computeHMAC(sessionNonceRef.current, `${gameSessionTokenRef.current}|${score}|${currentWave}`);
+        const { asteroidsDestroyed, bulletsFired } = gameStatsRef.current;
+        hmac = await computeHMAC(sessionNonceRef.current, `${gameSessionTokenRef.current}|${score}|${currentWave}|${asteroidsDestroyed}|${bulletsFired}`);
       }
 
       try {

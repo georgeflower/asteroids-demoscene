@@ -55,6 +55,7 @@ export type Database = {
           level: number
           reported_at: string
           score: number
+          seq: number | null
           session_token: string
         }
         Insert: {
@@ -64,6 +65,7 @@ export type Database = {
           level?: number
           reported_at?: string
           score?: number
+          seq?: number | null
           session_token: string
         }
         Update: {
@@ -73,6 +75,7 @@ export type Database = {
           level?: number
           reported_at?: string
           score?: number
+          seq?: number | null
           session_token?: string
         }
         Relationships: []
