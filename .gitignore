@@ -12,10 +12,28 @@ dist
 dist-ssr
 *.local
 
-# Environment variables
+# Environment variables — NEVER commit these
 .env
 .env.local
 .env.*.local
+.env.production
+.env.staging
+
+# Private keys and certificates — NEVER commit these
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+*.cert
+id_rsa
+id_ed25519
+id_ecdsa
+
+# Secret scanning tool artifacts
+.gitleaks-report.json
+trufflehog-report.json
+gitleaks-report.sarif
 
 # Editor directories and files
 .vscode/*
