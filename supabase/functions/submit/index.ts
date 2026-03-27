@@ -373,12 +373,22 @@ async function handleSubmit(req: Request, supabaseAdmin: any) {
     }
   }
 
-  // --- HMAC verification ---
+  // --- HMAC verification — includes all validated fields ---
   if (session.session_nonce) {
     if (!submission.hmac) {
       return errorResponse('Missing signature', 400);
     }
-    const message = `${submission.gameSessionToken}|${submission.score}|${submission.level ?? 1}`;
+    // Reconstruct the last checkpoint's enriched metrics for HMAC verification
+    const { data: lastCpForHmac } = await supabaseAdmin
+      .from('game_session_checkpoints')
+      .select('asteroids_destroyed, bullets_fired')
+      .eq('session_token', submission.gameSessionToken)
+      .order('reported_at', { ascending: false })
+      .limit(1)
+      .single();
+    const ad = lastCpForHmac?.asteroids_destroyed ?? 0;
+    const bf = lastCpForHmac?.bullets_fired ?? 0;
+    const message = `${submission.gameSessionToken}|${submission.score}|${submission.level ?? 1}|${ad}|${bf}`;
     const valid = await verifyHMAC(session.session_nonce, message, submission.hmac);
     if (!valid) {
       console.log(`HMAC verification failed for submit: token=${submission.gameSessionToken}`);
