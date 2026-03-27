@@ -15,4 +15,19 @@ export default defineConfig(({ mode }) => ({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  build: {
+    minify: 'terser',
+    terserOptions: {
+      mangle: {
+        toplevel: true,
+        properties: {
+          regex: /^(gameSessionToken|sessionNonce|asteroidsDestroyed|bulletsFired|powSolution|powNonce|heartbeat|session_nonce|pow_challenge|pow_difficulty)/,
+        },
+      },
+      compress: {
+        drop_console: false,
+        passes: 2,
+      },
+    },
+  },
 }));
