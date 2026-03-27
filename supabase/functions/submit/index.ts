@@ -37,8 +37,6 @@ const MAX_SCORE_PER_SECOND = 1000;
 const MAX_SCORE_PER_LEVEL = 75000;
 const MAX_LEVEL = 30;
 const MIN_PLAY_TIME_SECONDS = 10;
-const MIN_HEARTBEAT_INTERVAL_MS = 10000;
-const HEARTBEAT_SCORE_THRESHOLD = 50000;
 const MAX_CHECKPOINT_GAP_SECONDS = 90;
 const MAX_SCORE_JUMP_PER_SECOND = 1000;
 const MAX_LEVEL_JUMP = 5;
@@ -46,7 +44,13 @@ const HIGH_SCORE_MIN_PLAY_SECONDS = 300;
 const HIGH_SCORE_DURATION_THRESHOLD = 50000;
 const MAX_CHECKPOINT_SPAN_RATIO = 0.15;
 const MAX_CHECKPOINT_START_RATIO = 0.10;
-const POW_DIFFICULTY = 18; // Number of leading zero bits required
+const POW_DIFFICULTY = 18;
+
+// Delta validation thresholds (per second)
+const MAX_ASTEROIDS_PER_SEC = 5;
+const MAX_BULLETS_PER_SEC = 10;
+const MIN_HEARTBEAT_GAP_MS = 5000; // Absolute minimum between heartbeats
+const MAX_HEARTBEATS_PER_MINUTE = 6; // Client sends every ~30s
 
 // Scaled checkpoint requirements
 const CHECKPOINT_REQUIREMENTS = [
@@ -98,13 +102,11 @@ async function verifyPoW(challenge: string, nonce: number, difficulty: number): 
   const data = new TextEncoder().encode(challenge + nonce.toString());
   const hashBuffer = await crypto.subtle.digest('SHA-256', data);
   const hashArray = new Uint8Array(hashBuffer);
-  // Check leading zero bits
   let zeroBits = 0;
   for (const byte of hashArray) {
     if (byte === 0) {
       zeroBits += 8;
     } else {
-      // Count leading zeros in this byte
       for (let bit = 7; bit >= 0; bit--) {
         if ((byte & (1 << bit)) === 0) {
           zeroBits++;
@@ -140,8 +142,8 @@ async function handleStartSession(req: Request, supabaseAdmin: any) {
   }
 
   const token = crypto.randomUUID();
-  const challenge = crypto.randomUUID() + crypto.randomUUID(); // 64-char random challenge
-  const sessionNonce = crypto.randomUUID(); // For HMAC signing
+  const challenge = crypto.randomUUID() + crypto.randomUUID();
+  const sessionNonce = crypto.randomUUID();
   const difficulty = POW_DIFFICULTY;
 
   try { await supabaseAdmin.rpc('cleanup_old_sessions'); } catch (_) { /* ignore */ }
@@ -151,6 +153,13 @@ async function handleStartSession(req: Request, supabaseAdmin: any) {
     pow_challenge: challenge,
     pow_difficulty: difficulty,
     session_nonce: sessionNonce,
+    // Initialize server-authoritative state
+    last_seq: 0,
+    last_score: 0,
+    last_level: 1,
+    last_asteroids: 0,
+    last_bullets: 0,
+    heartbeat_count_minute: 0,
   });
   if (error) {
     console.error('Failed to create session:', error);
@@ -184,7 +193,7 @@ async function handleHeartbeat(req: Request, supabaseAdmin: any) {
     return errorResponse('Invalid level', 400);
   }
 
-  // Validate session
+  // Fetch session with server-authoritative state
   const { data: session, error: sessionError } = await supabaseAdmin
     .from('game_sessions')
     .select('*')
@@ -199,7 +208,9 @@ async function handleHeartbeat(req: Request, supabaseAdmin: any) {
     return errorResponse('Session expired', 403);
   }
 
-  // Verify HMAC signature — now includes all validated fields
+  const now = Date.now();
+
+  // --- HMAC verification ---
   if (session.session_nonce) {
     if (!payload.hmac) {
       return errorResponse('Missing signature', 400);
@@ -212,45 +223,140 @@ async function handleHeartbeat(req: Request, supabaseAdmin: any) {
     }
   }
 
-  // Rate limit heartbeats
-  const { data: lastCheckpoint } = await supabaseAdmin
-    .from('game_session_checkpoints')
-    .select('reported_at, score, asteroids_destroyed, bullets_fired, seq')
-    .eq('session_token', payload.gameSessionToken)
-    .order('reported_at', { ascending: false })
-    .limit(1)
-    .single();
-
-  if (lastCheckpoint) {
-    const timeSinceLast = Date.now() - new Date(lastCheckpoint.reported_at).getTime();
-    if (timeSinceLast < MIN_HEARTBEAT_INTERVAL_MS) {
-      return errorResponse('Too frequent', 429);
-    }
-    // Score must be monotonically increasing
-    if (payload.score < lastCheckpoint.score) {
-      return errorResponse('Invalid score progression', 400);
-    }
-    // Enriched metrics must be monotonically increasing
-    if (payload.asteroidsDestroyed !== undefined && lastCheckpoint.asteroids_destroyed !== null) {
-      if (payload.asteroidsDestroyed < lastCheckpoint.asteroids_destroyed) {
-        return errorResponse('Invalid metric progression', 400);
-      }
-    }
-    if (payload.bulletsFired !== undefined && lastCheckpoint.bullets_fired !== null) {
-      if (payload.bulletsFired < lastCheckpoint.bullets_fired) {
-        return errorResponse('Invalid metric progression', 400);
-      }
-    }
-    // Sequence validation: must be strictly incrementing
-    if (payload.seq !== undefined && lastCheckpoint.seq !== null && lastCheckpoint.seq !== undefined) {
-      if (payload.seq <= lastCheckpoint.seq) {
-        console.log(`Seq replay detected: got seq=${payload.seq}, last was ${lastCheckpoint.seq}`);
-        return errorResponse('Replay detected', 403);
-      }
+  // --- Sequence validation ---
+  const lastSeq = session.last_seq ?? 0;
+  if (payload.seq !== undefined && payload.seq !== null) {
+    if (payload.seq <= lastSeq) {
+      console.log(`Seq replay detected: got seq=${payload.seq}, last was ${lastSeq}`);
+      return errorResponse('Replay detected', 403);
     }
   }
 
-  // Insert checkpoint with enriched data + seq
+  // --- Timing validation ---
+  const lastHeartbeatAt = session.last_heartbeat_at ? new Date(session.last_heartbeat_at).getTime() : null;
+
+  if (lastHeartbeatAt !== null) {
+    const timeSinceLast = now - lastHeartbeatAt;
+
+    // Absolute minimum gap
+    if (timeSinceLast < MIN_HEARTBEAT_GAP_MS) {
+      return errorResponse('Too frequent', 429);
+    }
+
+    // --- Per-minute rate limiting ---
+    const windowStart = session.heartbeat_window_start ? new Date(session.heartbeat_window_start).getTime() : null;
+    let countThisMinute = session.heartbeat_count_minute ?? 0;
+    let newWindowStart = windowStart;
+
+    if (windowStart && (now - windowStart) < 60000) {
+      // Still within the same minute window
+      countThisMinute++;
+      if (countThisMinute > MAX_HEARTBEATS_PER_MINUTE) {
+        console.log(`Rate limit exceeded: ${countThisMinute} heartbeats in current minute window, token=${payload.gameSessionToken}`);
+        return errorResponse('Rate limit exceeded', 429);
+      }
+    } else {
+      // Start a new minute window
+      countThisMinute = 1;
+      newWindowStart = now;
+    }
+
+    // --- Delta validation (the core anti-cheat) ---
+    const dtSec = (now - lastHeartbeatAt) / 1000;
+    const lastScore = session.last_score ?? 0;
+    const lastAsteroids = session.last_asteroids ?? 0;
+    const lastBullets = session.last_bullets ?? 0;
+    const lastLevel = session.last_level ?? 1;
+
+    const scoreDelta = payload.score - lastScore;
+    const asteroidsDelta = (payload.asteroidsDestroyed ?? 0) - lastAsteroids;
+    const bulletsDelta = (payload.bulletsFired ?? 0) - lastBullets;
+    const levelDelta = payload.level - lastLevel;
+
+    // Score cannot decrease
+    if (scoreDelta < 0) {
+      console.log(`Score decreased: ${payload.score} < ${lastScore}, token=${payload.gameSessionToken}`);
+      return errorResponse('Invalid score progression', 400);
+    }
+
+    // Score delta must be plausible for elapsed time
+    const maxScoreDelta = MAX_SCORE_PER_SECOND * dtSec;
+    if (scoreDelta > maxScoreDelta) {
+      console.log(`Score delta too high: +${scoreDelta} in ${dtSec.toFixed(1)}s (max ${maxScoreDelta.toFixed(0)}), token=${payload.gameSessionToken}`);
+      return errorResponse('Score progression anomaly', 403);
+    }
+
+    // Asteroids cannot decrease
+    if (asteroidsDelta < 0) {
+      return errorResponse('Invalid metric progression', 400);
+    }
+    // Asteroids delta must be plausible
+    const maxAsteroidsDelta = MAX_ASTEROIDS_PER_SEC * dtSec;
+    if (asteroidsDelta > maxAsteroidsDelta) {
+      console.log(`Asteroids delta too high: +${asteroidsDelta} in ${dtSec.toFixed(1)}s (max ${maxAsteroidsDelta.toFixed(0)}), token=${payload.gameSessionToken}`);
+      return errorResponse('Metric progression anomaly', 403);
+    }
+
+    // Bullets cannot decrease
+    if (bulletsDelta < 0) {
+      return errorResponse('Invalid metric progression', 400);
+    }
+    // Bullets delta must be plausible
+    const maxBulletsDelta = MAX_BULLETS_PER_SEC * dtSec;
+    if (bulletsDelta > maxBulletsDelta) {
+      console.log(`Bullets delta too high: +${bulletsDelta} in ${dtSec.toFixed(1)}s (max ${maxBulletsDelta.toFixed(0)}), token=${payload.gameSessionToken}`);
+      return errorResponse('Metric progression anomaly', 403);
+    }
+
+    // Level cannot decrease; max jump limited
+    if (levelDelta < 0) {
+      return errorResponse('Invalid level progression', 400);
+    }
+    if (levelDelta > MAX_LEVEL_JUMP) {
+      console.log(`Level jump too large: +${levelDelta}, token=${payload.gameSessionToken}`);
+      return errorResponse('Impossible wave progression', 403);
+    }
+
+    // --- Update session state (including rate limit counters) ---
+    const { error: updateError } = await supabaseAdmin
+      .from('game_sessions')
+      .update({
+        last_heartbeat_at: new Date(now).toISOString(),
+        last_seq: payload.seq ?? lastSeq,
+        last_score: payload.score,
+        last_level: payload.level,
+        last_asteroids: payload.asteroidsDestroyed ?? lastAsteroids,
+        last_bullets: payload.bulletsFired ?? lastBullets,
+        heartbeat_count_minute: countThisMinute,
+        heartbeat_window_start: newWindowStart ? new Date(newWindowStart).toISOString() : new Date(now).toISOString(),
+      })
+      .eq('token', payload.gameSessionToken);
+
+    if (updateError) {
+      console.error('Failed to update session state:', updateError);
+    }
+  } else {
+    // First heartbeat — just record initial state, no delta validation needed
+    const { error: updateError } = await supabaseAdmin
+      .from('game_sessions')
+      .update({
+        last_heartbeat_at: new Date(now).toISOString(),
+        last_seq: payload.seq ?? 0,
+        last_score: payload.score,
+        last_level: payload.level,
+        last_asteroids: payload.asteroidsDestroyed ?? 0,
+        last_bullets: payload.bulletsFired ?? 0,
+        heartbeat_count_minute: 1,
+        heartbeat_window_start: new Date(now).toISOString(),
+      })
+      .eq('token', payload.gameSessionToken);
+
+    if (updateError) {
+      console.error('Failed to update session state:', updateError);
+    }
+  }
+
+  // Still insert checkpoint for audit trail
   const { error: insertError } = await supabaseAdmin
     .from('game_session_checkpoints')
     .insert({
@@ -267,7 +373,7 @@ async function handleHeartbeat(req: Request, supabaseAdmin: any) {
     return errorResponse('Failed to save checkpoint', 500);
   }
 
-  // Burst detection: check timing jitter across all checkpoints for this session
+  // Burst detection on 5+ checkpoints
   const { data: allCheckpoints } = await supabaseAdmin
     .from('game_session_checkpoints')
     .select('reported_at')
@@ -283,11 +389,8 @@ async function handleHeartbeat(req: Request, supabaseAdmin: any) {
     const meanInterval = intervals.reduce((a, b) => a + b, 0) / intervals.length;
     const intervalVariance = intervals.reduce((sum, g) => sum + (g - meanInterval) ** 2, 0) / intervals.length;
     const intervalStdDev = Math.sqrt(intervalVariance);
-    // Real 30s heartbeats have natural jitter (1-5s std dev).
-    // Burst-sent heartbeats at exactly MIN_HEARTBEAT_INTERVAL have < 500ms std dev.
     if (intervalStdDev < 500 && meanInterval < 15000) {
       console.log(`Burst detection: stdDev=${intervalStdDev.toFixed(0)}ms, mean=${meanInterval.toFixed(0)}ms for token=${payload.gameSessionToken}`);
-      // Don't hard-reject yet — just expire the session to prevent submission
       await supabaseAdmin
         .from('game_sessions')
         .update({ expired: true })
@@ -296,7 +399,7 @@ async function handleHeartbeat(req: Request, supabaseAdmin: any) {
     }
   }
 
-  return successResponse({ ok: true });
+  return successResponse({ ok: true, accepted: true });
 }
 
 async function handleSubmit(req: Request, supabaseAdmin: any) {
@@ -361,6 +464,12 @@ async function handleSubmit(req: Request, supabaseAdmin: any) {
     }
   }
 
+  // --- Require at least 1 heartbeat ---
+  if (!session.last_heartbeat_at) {
+    console.log(`Submit rejected: no heartbeats for token=${submission.gameSessionToken}`);
+    return errorResponse('Insufficient gameplay data', 403);
+  }
+
   // --- Proof-of-Work verification ---
   if (session.pow_challenge && session.pow_difficulty) {
     if (submission.powNonce === undefined || submission.powNonce === null) {
@@ -373,21 +482,13 @@ async function handleSubmit(req: Request, supabaseAdmin: any) {
     }
   }
 
-  // --- HMAC verification — includes all validated fields ---
+  // --- HMAC verification ---
   if (session.session_nonce) {
     if (!submission.hmac) {
       return errorResponse('Missing signature', 400);
     }
-    // Reconstruct the last checkpoint's enriched metrics for HMAC verification
-    const { data: lastCpForHmac } = await supabaseAdmin
-      .from('game_session_checkpoints')
-      .select('asteroids_destroyed, bullets_fired')
-      .eq('session_token', submission.gameSessionToken)
-      .order('reported_at', { ascending: false })
-      .limit(1)
-      .single();
-    const ad = lastCpForHmac?.asteroids_destroyed ?? 0;
-    const bf = lastCpForHmac?.bullets_fired ?? 0;
+    const ad = session.last_asteroids ?? 0;
+    const bf = session.last_bullets ?? 0;
     const message = `${submission.gameSessionToken}|${submission.score}|${submission.level ?? 1}|${ad}|${bf}`;
     const valid = await verifyHMAC(session.session_nonce, message, submission.hmac);
     if (!valid) {
@@ -425,7 +526,26 @@ async function handleSubmit(req: Request, supabaseAdmin: any) {
     }
   }
 
-  // --- Heartbeat checkpoint validation ---
+  // --- Final score vs server-authoritative last_score ---
+  const lastScore = session.last_score ?? 0;
+  const lastHeartbeatAt = session.last_heartbeat_at ? new Date(session.last_heartbeat_at).getTime() : Date.now();
+  const dtSinceLastHeartbeat = (Date.now() - lastHeartbeatAt) / 1000;
+
+  // Allow a small time-based tolerance for score gained between last heartbeat and game over
+  const maxFinalScore = lastScore + (dtSinceLastHeartbeat * MAX_SCORE_JUMP_PER_SECOND);
+
+  if (submission.score > maxFinalScore) {
+    console.log(`Final score exceeds server state: submitted=${submission.score}, lastHB=${lastScore}, dt=${dtSinceLastHeartbeat.toFixed(1)}s, max=${maxFinalScore.toFixed(0)}`);
+    return errorResponse('Final score anomaly', 403);
+  }
+
+  // For high scores (>50k), require exact match with last heartbeat score
+  if (submission.score > 50000 && submission.score > lastScore + 5000) {
+    console.log(`High-score mismatch: submitted=${submission.score}, lastHB=${lastScore}, token=${submission.gameSessionToken}`);
+    return errorResponse('Final score anomaly', 403);
+  }
+
+  // --- Heartbeat checkpoint validation (existing analysis) ---
   const suspiciousFlags: Array<{ flag_type: string; severity: string; reasoning: string }> = [];
   const minCheckpoints = getMinCheckpoints(submission.score);
 
@@ -441,7 +561,6 @@ async function handleSubmit(req: Request, supabaseAdmin: any) {
       return errorResponse('Validation error', 500);
     }
 
-    // Scaled checkpoint requirement
     if (!checkpoints || checkpoints.length < minCheckpoints) {
       console.log(`Checkpoint fail: score=${submission.score}, checkpoints=${checkpoints?.length ?? 0}, required=${minCheckpoints}`);
       return errorResponse('Insufficient gameplay data', 403);
@@ -483,28 +602,25 @@ async function handleSubmit(req: Request, supabaseAdmin: any) {
         return errorResponse('Invalid metric progression in checkpoints', 403);
       }
 
-      // Detect duplicate scores (exact same score in consecutive heartbeats)
+      // Detect duplicate scores
       if (curr.score === prev.score && curr.score > 0) {
         consecutiveDuplicateScores++;
       } else {
         consecutiveDuplicateScores = 0;
       }
 
-      // Detect stagnant asteroids_destroyed while score increases
       if (curr.asteroids_destroyed === prev.asteroids_destroyed && scoreDelta > 0) {
         consecutiveStagnantAsteroids++;
       } else {
         consecutiveStagnantAsteroids = 0;
       }
 
-      // Detect stagnant bullets_fired while score increases
       if (curr.bullets_fired === prev.bullets_fired && scoreDelta > 0) {
         consecutiveStagnantBullets++;
       } else {
         consecutiveStagnantBullets = 0;
       }
 
-      // Flag if 3+ consecutive stagnant checkpoints
       if (consecutiveDuplicateScores >= 3) {
         suspiciousFlags.push({
           flag_type: 'duplicate_score_sequence',
@@ -528,7 +644,7 @@ async function handleSubmit(req: Request, supabaseAdmin: any) {
       }
     }
 
-    // Cross-session fingerprint detection: check if another session submitted identical checkpoint score sequence
+    // Cross-session fingerprint detection
     const cpFingerprint = checkpoints.map((cp: any) => cp.score).join(',');
     if (checkpoints.length >= 3) {
       const thirtyMinAgo = new Date(Date.now() - 1800000).toISOString();
@@ -540,7 +656,6 @@ async function handleSubmit(req: Request, supabaseAdmin: any) {
         .order('reported_at', { ascending: true });
 
       if (recentSessions && recentSessions.length > 0) {
-        // Group by session_token
         const sessionMap = new Map<string, number[]>();
         for (const row of recentSessions) {
           const arr = sessionMap.get(row.session_token) || [];
@@ -559,7 +674,6 @@ async function handleSubmit(req: Request, supabaseAdmin: any) {
 
     // --- Entropy-based validation ---
     if (checkpoints.length >= 5) {
-      // 1. Score delta coefficient of variation (CV)
       const scoreDeltas: number[] = [];
       for (let i = 1; i < checkpoints.length; i++) {
         scoreDeltas.push(checkpoints[i].score - checkpoints[i - 1].score);
@@ -578,7 +692,6 @@ async function handleSubmit(req: Request, supabaseAdmin: any) {
         }
       }
 
-      // 2. Pts-per-asteroid ratio variance
       const ratios: number[] = [];
       for (let i = 1; i < checkpoints.length; i++) {
         const scoreDelta = checkpoints[i].score - checkpoints[i - 1].score;
@@ -604,19 +717,10 @@ async function handleSubmit(req: Request, supabaseAdmin: any) {
       return errorResponse('Score too high for reported level', 403);
     }
 
-    // Check final score vs last checkpoint
+    // Enriched metric consistency
     const lastCp = checkpoints[checkpoints.length - 1];
-    const timeSinceLastCp = (Date.now() - new Date(lastCp.reported_at).getTime()) / 1000;
-    const maxFinalJump = timeSinceLastCp * MAX_SCORE_JUMP_PER_SECOND;
-    if (submission.score - lastCp.score > maxFinalJump) {
-      console.log(`Final score jump too large: submitted=${submission.score}, lastCp=${lastCp.score}, gap=${timeSinceLastCp}s`);
-      return errorResponse('Final score anomaly', 403);
-    }
-
-    // Enriched metric consistency: score should correlate with asteroids destroyed
     const totalAsteroidsDestroyed = lastCp.asteroids_destroyed || 0;
     if (totalAsteroidsDestroyed > 0 && submission.score > 0) {
-      // Average points per asteroid should be within reasonable bounds (20-2000)
       const avgPointsPerAsteroid = submission.score / totalAsteroidsDestroyed;
       if (avgPointsPerAsteroid > 2000) {
         suspiciousFlags.push({
