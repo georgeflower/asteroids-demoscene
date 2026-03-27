@@ -1,0 +1,1 @@
+ALTER TABLE public.game_session_checkpoints ADD COLUMN seq integer DEFAULT 0;
