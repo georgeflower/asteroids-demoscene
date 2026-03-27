@@ -689,7 +689,7 @@ const Game = () => {
       let hmac: string | undefined;
       if (sessionNonceRef.current) {
         const { asteroidsDestroyed, bulletsFired } = gameStatsRef.current;
-        hmac = await computeHMAC(sessionNonceRef.current, `${gameSessionTokenRef.current}|${score}|${currentWave}|${asteroidsDestroyed}|${bulletsFired}`);
+        hmac = await computeHMAC(sessionNonceRef.current, `${gameSessionTokenRef.current}|${score}|${currentWave}|${asteroidsDestroyed}|${bulletsFired}|${heartbeatSeqRef.current}`);
       }
 
       try {
