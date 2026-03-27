@@ -364,42 +364,54 @@ async function handleHeartbeat(req: Request, supabaseAdmin: any) {
       return errorResponse('Impossible wave progression', 403);
     }
 
-    // --- Update session state (including rate limit counters) ---
-    const { error: updateError } = await supabaseAdmin
+    // --- CAS update: atomic session state mutation ---
+    const { data: updatedRows, error: updateError } = await supabaseAdmin
       .from('game_sessions')
       .update({
         last_heartbeat_at: new Date(now).toISOString(),
-        last_seq: payload.seq ?? lastSeq,
+        last_seq: payload.seq,
         last_score: payload.score,
         last_level: payload.level,
-        last_asteroids: payload.asteroidsDestroyed ?? lastAsteroids,
-        last_bullets: payload.bulletsFired ?? lastBullets,
+        last_asteroids: payload.asteroidsDestroyed,
+        last_bullets: payload.bulletsFired,
         heartbeat_count_minute: countThisMinute,
         heartbeat_window_start: newWindowStart ? new Date(newWindowStart).toISOString() : new Date(now).toISOString(),
       })
-      .eq('token', payload.gameSessionToken);
+      .eq('token', payload.token)
+      .eq('last_seq', lastSeq)  // CAS guard
+      .select('token');
 
     if (updateError) {
       console.error('Failed to update session state:', updateError);
+      return errorResponse('Failed to update session state', 500);
+    }
+    if (!updatedRows || updatedRows.length === 0) {
+      return errorResponse('Out-of-order heartbeat', 409);
     }
   } else {
-    // First heartbeat — just record initial state, no delta validation needed
-    const { error: updateError } = await supabaseAdmin
+    // First heartbeat — CAS guard with last_seq = 0
+    const { data: updatedRows, error: updateError } = await supabaseAdmin
       .from('game_sessions')
       .update({
         last_heartbeat_at: new Date(now).toISOString(),
-        last_seq: payload.seq ?? 0,
+        last_seq: payload.seq,
         last_score: payload.score,
         last_level: payload.level,
-        last_asteroids: payload.asteroidsDestroyed ?? 0,
-        last_bullets: payload.bulletsFired ?? 0,
+        last_asteroids: payload.asteroidsDestroyed,
+        last_bullets: payload.bulletsFired,
         heartbeat_count_minute: 1,
         heartbeat_window_start: new Date(now).toISOString(),
       })
-      .eq('token', payload.gameSessionToken);
+      .eq('token', payload.token)
+      .eq('last_seq', 0)  // CAS guard for first heartbeat
+      .select('token');
 
     if (updateError) {
       console.error('Failed to update session state:', updateError);
+      return errorResponse('Failed to update session state', 500);
+    }
+    if (!updatedRows || updatedRows.length === 0) {
+      return errorResponse('Out-of-order heartbeat', 409);
     }
   }
 
