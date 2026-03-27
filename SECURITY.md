@@ -70,7 +70,7 @@ Game Client (Browser)
 ### Implementation Details
 
 #### Edge Function: `submit`
-Handled by the secure edge function with session validation, PoW verification, and HMAC signature checks. Implementation details are kept server-side.
+Handled by the secure edge function with multi-layer validation. Implementation details are kept server-side.
 
 ### Admin Monitoring Dashboard
 
