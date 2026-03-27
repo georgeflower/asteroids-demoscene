@@ -28,7 +28,7 @@ interface HeartbeatPayload {
 }
 
 // --- Constants ---
-const MAX_SUBMISSIONS_PER_SESSION = 10;
+const MAX_SUBMISSIONS_PER_SESSION = 1;
 const SESSION_TIMEOUT_MS = 3600000; // 1 hour
 const MIN_SUBMISSION_INTERVAL_MS = 5000;
 const MAX_VALID_SCORE = 9999999;
