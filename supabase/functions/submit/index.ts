@@ -509,6 +509,53 @@ async function handleSubmit(req: Request, supabaseAdmin: any) {
       }
     }
 
+    // --- Entropy-based validation ---
+    if (checkpoints.length >= 5) {
+      // 1. Score delta coefficient of variation (CV)
+      const scoreDeltas: number[] = [];
+      for (let i = 1; i < checkpoints.length; i++) {
+        scoreDeltas.push(checkpoints[i].score - checkpoints[i - 1].score);
+      }
+      const positiveDeltas = scoreDeltas.filter(d => d > 0);
+      if (positiveDeltas.length >= 4) {
+        const mean = positiveDeltas.reduce((a, b) => a + b, 0) / positiveDeltas.length;
+        if (mean > 0) {
+          const variance = positiveDeltas.reduce((sum, d) => sum + (d - mean) ** 2, 0) / positiveDeltas.length;
+          const stdDev = Math.sqrt(variance);
+          const cv = stdDev / mean;
+          if (cv < 0.15) {
+            console.log(`Entropy fail: score delta CV=${cv.toFixed(4)} (min 0.15), deltas=[${positiveDeltas.join(',')}]`);
+            return errorResponse('Score progression anomaly', 403);
+          }
+        }
+      }
+
+      // 2. Pts-per-asteroid ratio variance
+      const ratios: number[] = [];
+      for (let i = 1; i < checkpoints.length; i++) {
+        const scoreDelta = checkpoints[i].score - checkpoints[i - 1].score;
+        const asteroidDelta = (checkpoints[i].asteroids_destroyed || 0) - (checkpoints[i - 1].asteroids_destroyed || 0);
+        if (asteroidDelta > 0 && scoreDelta > 0) {
+          ratios.push(scoreDelta / asteroidDelta);
+        }
+      }
+      if (ratios.length >= 4) {
+        const ratioMean = ratios.reduce((a, b) => a + b, 0) / ratios.length;
+        const ratioVariance = ratios.reduce((sum, r) => sum + (r - ratioMean) ** 2, 0) / ratios.length;
+        const ratioStdDev = Math.sqrt(ratioVariance);
+        if (ratioStdDev < 5) {
+          console.log(`Entropy fail: pts/asteroid stdDev=${ratioStdDev.toFixed(2)} (min 5), ratios=[${ratios.map(r => r.toFixed(1)).join(',')}]`);
+          return errorResponse('Score progression anomaly', 403);
+        }
+      }
+    }
+
+    // --- Level-1 score cap ---
+    if (submission.level === 1 && submission.score > 15000) {
+      console.log(`Level-1 cap fail: score=${submission.score} at level 1 (max 15000)`);
+      return errorResponse('Score too high for reported level', 403);
+    }
+
     // Check final score vs last checkpoint
     const lastCp = checkpoints[checkpoints.length - 1];
     const timeSinceLastCp = (Date.now() - new Date(lastCp.reported_at).getTime()) / 1000;
