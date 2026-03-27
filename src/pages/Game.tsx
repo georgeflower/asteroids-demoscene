@@ -633,7 +633,10 @@ const Game = () => {
       // Compute HMAC with seq included (V2 format)
       let hmac: string | undefined;
       if (sessionNonceRef.current) {
-        hmac = await computeHMAC(sessionNonceRef.current, `${token}|${score}|${level}|${asteroidsDestroyed}|${bulletsFired}|${seq}`);
+        hmac = await computeHMAC(
+          sessionNonceRef.current,
+          `${token}|${score}|${level}|${asteroidsDestroyed}|${bulletsFired}|${seq}`,
+        );
       }
 
       await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/submit/heartbeat`, {
@@ -693,7 +696,10 @@ const Game = () => {
       let hmac: string | undefined;
       if (sessionNonceRef.current) {
         const { asteroidsDestroyed, bulletsFired } = gameStatsRef.current;
-        hmac = await computeHMAC(sessionNonceRef.current, `${gameSessionTokenRef.current}|${score}|${currentWave}|${asteroidsDestroyed}|${bulletsFired}|${heartbeatSeqRef.current}`);
+        hmac = await computeHMAC(
+          sessionNonceRef.current,
+          `${gameSessionTokenRef.current}|${score}|${currentWave}|${asteroidsDestroyed}|${bulletsFired}|${heartbeatSeqRef.current}`,
+        );
       }
 
       try {
@@ -1472,7 +1478,8 @@ const Game = () => {
         stopHeartbeatInterval();
         setShowGameOver(true);
         // Trainer mode: don't offer score saving
-        if (HIGH_SCORES_ENABLED && !(DEBUG_ENABLED && trainerModeRef.current) && isHighScore(state.score)) setEnteringInitials(true);
+        if (HIGH_SCORES_ENABLED && !(DEBUG_ENABLED && trainerModeRef.current) && isHighScore(state.score))
+          setEnteringInitials(true);
         loadLeaderboard().then(setLeaderboard);
         // Game over
         haptics.gameOver();
@@ -4628,7 +4635,7 @@ const Game = () => {
               className="text-sm font-mono tracking-wider"
               style={{ color: "#FFD700", textShadow: "0 0 10px #FFD700" }}
             >
-              MDB IS THE GRAND CHAMPION!
+              MBD IS THE GRAND CHAMPION!
             </div>
           </div>
         )}
