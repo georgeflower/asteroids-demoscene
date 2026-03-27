@@ -123,7 +123,7 @@ If you discover a security vulnerability in the highscore system or any other pa
 #### 2026-03-24: Content Restrictions Removed & Behavioral Analysis Added
 - Removed profanity/content filter — any valid A-Z initials now accepted
 - Added wave consistency check (rejects impossible level jumps between checkpoints)
-- Added high-score minimum play duration (50k+ requires ≥ 300 s)
+- Added high-score minimum play duration requirements
 - Added checkpoint clustering and temporal anomaly flagging
 - Created `submission_flags` database table with audit trail
 - Added CHECK constraints to `current_high_scores` for immutable data integrity
