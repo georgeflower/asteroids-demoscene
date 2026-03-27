@@ -419,12 +419,12 @@ async function handleHeartbeat(req: Request, supabaseAdmin: any) {
   const { error: insertError } = await supabaseAdmin
     .from('game_session_checkpoints')
     .insert({
-      session_token: payload.gameSessionToken,
+      session_token: payload.token,
       score: payload.score,
       level: payload.level,
-      asteroids_destroyed: payload.asteroidsDestroyed ?? 0,
-      bullets_fired: payload.bulletsFired ?? 0,
-      seq: payload.seq ?? 0,
+      asteroids_destroyed: payload.asteroidsDestroyed,
+      bullets_fired: payload.bulletsFired,
+      seq: payload.seq,
     });
 
   if (insertError) {
@@ -436,7 +436,7 @@ async function handleHeartbeat(req: Request, supabaseAdmin: any) {
   const { data: allCheckpoints } = await supabaseAdmin
     .from('game_session_checkpoints')
     .select('reported_at')
-    .eq('session_token', payload.gameSessionToken)
+    .eq('session_token', payload.token)
     .order('reported_at', { ascending: true });
 
   if (allCheckpoints && allCheckpoints.length >= 5) {
@@ -449,11 +449,11 @@ async function handleHeartbeat(req: Request, supabaseAdmin: any) {
     const intervalVariance = intervals.reduce((sum, g) => sum + (g - meanInterval) ** 2, 0) / intervals.length;
     const intervalStdDev = Math.sqrt(intervalVariance);
     if (intervalStdDev < 500 && meanInterval < 15000) {
-      console.log(`Burst detection: stdDev=${intervalStdDev.toFixed(0)}ms, mean=${meanInterval.toFixed(0)}ms for token=${payload.gameSessionToken}`);
+      console.log(`Burst detection: stdDev=${intervalStdDev.toFixed(0)}ms, mean=${meanInterval.toFixed(0)}ms for token=${payload.token}`);
       await supabaseAdmin
         .from('game_sessions')
         .update({ expired: true })
-        .eq('token', payload.gameSessionToken);
+        .eq('token', payload.token);
       return errorResponse('Suspicious timing pattern', 403);
     }
   }
