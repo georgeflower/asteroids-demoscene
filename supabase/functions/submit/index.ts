@@ -19,11 +19,14 @@ interface ScoreSubmission {
 }
 
 interface HeartbeatPayload {
-  gameSessionToken: string;
+  gameSessionToken?: string;
+  k?: string;
   score: number;
   level: number;
   asteroidsDestroyed?: number;
   bulletsFired?: number;
+  l?: number;
+  u?: number;
   hmac?: string;
   seq?: number;
 }
