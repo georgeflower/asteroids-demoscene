@@ -1,0 +1,2 @@
+DELETE FROM public.score_audit_log WHERE score_id IN (SELECT id FROM public.current_high_scores WHERE initials = 'TST' AND score = 200);
+DELETE FROM public.current_high_scores WHERE initials = 'TST' AND score = 200;
