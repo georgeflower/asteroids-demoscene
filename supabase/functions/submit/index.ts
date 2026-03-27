@@ -504,12 +504,13 @@ async function handleSubmit(req: Request, supabaseAdmin: any) {
     return errorResponse('Duplicate score detected', 409);
   }
 
-  // --- Update session counters ---
+  // --- Expire session after single submission ---
   await supabaseAdmin
     .from('game_sessions')
     .update({
       submission_count: session.submission_count + 1,
       last_submission_at: new Date().toISOString(),
+      expired: true,
     })
     .eq('id', session.id);
 
