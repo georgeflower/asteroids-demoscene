@@ -29,12 +29,12 @@ The highscore submission system has been secured to prevent unauthorized score s
 - Rejects malformed or suspicious submissions
 
 #### 5. Advanced Behavioral Analysis
-- **Score rate analysis**: Score per second must not exceed the physical game maximum
-- **High-score play duration**: Scores ≥ 50,000 require ≥ 300 seconds of play time
-- **Wave consistency check**: Impossible level jumps (>5 waves) between heartbeat checkpoints are rejected
-- **Checkpoint gap detection**: Heartbeat gaps > 90 seconds are rejected for high-score sessions
-- **Checkpoint clustering detection**: Flags sessions where all checkpoints are suspiciously bunched at the start
-- **Temporal anomaly detection**: Flags identical score/initials pairs submitted within 5 minutes across sessions
+- **Score rate analysis**: Validates score progression against physical game limits
+- **Play duration checks**: High scores require proportional play time
+- **Wave consistency check**: Detects impossible level progression between checkpoints
+- **Checkpoint gap detection**: Rejects sessions with irregular heartbeat timing
+- **Checkpoint clustering detection**: Flags sessions with suspicious checkpoint distribution
+- **Temporal anomaly detection**: Detects automated submission patterns across sessions
 
 #### 6. Submission Audit Trail
 - All accepted scores are written with a corresponding `score_audit_log` entry atomically
@@ -70,72 +70,11 @@ Game Client (Browser)
 ### Implementation Details
 
 #### Edge Function: `submit`
-Located in `/supabase/functions/submit/index.ts`
-
-**Endpoints:**
-- `POST /start-session` — Creates a new game session and returns a token
-- `POST /heartbeat` — Records a gameplay checkpoint (score + wave)
-- `POST /submit` — Validates and submits a score with session token
-- `GET /admin-data` — Returns scores, flags, and audit logs (requires `x-admin-key`)
-- `POST /admin-delete` — Removes a score by ID (requires `x-admin-key`)
-
-**Request Format (submit):**
-```json
-{
-  "initials": "ABC",
-  "score": 12345,
-  "gameSessionToken": "uuid-token",
-  "timestamp": 1234567890,
-  "level": 5,
-  "source": "game_client"
-}
-```
-
-**Error Responses:**
-- `400` — Invalid request format or missing fields
-- `403` — Invalid session token, session expired, or score plausibility failure
-- `409` — Duplicate score detected
-- `500` — Server error
+Handled by the secure edge function with session validation, PoW verification, and HMAC signature checks. Implementation details are kept server-side.
 
 ### Admin Monitoring Dashboard
 
-A development-only admin dashboard is available in `src/components/AdminMonitor.tsx`.
-
-#### Step 0 — Provision the secret in Supabase (required first-time setup)
-
-The admin dashboard is authenticated by an `ADMIN_SECRET_KEY` secret stored in your Supabase Edge Function environment. **You must set this yourself** — it is not automatically generated.
-
-```bash
-# Pick any strong random string as your admin password
-supabase secrets set ADMIN_SECRET_KEY=<your-strong-random-secret>
-```
-
-Or via the Supabase Dashboard:
-1. Go to **Edge Functions → submit → Settings**
-2. Add secret: `ADMIN_SECRET_KEY` = `<your-strong-random-secret>`
-
-The key you set here is what you will type into the **Admin key** prompt in the dashboard.
-
-**Access — Debug Mode (recommended):**
-1. Press `X` on any page to toggle debug mode
-2. A small `⚙ DEBUG` badge appears in the bottom-right corner
-3. Click **OPEN ADMIN** in the debug panel to mount the admin dashboard
-4. Enter the value you set for `ADMIN_SECRET_KEY` when prompted
-
-Debug mode state is persisted in `localStorage` (`asteroids_debug` key) so it survives page reloads.
-
-**Access — Manual (console):**
-1. Open browser console on the game site
-2. `localStorage.setItem('asteroids_admin', 'true')`
-3. The `<AdminMonitor />` component renders over the game
-4. Enter the value you set for `ADMIN_SECRET_KEY` when prompted
-
-**Features:**
-- Real-time list of recent scores with flag severity highlighted
-- Expand any row to see session token (masked), submission method, and flag reasoning
-- One-click score removal
-- Filter to flagged-only submissions
-- Export submissions as CSV
+A development-only admin dashboard is available for leaderboard oversight. Access requires a secret admin key configured in the backend environment. Details are available to project maintainers only.
 
 ### Database Schema
 
@@ -153,13 +92,7 @@ Tracks anomalous patterns detected during submission:
 | `created_at` | timestamptz | When the flag was recorded |
 
 #### `current_high_scores` CHECK Constraints
-| Constraint | Rule |
-|------------|------|
-| `check_score_non_negative` | `score >= 0` |
-| `check_score_max` | `score <= 9999999` (9,999,999) |
-| `check_initials_format` | `initials ~ '^[A-Z]{1,3}$'` |
-| `check_level_valid` | `level IS NULL OR level BETWEEN 1 AND 30` |
-| `check_time_played` | `time_played_seconds IS NULL OR time_played_seconds >= 0` |
+Database-level CHECK constraints enforce valid ranges for score, initials format, level, and play time. Details are maintained server-side.
 
 ### What This Protects Against
 
