@@ -147,8 +147,12 @@ asteroids-demoscene/
 │   └── constants/            # Game constants and configuration
 ├── supabase/
 │   ├── functions/            # Edge Functions for score submission
-│   │   ├── submit-score/     # Secure highscore submission
-│   │   └── start-session/    # Session token generation
+│   │   └── submit/           # Unified secure highscore Edge Function
+│   │       │                 #   POST /start-session  — issue session token + PoW challenge
+│   │       │                 #   POST /heartbeat      — validate & record gameplay state
+│   │       │                 #   POST /submit         — validate & accept final score
+│   │       │                 #   GET  /admin-data     — admin leaderboard view
+│   │       │                 #   POST /admin-delete   — admin score removal
 │   └── migrations/           # Database schema migrations
 ├── scripts/                  # Utility scripts
 │   └── check-highscore-legitimacy.mjs
@@ -165,7 +169,7 @@ asteroids-demoscene/
 | **Rendering** | HTML5 Canvas 2D |
 | **Multiplayer** | WebWorkers |
 | **Backend** | Supabase (PostgreSQL + Edge Functions) |
-| **Security** | HMAC signatures, session tokens |
+| **Security** | HMAC-SHA-256 signatures, PoW, session tokens, server-authoritative state |
 
 ### Game Loop Architecture
 
@@ -196,19 +200,27 @@ asteroids-demoscene/
 ```
 Game Client (Browser)
     │
-    ├─[1]─► Request Session Token → Edge Function (/start-session)
+    ├─[1]─► POST /start-session → Edge Function
+    │         Receives: session token, session nonce (HMAC key),
+    │                   PoW challenge + difficulty
+    │         Client begins solving PoW in background
     │
-    ◄─[2]── Receive Session Token ◄─┘
+    ├─[2]─► Play Game
+    │         Every ~30 s: POST /heartbeat
+    │           Carries: token, score, level, asteroidsDestroyed,
+    │                    bulletsFired, seq (monotonically increasing), HMAC
+    │           Server validates HMAC, seq, delta rates, timing, CAS updates
     │
-    ├─[3]─► Play Game (score tracked locally)
+    ├─[3]─► POST /submit → Edge Function
+    │         Carries: token, final score, initials, level,
+    │                  PoW nonce, HMAC, seq, game metrics
+    │         Server runs all 21 validation layers (see SECURITY.md)
+    │         → insert_score_with_audit() RPC (atomic)
     │
-    ├─[4]─► Submit Score + Token → Edge Function (/submit-score)
-    │                              ├── Validate HMAC signature
-    │                              ├── Verify session token
-    │                              └── Insert via service role
-    │
-    ◄─[6]── Success/Error Response
+    └─[4]─► Success / Error Response
 ```
+
+For a complete description of every security layer see [SECURITY.md](./SECURITY.md).
 
 ## 📊 Scoring
 
