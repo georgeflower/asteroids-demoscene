@@ -29,12 +29,12 @@ The highscore submission system has been secured to prevent unauthorized score s
 - Rejects malformed or suspicious submissions
 
 #### 5. Advanced Behavioral Analysis
-- **Score rate analysis**: Score per second must not exceed the physical game maximum
-- **High-score play duration**: Scores ≥ 50,000 require ≥ 300 seconds of play time
-- **Wave consistency check**: Impossible level jumps (>5 waves) between heartbeat checkpoints are rejected
-- **Checkpoint gap detection**: Heartbeat gaps > 90 seconds are rejected for high-score sessions
-- **Checkpoint clustering detection**: Flags sessions where all checkpoints are suspiciously bunched at the start
-- **Temporal anomaly detection**: Flags identical score/initials pairs submitted within 5 minutes across sessions
+- **Score rate analysis**: Validates score progression against physical game limits
+- **Play duration checks**: High scores require proportional play time
+- **Wave consistency check**: Detects impossible level progression between checkpoints
+- **Checkpoint gap detection**: Rejects sessions with irregular heartbeat timing
+- **Checkpoint clustering detection**: Flags sessions with suspicious checkpoint distribution
+- **Temporal anomaly detection**: Detects automated submission patterns across sessions
 
 #### 6. Submission Audit Trail
 - All accepted scores are written with a corresponding `score_audit_log` entry atomically
