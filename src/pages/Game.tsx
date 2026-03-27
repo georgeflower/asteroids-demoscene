@@ -711,6 +711,7 @@ const Game = () => {
             hmac,
             asteroidsDestroyed: gameStatsRef.current.asteroidsDestroyed,
             bulletsFired: gameStatsRef.current.bulletsFired,
+            seq: heartbeatSeqRef.current,
           }),
         });
 

@@ -18,6 +18,9 @@ interface ScoreSubmission {
   powNonce?: number;
   S?: number;
   hmac?: string;
+  asteroidsDestroyed?: number;
+  bulletsFired?: number;
+  seq?: number;
 }
 
 interface HeartbeatPayload {
@@ -556,14 +559,15 @@ async function handleSubmit(req: Request, supabaseAdmin: any) {
     // Extract asteroids/bullets from submission payload
     const submittedAsteroids = submission.asteroidsDestroyed ?? 0;
     const submittedBullets = submission.bulletsFired ?? 0;
-    const lastSeqForHmac = session.last_seq ?? 0;
+    // Use submitted seq if provided, otherwise fall back to session.last_seq
+    const seqForHmac = submission.seq ?? session.last_seq ?? 0;
     // Try V2 (with seq) then V1 (without)
     const valid = await verifyHMACCompat(
       session.session_nonce, sessionToken!, submission.score, submission.level ?? 1,
-      submittedAsteroids, submittedBullets, lastSeqForHmac, submission.hmac
+      submittedAsteroids, submittedBullets, seqForHmac, submission.hmac
     );
     if (!valid) {
-      console.log(`HMAC verification failed for submit: token=${sessionToken}`);
+      console.log(`HMAC verification failed for submit: token=${sessionToken}, seq=${seqForHmac}, submitted_seq=${submission.seq}, last_seq=${session.last_seq}`);
       return errorResponse('Invalid signature', 403);
     }
   }
