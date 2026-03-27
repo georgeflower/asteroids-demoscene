@@ -709,6 +709,8 @@ const Game = () => {
             source: "game_client",
             powNonce: powSolutionRef.current,
             hmac,
+            asteroidsDestroyed: gameStatsRef.current.asteroidsDestroyed,
+            bulletsFired: gameStatsRef.current.bulletsFired,
           }),
         });
 

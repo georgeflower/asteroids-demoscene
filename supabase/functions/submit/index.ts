@@ -553,13 +553,14 @@ async function handleSubmit(req: Request, supabaseAdmin: any) {
     if (!submission.hmac) {
       return errorResponse('Missing signature', 400);
     }
-    const ad = session.last_asteroids ?? 0;
-    const bf = session.last_bullets ?? 0;
+    // Extract asteroids/bullets from submission payload
+    const submittedAsteroids = submission.asteroidsDestroyed ?? 0;
+    const submittedBullets = submission.bulletsFired ?? 0;
     const lastSeqForHmac = session.last_seq ?? 0;
     // Try V2 (with seq) then V1 (without)
     const valid = await verifyHMACCompat(
       session.session_nonce, sessionToken!, submission.score, submission.level ?? 1,
-      ad, bf, lastSeqForHmac, submission.hmac
+      submittedAsteroids, submittedBullets, lastSeqForHmac, submission.hmac
     );
     if (!valid) {
       console.log(`HMAC verification failed for submit: token=${sessionToken}`);
