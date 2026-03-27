@@ -153,13 +153,7 @@ Tracks anomalous patterns detected during submission:
 | `created_at` | timestamptz | When the flag was recorded |
 
 #### `current_high_scores` CHECK Constraints
-| Constraint | Rule |
-|------------|------|
-| `check_score_non_negative` | `score >= 0` |
-| `check_score_max` | `score <= 9999999` (9,999,999) |
-| `check_initials_format` | `initials ~ '^[A-Z]{1,3}$'` |
-| `check_level_valid` | `level IS NULL OR level BETWEEN 1 AND 30` |
-| `check_time_played` | `time_played_seconds IS NULL OR time_played_seconds >= 0` |
+Database-level CHECK constraints enforce valid ranges for score, initials format, level, and play time. Details are maintained server-side.
 
 ### What This Protects Against
 
