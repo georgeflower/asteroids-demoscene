@@ -132,9 +132,34 @@ async function computeHMAC(key: string, message: string): Promise<string> {
   return Array.from(new Uint8Array(sig)).map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
+function timingSafeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let result = 0;
+  for (let i = 0; i < a.length; i++) {
+    result |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  }
+  return result === 0;
+}
+
 async function verifyHMAC(key: string, message: string, expectedHmac: string): Promise<boolean> {
   const computed = await computeHMAC(key, message);
-  return computed === expectedHmac;
+  return timingSafeEqual(computed, expectedHmac);
+}
+
+// Verify HMAC with backward compatibility: try V2 (with seq) first, then V1 (without)
+async function verifyHMACCompat(
+  key: string, token: string, score: number, level: number,
+  asteroids: number, bullets: number, seq: number | undefined, provided: string
+): Promise<boolean> {
+  // V2: includes seq
+  const msgV2 = `${token}|${score}|${level}|${asteroids}|${bullets}|${seq ?? 0}`;
+  const computedV2 = await computeHMAC(key, msgV2);
+  if (timingSafeEqual(computedV2, provided)) return true;
+
+  // V1 fallback: no seq (backward compat for older clients)
+  const msgV1 = `${token}|${score}|${level}|${asteroids}|${bullets}`;
+  const computedV1 = await computeHMAC(key, msgV1);
+  return timingSafeEqual(computedV1, provided);
 }
 
 // --- Handlers ---
