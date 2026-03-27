@@ -83,7 +83,15 @@ export type Database = {
       game_sessions: {
         Row: {
           expired: boolean
+          heartbeat_count_minute: number | null
+          heartbeat_window_start: string | null
           id: string
+          last_asteroids: number | null
+          last_bullets: number | null
+          last_heartbeat_at: string | null
+          last_level: number | null
+          last_score: number | null
+          last_seq: number | null
           last_submission_at: string | null
           pow_challenge: string | null
           pow_difficulty: number | null
@@ -94,7 +102,15 @@ export type Database = {
         }
         Insert: {
           expired?: boolean
+          heartbeat_count_minute?: number | null
+          heartbeat_window_start?: string | null
           id?: string
+          last_asteroids?: number | null
+          last_bullets?: number | null
+          last_heartbeat_at?: string | null
+          last_level?: number | null
+          last_score?: number | null
+          last_seq?: number | null
           last_submission_at?: string | null
           pow_challenge?: string | null
           pow_difficulty?: number | null
@@ -105,7 +121,15 @@ export type Database = {
         }
         Update: {
           expired?: boolean
+          heartbeat_count_minute?: number | null
+          heartbeat_window_start?: string | null
           id?: string
+          last_asteroids?: number | null
+          last_bullets?: number | null
+          last_heartbeat_at?: string | null
+          last_level?: number | null
+          last_score?: number | null
+          last_seq?: number | null
           last_submission_at?: string | null
           pow_challenge?: string | null
           pow_difficulty?: number | null
