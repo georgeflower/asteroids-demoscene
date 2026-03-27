@@ -207,10 +207,29 @@ async function handleHeartbeat(req: Request, supabaseAdmin: any) {
     return errorResponse('Forbidden', 403);
   }
 
-  const payload: HeartbeatPayload = await req.json();
+  const rawPayload: HeartbeatPayload = await req.json();
 
-  if (!payload.gameSessionToken || payload.score === undefined || payload.level === undefined) {
+  // Robust field-name parsing (accept both minified and full names)
+  const token = rawPayload.gameSessionToken ?? rawPayload.k;
+  const ast = rawPayload.asteroidsDestroyed ?? rawPayload.l ?? 0;
+  const bul = rawPayload.bulletsFired ?? rawPayload.u ?? 0;
+  const payload = {
+    token,
+    score: rawPayload.score,
+    level: rawPayload.level,
+    asteroidsDestroyed: ast,
+    bulletsFired: bul,
+    hmac: rawPayload.hmac,
+    seq: rawPayload.seq,
+  };
+
+  if (!payload.token || payload.score === undefined || payload.level === undefined) {
     return errorResponse('Missing required fields', 400);
+  }
+
+  // Strictly require seq
+  if (payload.seq === undefined || payload.seq === null) {
+    return errorResponse('Missing seq', 400);
   }
 
   if (payload.score < 0 || payload.score > MAX_VALID_SCORE) {
@@ -225,7 +244,7 @@ async function handleHeartbeat(req: Request, supabaseAdmin: any) {
   const { data: session, error: sessionError } = await supabaseAdmin
     .from('game_sessions')
     .select('*')
-    .eq('token', payload.gameSessionToken)
+    .eq('token', payload.token)
     .single();
 
   if (sessionError || !session) {
@@ -238,26 +257,26 @@ async function handleHeartbeat(req: Request, supabaseAdmin: any) {
 
   const now = Date.now();
 
-  // --- HMAC verification ---
+  // --- HMAC verification (with seq, backward-compat) ---
   if (session.session_nonce) {
     if (!payload.hmac) {
       return errorResponse('Missing signature', 400);
     }
-    const message = `${payload.gameSessionToken}|${payload.score}|${payload.level}|${payload.asteroidsDestroyed ?? 0}|${payload.bulletsFired ?? 0}`;
-    const valid = await verifyHMAC(session.session_nonce, message, payload.hmac);
+    const valid = await verifyHMACCompat(
+      session.session_nonce, payload.token, payload.score, payload.level,
+      payload.asteroidsDestroyed, payload.bulletsFired, payload.seq, payload.hmac
+    );
     if (!valid) {
-      console.log(`HMAC verification failed for heartbeat: token=${payload.gameSessionToken}`);
+      console.log(`HMAC verification failed for heartbeat: token=${payload.token}`);
       return errorResponse('Invalid signature', 403);
     }
   }
 
-  // --- Sequence validation ---
+  // --- Sequence validation (strict) ---
   const lastSeq = session.last_seq ?? 0;
-  if (payload.seq !== undefined && payload.seq !== null) {
-    if (payload.seq <= lastSeq) {
-      console.log(`Seq replay detected: got seq=${payload.seq}, last was ${lastSeq}`);
-      return errorResponse('Replay detected', 403);
-    }
+  if (payload.seq <= lastSeq) {
+    console.log(`Seq replay detected: got seq=${payload.seq}, last was ${lastSeq}`);
+    return errorResponse('Replay detected', 403);
   }
 
   // --- Timing validation ---
