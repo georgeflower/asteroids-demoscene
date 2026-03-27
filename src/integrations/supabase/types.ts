@@ -21,6 +21,7 @@ export type Database = {
           initials: string
           level: number | null
           score: number
+          session_token: string | null
           source: string | null
           time_played_seconds: number | null
         }
@@ -30,6 +31,7 @@ export type Database = {
           initials: string
           level?: number | null
           score: number
+          session_token?: string | null
           source?: string | null
           time_played_seconds?: number | null
         }
@@ -39,6 +41,7 @@ export type Database = {
           initials?: string
           level?: number | null
           score?: number
+          session_token?: string | null
           source?: string | null
           time_played_seconds?: number | null
         }

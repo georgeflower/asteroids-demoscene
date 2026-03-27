@@ -399,7 +399,11 @@ async function handleSubmit(req: Request, supabaseAdmin: any) {
       return errorResponse('Insufficient gameplay data', 403);
     }
 
-    // Validate checkpoint progression
+    // Validate checkpoint progression + detect stagnant/duplicate patterns
+    let consecutiveDuplicateScores = 0;
+    let consecutiveStagnantAsteroids = 0;
+    let consecutiveStagnantBullets = 0;
+
     for (let i = 1; i < checkpoints.length; i++) {
       const prev = checkpoints[i - 1];
       const curr = checkpoints[i];
@@ -429,6 +433,79 @@ async function handleSubmit(req: Request, supabaseAdmin: any) {
       }
       if (curr.bullets_fired < prev.bullets_fired) {
         return errorResponse('Invalid metric progression in checkpoints', 403);
+      }
+
+      // Detect duplicate scores (exact same score in consecutive heartbeats)
+      if (curr.score === prev.score && curr.score > 0) {
+        consecutiveDuplicateScores++;
+      } else {
+        consecutiveDuplicateScores = 0;
+      }
+
+      // Detect stagnant asteroids_destroyed while score increases
+      if (curr.asteroids_destroyed === prev.asteroids_destroyed && scoreDelta > 0) {
+        consecutiveStagnantAsteroids++;
+      } else {
+        consecutiveStagnantAsteroids = 0;
+      }
+
+      // Detect stagnant bullets_fired while score increases
+      if (curr.bullets_fired === prev.bullets_fired && scoreDelta > 0) {
+        consecutiveStagnantBullets++;
+      } else {
+        consecutiveStagnantBullets = 0;
+      }
+
+      // Flag if 3+ consecutive stagnant checkpoints
+      if (consecutiveDuplicateScores >= 3) {
+        suspiciousFlags.push({
+          flag_type: 'duplicate_score_sequence',
+          severity: 'high',
+          reasoning: `Score ${curr.score} unchanged for ${consecutiveDuplicateScores + 1} consecutive heartbeats`,
+        });
+      }
+      if (consecutiveStagnantAsteroids >= 2) {
+        suspiciousFlags.push({
+          flag_type: 'stagnant_asteroids',
+          severity: 'medium',
+          reasoning: `asteroids_destroyed stuck at ${curr.asteroids_destroyed} for ${consecutiveStagnantAsteroids + 1} heartbeats while score increased`,
+        });
+      }
+      if (consecutiveStagnantBullets >= 2) {
+        suspiciousFlags.push({
+          flag_type: 'stagnant_bullets',
+          severity: 'medium',
+          reasoning: `bullets_fired stuck at ${curr.bullets_fired} for ${consecutiveStagnantBullets + 1} heartbeats while score increased`,
+        });
+      }
+    }
+
+    // Cross-session fingerprint detection: check if another session submitted identical checkpoint score sequence
+    const cpFingerprint = checkpoints.map((cp: any) => cp.score).join(',');
+    if (checkpoints.length >= 3) {
+      const thirtyMinAgo = new Date(Date.now() - 1800000).toISOString();
+      const { data: recentSessions } = await supabaseAdmin
+        .from('game_session_checkpoints')
+        .select('session_token, score')
+        .neq('session_token', submission.gameSessionToken)
+        .gte('reported_at', thirtyMinAgo)
+        .order('reported_at', { ascending: true });
+
+      if (recentSessions && recentSessions.length > 0) {
+        // Group by session_token
+        const sessionMap = new Map<string, number[]>();
+        for (const row of recentSessions) {
+          const arr = sessionMap.get(row.session_token) || [];
+          arr.push(row.score);
+          sessionMap.set(row.session_token, arr);
+        }
+        for (const [otherToken, scores] of sessionMap) {
+          const otherFingerprint = scores.join(',');
+          if (otherFingerprint === cpFingerprint) {
+            console.log(`Cross-session duplicate detected: ${submission.gameSessionToken} matches ${otherToken}`);
+            return errorResponse('Duplicate gameplay pattern detected', 403);
+          }
+        }
       }
     }
 
