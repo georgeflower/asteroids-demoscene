@@ -548,17 +548,21 @@ async function handleSubmit(req: Request, supabaseAdmin: any) {
     }
   }
 
-  // --- HMAC verification ---
+  // --- HMAC verification (with backward compat) ---
   if (session.session_nonce) {
     if (!submission.hmac) {
       return errorResponse('Missing signature', 400);
     }
     const ad = session.last_asteroids ?? 0;
     const bf = session.last_bullets ?? 0;
-    const message = `${submission.gameSessionToken}|${submission.score}|${submission.level ?? 1}|${ad}|${bf}`;
-    const valid = await verifyHMAC(session.session_nonce, message, submission.hmac);
+    const lastSeqForHmac = session.last_seq ?? 0;
+    // Try V2 (with seq) then V1 (without)
+    const valid = await verifyHMACCompat(
+      session.session_nonce, sessionToken!, submission.score, submission.level ?? 1,
+      ad, bf, lastSeqForHmac, submission.hmac
+    );
     if (!valid) {
-      console.log(`HMAC verification failed for submit: token=${submission.gameSessionToken}`);
+      console.log(`HMAC verification failed for submit: token=${sessionToken}`);
       return errorResponse('Invalid signature', 403);
     }
   }
