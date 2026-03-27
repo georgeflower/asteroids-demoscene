@@ -596,6 +596,7 @@ const Game = () => {
       gameSessionTokenRef.current = data.sessionToken;
       sessionNonceRef.current = data.sessionNonce || null;
       gameStatsRef.current = { asteroidsDestroyed: 0, bulletsFired: 0 };
+      heartbeatSeqRef.current = 0;
       powSolutionRef.current = null;
 
       // Solve PoW challenge in background
