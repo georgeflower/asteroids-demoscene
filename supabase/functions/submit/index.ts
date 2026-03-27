@@ -199,12 +199,12 @@ async function handleHeartbeat(req: Request, supabaseAdmin: any) {
     return errorResponse('Session expired', 403);
   }
 
-  // Verify HMAC signature
+  // Verify HMAC signature — now includes all validated fields
   if (session.session_nonce) {
     if (!payload.hmac) {
       return errorResponse('Missing signature', 400);
     }
-    const message = `${payload.gameSessionToken}|${payload.score}|${payload.level}`;
+    const message = `${payload.gameSessionToken}|${payload.score}|${payload.level}|${payload.asteroidsDestroyed ?? 0}|${payload.bulletsFired ?? 0}`;
     const valid = await verifyHMAC(session.session_nonce, message, payload.hmac);
     if (!valid) {
       console.log(`HMAC verification failed for heartbeat: token=${payload.gameSessionToken}`);
