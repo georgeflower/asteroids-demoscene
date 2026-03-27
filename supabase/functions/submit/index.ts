@@ -9,12 +9,14 @@ const corsHeaders = {
 interface ScoreSubmission {
   initials: string;
   score: number;
-  gameSessionToken: string;
+  gameSessionToken?: string;
+  k?: string;
   timestamp: number;
   level?: number;
   timePlayedSeconds?: number;
   source?: string;
   powNonce?: number;
+  S?: number;
   hmac?: string;
 }
 
