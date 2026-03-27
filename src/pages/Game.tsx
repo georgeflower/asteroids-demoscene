@@ -622,11 +622,14 @@ const Game = () => {
       const level = state.wave;
       const { asteroidsDestroyed, bulletsFired } = gameStatsRef.current;
 
-      // Compute HMAC if we have a session nonce
+      // Compute HMAC if we have a session nonce — sign ALL validated fields
       let hmac: string | undefined;
       if (sessionNonceRef.current) {
-        hmac = await computeHMAC(sessionNonceRef.current, `${token}|${score}|${level}`);
+        hmac = await computeHMAC(sessionNonceRef.current, `${token}|${score}|${level}|${asteroidsDestroyed}|${bulletsFired}`);
       }
+
+      heartbeatSeqRef.current += 1;
+      const seq = heartbeatSeqRef.current;
 
       await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/submit/heartbeat`, {
         method: "POST",
@@ -641,6 +644,7 @@ const Game = () => {
           asteroidsDestroyed,
           bulletsFired,
           hmac,
+          seq,
         }),
       });
     } catch (_) {
