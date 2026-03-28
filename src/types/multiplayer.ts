@@ -47,13 +47,14 @@ export interface NetAlien {
 }
 
 export interface GameEvent {
-  type: "explosion" | "kill" | "die_env";
+  type: "explosion" | "kill" | "die_env" | "score_pop";
   x: number;
   y: number;
   color: string;
   count: number;
   player?: number;
   killer?: number;
+  points?: number;
 }
 
 export interface DuelNetState {
@@ -70,9 +71,36 @@ export interface DuelNetState {
   tick: number;
 }
 
+export interface CoopNetState {
+  ship1: NetShip;
+  ship2: NetShip;
+  bullets1: NetBullet[];
+  bullets2: NetBullet[];
+  asteroids: NetAsteroid[];
+  aliens: NetAlien[];
+  score: number;
+  lives1: number;
+  lives2: number;
+  wave: number;
+  respawnTimer: [number, number];
+  waveComplete: boolean;
+  gameOver: boolean;
+  events: GameEvent[];
+  tick: number;
+}
+
+export type SessionMode = "duel" | "coop";
+
 export type WorkerInMessage =
-  | { type: "init" }
+  | { type: "init"; turnSpeed?: number }
   | { type: "inputs"; p1: InputState; p2: InputState }
   | { type: "stop" };
 
 export type WorkerOutMessage = { type: "state"; data: DuelNetState };
+
+export type CoopWorkerInMessage =
+  | { type: "init"; turnSpeed?: number }
+  | { type: "inputs"; p1: InputState; p2: InputState }
+  | { type: "stop" };
+
+export type CoopWorkerOutMessage = { type: "state"; data: CoopNetState };
