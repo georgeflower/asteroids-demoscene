@@ -255,6 +255,10 @@ interface CoopState {
 
 type GameMode = "menu" | "solo" | "duel" | "online_lobby" | "online" | "coop" | "online_coop";
 
+/** True for any mode where two ships are on screen (duel, coop, online variants). */
+const isMultiplayerMode = (m: GameMode) =>
+  m === "duel" || m === "online" || m === "coop" || m === "online_coop";
+
 const CANVAS_WIDTH = 800;
 const CANVAS_HEIGHT = 600;
 
@@ -4218,8 +4222,7 @@ const Game = () => {
           multiplayer.sendInputs(localInput);
         }
         updateOnlineVisuals();
-        // Physics run in the worker; don't count as local updates
-        updatesThisFrame = 0;
+        // Physics run in the worker; updatesThisFrame stays 0 (already initialised)
       } else if (gameModeRef.current === "coop") {
         // Local co-op: both players' inputs sent to the co-op worker
         const keys = keysRef.current;
@@ -4234,7 +4237,7 @@ const Game = () => {
           });
         }
         updateOnlineVisuals();
-        updatesThisFrame = 0;
+        // Physics run in the worker; updatesThisFrame stays 0 (already initialised)
       } else {
         // Solo / Duel: fixed timestep accumulator – game logic always runs at 60 Hz
         accumulatorRef.current += cappedDelta;
@@ -4623,7 +4626,7 @@ const Game = () => {
       // Pause toggle on Escape
       if (
         e.key === "Escape" &&
-        (gameModeRef.current === "solo" || gameModeRef.current === "duel" || gameModeRef.current === "online" || gameModeRef.current === "coop" || gameModeRef.current === "online_coop")
+        (gameModeRef.current === "solo" || isMultiplayerMode(gameModeRef.current))
       ) {
         if (!showLifeLostRef.current && !showGameOver) {
           e.preventDefault();
@@ -4707,7 +4710,7 @@ const Game = () => {
           e.preventDefault();
           hyperspace();
         }
-      } else if (gameModeRef.current === "duel" || gameModeRef.current === "online" || gameModeRef.current === "coop" || gameModeRef.current === "online_coop") {
+      } else if (isMultiplayerMode(gameModeRef.current)) {
         if (e.key === b.p1.fire) {
           e.preventDefault();
         }
@@ -4768,7 +4771,7 @@ const Game = () => {
           // Start button toggles pause during gameplay
           if (
             justStart &&
-            (gameModeRef.current === "solo" || gameModeRef.current === "duel" || gameModeRef.current === "online" || gameModeRef.current === "coop" || gameModeRef.current === "online_coop") &&
+            (gameModeRef.current === "solo" || isMultiplayerMode(gameModeRef.current)) &&
             !showLifeLostRef.current &&
             !showGameOver
           ) {
@@ -4838,7 +4841,7 @@ const Game = () => {
                 });
               }
             }
-          } else if (gameModeRef.current === "duel" || gameModeRef.current === "online" || gameModeRef.current === "coop" || gameModeRef.current === "online_coop") {
+          } else if (isMultiplayerMode(gameModeRef.current)) {
             if (justB) {
               quitToMenu();
             }
@@ -5645,7 +5648,7 @@ const Game = () => {
         )}
 
         {/* Duel / Co-op quit button */}
-        {(gameMode === "duel" || gameMode === "online" || gameMode === "coop" || gameMode === "online_coop") && !isPaused && (
+        {isMultiplayerMode(gameMode) && !isPaused && (
           <div className="absolute top-2 right-2">
             <Button
               onClick={quitToMenu}

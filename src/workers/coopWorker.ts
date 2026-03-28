@@ -116,12 +116,12 @@ function dist(a: Vector, b: Vector): number {
   return Math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2);
 }
 
-function asteroidCount(wave: number): number {
+function getAsteroidsPerWave(wave: number): number {
   return Math.min(3 + wave, 10);
 }
 
 function spawnWaveAsteroids() {
-  const count = asteroidCount(wave);
+  const count = getAsteroidsPerWave(wave);
   asteroidsThisWave = count;
   asteroidsKilledThisWave = 0;
   for (let i = 0; i < count; i++) {
@@ -275,11 +275,6 @@ function updateTick() {
     respawnTimer[playerIdx] = 150;
     ship.pos = { x: -100, y: -100 }; ship.vel = { x: 0, y: 0 };
     ship.invulnerable = true; ship.invulnerableTime = 999;
-
-    // Game over when both players are out of lives
-    if (lives1 === 0 && lives2 === 0 && respawnTimer[0] > 0 && respawnTimer[1] > 0) {
-      // Will be detected next frame after respawn timers run out with 0 lives
-    }
   };
 
   // Ships vs asteroids

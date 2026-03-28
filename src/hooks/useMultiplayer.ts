@@ -103,7 +103,8 @@ export function useMultiplayer() {
         }
       })
       .on("broadcast", { event: "game_start" }, ({ payload }) => {
-        const mode: SessionMode = (payload as any)?.mode ?? "duel";
+        const raw = payload as { mode?: string } | null;
+        const mode: SessionMode = (raw?.mode === "coop" || raw?.mode === "duel") ? raw.mode : "duel";
         onGameStartRef.current?.(mode);
       })
       .subscribe(async (status) => {
