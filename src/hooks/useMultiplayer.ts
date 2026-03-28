@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import type { InputState, DuelNetState } from "@/types/multiplayer";
+import type { InputState, DuelNetState, CoopNetState, SessionMode } from "@/types/multiplayer";
 
 interface PresenceInfo {
   role: "host" | "guest";
@@ -24,8 +24,14 @@ export function useMultiplayer() {
   const [opponentConnected, setOpponentConnected] = useState(false);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const remoteStateRef = useRef<DuelNetState | null>(null);
+  const remoteCoopStateRef = useRef<CoopNetState | null>(null);
   const remoteInputRef = useRef<InputState>({ left: false, right: false, up: false, fire: false });
-  const onGameStartRef = useRef<(() => void) | null>(null);
+  const onGameStartRef = useRef<((mode: SessionMode) => void) | null>(null);
+
+  // Direct state callbacks – called immediately on message receipt, bypassing the
+  // 16 ms setInterval polling that was the main source of guest-side lag.
+  const onRemoteStateRef = useRef<((state: DuelNetState) => void) | null>(null);
+  const onRemoteCoopStateRef = useRef<((state: CoopNetState) => void) | null>(null);
 
   const createRoom = useCallback(() => {
     const code = generateRoomCode();
@@ -33,7 +39,8 @@ export function useMultiplayer() {
     setIsHost(true);
 
     const channel = supabase.channel(`game-${code}`, {
-      config: { broadcast: { self: false } },
+      // ack: false skips the server acknowledgement round-trip → lower latency
+      config: { broadcast: { self: false, ack: false } },
     });
 
     channel
@@ -66,7 +73,7 @@ export function useMultiplayer() {
     setIsHost(false);
 
     const channel = supabase.channel(`game-${code.toUpperCase()}`, {
-      config: { broadcast: { self: false } },
+      config: { broadcast: { self: false, ack: false } },
     });
 
     channel
@@ -81,10 +88,24 @@ export function useMultiplayer() {
         }
       })
       .on("broadcast", { event: "game_state" }, ({ payload }) => {
-        remoteStateRef.current = payload as DuelNetState;
+        // Invoke direct callback if registered (zero-polling path); fall back to ref.
+        if (onRemoteStateRef.current) {
+          onRemoteStateRef.current(payload as DuelNetState);
+        } else {
+          remoteStateRef.current = payload as DuelNetState;
+        }
       })
-      .on("broadcast", { event: "game_start" }, () => {
-        onGameStartRef.current?.();
+      .on("broadcast", { event: "coop_state" }, ({ payload }) => {
+        if (onRemoteCoopStateRef.current) {
+          onRemoteCoopStateRef.current(payload as CoopNetState);
+        } else {
+          remoteCoopStateRef.current = payload as CoopNetState;
+        }
+      })
+      .on("broadcast", { event: "game_start" }, ({ payload }) => {
+        const raw = payload as { mode?: string } | null;
+        const mode: SessionMode = (raw?.mode === "coop" || raw?.mode === "duel") ? raw.mode : "duel";
+        onGameStartRef.current?.(mode);
       })
       .subscribe(async (status) => {
         if (status === "SUBSCRIBED") {
@@ -113,6 +134,14 @@ export function useMultiplayer() {
     });
   }, []);
 
+  const sendCoopState = useCallback((state: CoopNetState) => {
+    channelRef.current?.send({
+      type: "broadcast",
+      event: "coop_state",
+      payload: state,
+    });
+  }, []);
+
   const sendInputs = useCallback((inputs: InputState) => {
     channelRef.current?.send({
       type: "broadcast",
@@ -121,11 +150,11 @@ export function useMultiplayer() {
     });
   }, []);
 
-  const startGame = useCallback(() => {
+  const startGame = useCallback((mode: SessionMode = "duel") => {
     channelRef.current?.send({
       type: "broadcast",
       event: "game_start",
-      payload: {},
+      payload: { mode },
     });
   }, []);
 
@@ -154,11 +183,15 @@ export function useMultiplayer() {
     isConnected,
     opponentConnected,
     remoteStateRef,
+    remoteCoopStateRef,
     remoteInputRef,
     onGameStartRef,
+    onRemoteStateRef,
+    onRemoteCoopStateRef,
     createRoom,
     joinRoom,
     sendState,
+    sendCoopState,
     sendInputs,
     startGame,
     disconnect,
