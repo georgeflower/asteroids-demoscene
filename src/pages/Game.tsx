@@ -3579,8 +3579,10 @@ const Game = () => {
       ]);
 
       // Draw ships
-      if (ds.respawnTimer[0] === 0) drawShip(ctx, ds.ship1, P1_COLOR, "P1");
-      if (ds.respawnTimer[1] === 0) drawShip(ctx, ds.ship2, P2_COLOR, "P2");
+      const duelLabel1 = gameModeRef.current === "online" ? (multiplayer.playerInitialsMap.get(0) ?? "P1") : "P1";
+      const duelLabel2 = gameModeRef.current === "online" ? (multiplayer.playerInitialsMap.get(1) ?? "P2") : "P2";
+      if (ds.respawnTimer[0] === 0) drawShip(ctx, ds.ship1, P1_COLOR, duelLabel1);
+      if (ds.respawnTimer[1] === 0) drawShip(ctx, ds.ship2, P2_COLOR, duelLabel2);
 
       // Draw bullets
       drawBullets(ctx, ds.bullets1, P1_COLOR);
@@ -3601,7 +3603,8 @@ const Game = () => {
         if (cs.respawnTimer[i] === 0) {
           const color = PLAYER_COLORS[i % PLAYER_COLORS.length];
           const shielded = cs.powerUpActive?.[i]?.shield > 0;
-          drawShip(ctx, cs.ships[i], shielded ? "#7FFF7F" : color, `P${i + 1}`);
+          const shipLabel = multiplayer.playerInitialsMap.get(i) ?? `P${i + 1}`;
+          drawShip(ctx, cs.ships[i], shielded ? "#7FFF7F" : color, shipLabel);
         }
       }
 
@@ -4169,11 +4172,11 @@ const Game = () => {
           [-1, 1, 1],
         ].map(([x, y, z]) => {
           // Rotate around Y
-          let x2 = x * Math.cos(rotY) - z * Math.sin(rotY);
-          let z2 = x * Math.sin(rotY) + z * Math.cos(rotY);
+          const x2 = x * Math.cos(rotY) - z * Math.sin(rotY);
+          const z2 = x * Math.sin(rotY) + z * Math.cos(rotY);
           // Rotate around X
-          let y2 = y * Math.cos(rotX) - z2 * Math.sin(rotX);
-          let z3 = y * Math.sin(rotX) + z2 * Math.cos(rotX);
+          const y2 = y * Math.cos(rotX) - z2 * Math.sin(rotX);
+          const z3 = y * Math.sin(rotX) + z2 * Math.cos(rotX);
           // Project
           const scale = 150 / (150 + z3 * cubeSize * 0.3);
           return { x: x2 * cubeSize * scale, y: y2 * cubeSize * scale };
@@ -5301,6 +5304,7 @@ const Game = () => {
             multiplayer.disconnect();
             setGameMode("menu");
           }}
+          onInitialsSet={(inits) => multiplayer.setLocalInitials(inits)}
           onStartGame={(mode, playerCount) => {
             const pc = playerCount ?? (multiplayer.guestCount + 1);
             multiplayer.startGame(mode, pc);
@@ -5854,9 +5858,12 @@ const Game = () => {
             const color = PLAYER_COLORS[i % PLAYER_COLORS.length];
             const isMe = gameMode === "online_coop" && (multiplayer.isHost ? i === 0 : i === multiplayer.playerIdxRef.current);
             const eliminated = coopEliminated[i];
+            const label = gameMode === "online_coop"
+              ? (multiplayer.playerInitialsMap.get(i) ?? `P${i + 1}`)
+              : `P${i + 1}`;
             return (
               <div key={i} style={{ color, textShadow: `0 0 10px ${color}`, opacity: eliminated ? 0.4 : 1 }}>
-                P{i + 1}{isMe ? " (YOU)" : ""} {eliminated ? "💀" : `❤${coopLives[i] ?? 0}`}
+                {label}{isMe ? " (YOU)" : ""} {eliminated ? "💀" : `❤${coopLives[i] ?? 0}`}
               </div>
             );
           })}

@@ -5,6 +5,7 @@ import type { InputState, DuelNetState, CoopNetState, SessionMode } from "@/type
 interface PresenceInfo {
   role: "host" | "guest";
   playerIdx?: number;
+  initials?: string;
 }
 
 interface PresenceState {
@@ -24,6 +25,8 @@ export function useMultiplayer() {
   const [isConnected, setIsConnected] = useState(false);
   const [opponentConnected, setOpponentConnected] = useState(false);
   const [guestCount, setGuestCount] = useState(0);
+  // Map from playerIdx → initials for all players in the room
+  const [playerInitialsMap, setPlayerInitialsMap] = useState<Map<number, string>>(new Map());
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const remoteStateRef = useRef<DuelNetState | null>(null);
   const remoteCoopStateRef = useRef<CoopNetState | null>(null);
@@ -33,11 +36,27 @@ export function useMultiplayer() {
   const onGameStartRef = useRef<((mode: SessionMode, playerCount?: number) => void) | null>(null);
   // Own player index assigned when joining (0 = host, 1+ = guests)
   const playerIdxRef = useRef<number>(0);
+  // Local player's initials
+  const localInitialsRef = useRef<string>("");
 
   // Direct state callbacks – called immediately on message receipt, bypassing the
   // 16 ms setInterval polling that was the main source of guest-side lag.
   const onRemoteStateRef = useRef<((state: DuelNetState) => void) | null>(null);
   const onRemoteCoopStateRef = useRef<((state: CoopNetState) => void) | null>(null);
+
+  /** Rebuild the playerIdx→initials map from the current presence state */
+  const rebuildInitialsMap = useCallback((channel: ReturnType<typeof supabase.channel>) => {
+    const state = channel.presenceState() as PresenceState;
+    const map = new Map<number, string>();
+    for (const presences of Object.values(state)) {
+      for (const p of presences) {
+        if (p.playerIdx != null && p.initials) {
+          map.set(p.playerIdx, p.initials);
+        }
+      }
+    }
+    setPlayerInitialsMap(new Map(map));
+  }, []);
 
   const createRoom = useCallback(() => {
     const code = generateRoomCode();
@@ -60,6 +79,7 @@ export function useMultiplayer() {
         const state = channel.presenceState() as PresenceState;
         const allGuests = Object.values(state).flat().filter((p: PresenceInfo) => p.role === "guest");
         setGuestCount(allGuests.length);
+        rebuildInitialsMap(channel);
       })
       .on("presence", { event: "leave" }, ({ leftPresences: _leftPresences }) => {
         const state = channel.presenceState() as PresenceState;
@@ -68,6 +88,7 @@ export function useMultiplayer() {
         if (allGuests.length === 0) {
           setOpponentConnected(false);
         }
+        rebuildInitialsMap(channel);
       })
       .on("broadcast", { event: "player_input" }, ({ payload }) => {
         const { playerIdx, ...inp } = payload as InputState & { playerIdx?: number };
@@ -81,14 +102,15 @@ export function useMultiplayer() {
       })
       .subscribe(async (status) => {
         if (status === "SUBSCRIBED") {
-          await channel.track({ role: "host", playerIdx: 0 });
+          await channel.track({ role: "host", playerIdx: 0, initials: localInitialsRef.current });
           setIsConnected(true);
+          rebuildInitialsMap(channel);
         }
       });
 
     channelRef.current = channel;
     return code;
-  }, []);
+  }, [rebuildInitialsMap]);
 
   const joinRoom = useCallback((code: string) => {
     setRoomCode(code.toUpperCase());
@@ -106,6 +128,7 @@ export function useMultiplayer() {
         const state = channel.presenceState() as PresenceState;
         const allGuests = Object.values(state).flat().filter((p: PresenceInfo) => p.role === "guest");
         setGuestCount(allGuests.length);
+        rebuildInitialsMap(channel);
       })
       .on("presence", { event: "leave" }, ({ leftPresences }) => {
         if (leftPresences.some((p: PresenceInfo) => p.role === "host")) {
@@ -114,6 +137,7 @@ export function useMultiplayer() {
         const state = channel.presenceState() as PresenceState;
         const allGuests = Object.values(state).flat().filter((p: PresenceInfo) => p.role === "guest");
         setGuestCount(allGuests.length);
+        rebuildInitialsMap(channel);
       })
       .on("broadcast", { event: "game_state" }, ({ payload }) => {
         // Invoke direct callback if registered (zero-polling path); fall back to ref.
@@ -144,8 +168,9 @@ export function useMultiplayer() {
           const existingGuests = allPresent.filter((p: PresenceInfo) => p.role === "guest");
           const assignedIdx = existingGuests.length + 1; // host=0, guests start at 1
           playerIdxRef.current = assignedIdx;
-          await channel.track({ role: "guest", playerIdx: assignedIdx });
+          await channel.track({ role: "guest", playerIdx: assignedIdx, initials: localInitialsRef.current });
           setIsConnected(true);
+          rebuildInitialsMap(channel);
           // Check if host is already present
           const keys = Object.keys(state);
           for (const key of keys) {
@@ -205,6 +230,13 @@ export function useMultiplayer() {
     setRoomCode("");
     setIsHost(false);
     setGuestCount(0);
+    setPlayerInitialsMap(new Map());
+    localInitialsRef.current = "";
+  }, []);
+
+  /** Call this before createRoom/joinRoom to set the player's own initials */
+  const setLocalInitials = useCallback((initials: string) => {
+    localInitialsRef.current = initials.toUpperCase().replace(/[^A-Z]/g, "").slice(0, 3);
   }, []);
 
   useEffect(() => {
@@ -221,6 +253,8 @@ export function useMultiplayer() {
     isConnected,
     opponentConnected,
     guestCount,
+    playerInitialsMap,
+    localInitialsRef,
     remoteStateRef,
     remoteCoopStateRef,
     remoteInputRef,
@@ -236,5 +270,6 @@ export function useMultiplayer() {
     sendInputs,
     startGame,
     disconnect,
+    setLocalInitials,
   };
 }
