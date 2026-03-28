@@ -4,6 +4,7 @@ import type { InputState, DuelNetState, CoopNetState, SessionMode } from "@/type
 
 interface PresenceInfo {
   role: "host" | "guest";
+  playerIdx?: number;
 }
 
 interface PresenceState {
@@ -22,11 +23,16 @@ export function useMultiplayer() {
   const [isHost, setIsHost] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
   const [opponentConnected, setOpponentConnected] = useState(false);
+  const [guestCount, setGuestCount] = useState(0);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const remoteStateRef = useRef<DuelNetState | null>(null);
   const remoteCoopStateRef = useRef<CoopNetState | null>(null);
   const remoteInputRef = useRef<InputState>({ left: false, right: false, up: false, fire: false });
-  const onGameStartRef = useRef<((mode: SessionMode) => void) | null>(null);
+  // Map from playerIdx to latest InputState (for N-player coop)
+  const remoteInputsRef = useRef<Map<number, InputState>>(new Map());
+  const onGameStartRef = useRef<((mode: SessionMode, playerCount?: number) => void) | null>(null);
+  // Own player index assigned when joining (0 = host, 1+ = guests)
+  const playerIdxRef = useRef<number>(0);
 
   // Direct state callbacks – called immediately on message receipt, bypassing the
   // 16 ms setInterval polling that was the main source of guest-side lag.
@@ -37,6 +43,7 @@ export function useMultiplayer() {
     const code = generateRoomCode();
     setRoomCode(code);
     setIsHost(true);
+    playerIdxRef.current = 0;
 
     const channel = supabase.channel(`game-${code}`, {
       // ack: false skips the server acknowledgement round-trip → lower latency
@@ -45,21 +52,36 @@ export function useMultiplayer() {
 
     channel
       .on("presence", { event: "join" }, ({ newPresences }) => {
-        if (newPresences.some((p: any) => p.role === "guest")) {
+        const guests = newPresences.filter((p: PresenceInfo) => p.role === "guest");
+        if (guests.length > 0) {
           setOpponentConnected(true);
         }
+        // Recount guests in presence state
+        const state = channel.presenceState() as PresenceState;
+        const allGuests = Object.values(state).flat().filter((p: PresenceInfo) => p.role === "guest");
+        setGuestCount(allGuests.length);
       })
-      .on("presence", { event: "leave" }, ({ leftPresences }) => {
-        if (leftPresences.some((p: any) => p.role === "guest")) {
+      .on("presence", { event: "leave" }, ({ leftPresences: _leftPresences }) => {
+        const state = channel.presenceState() as PresenceState;
+        const allGuests = Object.values(state).flat().filter((p: PresenceInfo) => p.role === "guest");
+        setGuestCount(allGuests.length);
+        if (allGuests.length === 0) {
           setOpponentConnected(false);
         }
       })
       .on("broadcast", { event: "player_input" }, ({ payload }) => {
-        remoteInputRef.current = payload as InputState;
+        const { playerIdx, ...inp } = payload as InputState & { playerIdx?: number };
+        if (playerIdx != null) {
+          remoteInputsRef.current.set(playerIdx, inp as InputState);
+        } else {
+          // Legacy: treat as P2
+          remoteInputRef.current = inp as InputState;
+          remoteInputsRef.current.set(1, inp as InputState);
+        }
       })
       .subscribe(async (status) => {
         if (status === "SUBSCRIBED") {
-          await channel.track({ role: "host" });
+          await channel.track({ role: "host", playerIdx: 0 });
           setIsConnected(true);
         }
       });
@@ -78,14 +100,20 @@ export function useMultiplayer() {
 
     channel
       .on("presence", { event: "join" }, ({ newPresences }) => {
-        if (newPresences.some((p: any) => p.role === "host")) {
+        if (newPresences.some((p: PresenceInfo) => p.role === "host")) {
           setOpponentConnected(true);
         }
+        const state = channel.presenceState() as PresenceState;
+        const allGuests = Object.values(state).flat().filter((p: PresenceInfo) => p.role === "guest");
+        setGuestCount(allGuests.length);
       })
       .on("presence", { event: "leave" }, ({ leftPresences }) => {
-        if (leftPresences.some((p: any) => p.role === "host")) {
+        if (leftPresences.some((p: PresenceInfo) => p.role === "host")) {
           setOpponentConnected(false);
         }
+        const state = channel.presenceState() as PresenceState;
+        const allGuests = Object.values(state).flat().filter((p: PresenceInfo) => p.role === "guest");
+        setGuestCount(allGuests.length);
       })
       .on("broadcast", { event: "game_state" }, ({ payload }) => {
         // Invoke direct callback if registered (zero-polling path); fall back to ref.
@@ -103,16 +131,22 @@ export function useMultiplayer() {
         }
       })
       .on("broadcast", { event: "game_start" }, ({ payload }) => {
-        const raw = payload as { mode?: string } | null;
+        const raw = payload as { mode?: string; playerCount?: number } | null;
         const mode: SessionMode = (raw?.mode === "coop" || raw?.mode === "duel") ? raw.mode : "duel";
-        onGameStartRef.current?.(mode);
+        const pc = raw?.playerCount ?? 2;
+        onGameStartRef.current?.(mode, pc);
       })
       .subscribe(async (status) => {
         if (status === "SUBSCRIBED") {
-          await channel.track({ role: "guest" });
+          // Determine player index: count existing guests and take the next slot
+          const state = channel.presenceState() as PresenceState;
+          const allPresent = Object.values(state).flat();
+          const existingGuests = allPresent.filter((p: PresenceInfo) => p.role === "guest");
+          const assignedIdx = existingGuests.length + 1; // host=0, guests start at 1
+          playerIdxRef.current = assignedIdx;
+          await channel.track({ role: "guest", playerIdx: assignedIdx });
           setIsConnected(true);
           // Check if host is already present
-          const state = channel.presenceState() as PresenceState;
           const keys = Object.keys(state);
           for (const key of keys) {
             if (state[key]?.some?.((p: PresenceInfo) => p.role === "host")) {
@@ -120,6 +154,8 @@ export function useMultiplayer() {
               break;
             }
           }
+          const allGuests = allPresent.filter((p: PresenceInfo) => p.role === "guest");
+          setGuestCount(allGuests.length + 1); // +1 for self
         }
       });
 
@@ -142,19 +178,20 @@ export function useMultiplayer() {
     });
   }, []);
 
-  const sendInputs = useCallback((inputs: InputState) => {
+  const sendInputs = useCallback((inputs: InputState, playerIdx?: number) => {
+    const idx = playerIdx ?? playerIdxRef.current;
     channelRef.current?.send({
       type: "broadcast",
       event: "player_input",
-      payload: inputs,
+      payload: { ...inputs, playerIdx: idx },
     });
   }, []);
 
-  const startGame = useCallback((mode: SessionMode = "duel") => {
+  const startGame = useCallback((mode: SessionMode = "duel", playerCount = 2) => {
     channelRef.current?.send({
       type: "broadcast",
       event: "game_start",
-      payload: { mode },
+      payload: { mode, playerCount },
     });
   }, []);
 
@@ -167,6 +204,7 @@ export function useMultiplayer() {
     setOpponentConnected(false);
     setRoomCode("");
     setIsHost(false);
+    setGuestCount(0);
   }, []);
 
   useEffect(() => {
@@ -182,9 +220,12 @@ export function useMultiplayer() {
     isHost,
     isConnected,
     opponentConnected,
+    guestCount,
     remoteStateRef,
     remoteCoopStateRef,
     remoteInputRef,
+    remoteInputsRef,
+    playerIdxRef,
     onGameStartRef,
     onRemoteStateRef,
     onRemoteCoopStateRef,
