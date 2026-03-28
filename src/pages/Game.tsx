@@ -4925,24 +4925,7 @@ const Game = () => {
           >
             {menuSelection === 1 ? "▸ " : "  "}DUEL
           </Button>
-          <Button
-            onClick={initCoop}
-            className={`text-2xl px-12 py-6 font-mono tracking-wider border-2 transition-all ${
-              menuSelection === 2
-                ? "shadow-[0_0_20px_rgba(68,255,136,0.5)] border-[#44FF88] text-[#44FF88] bg-[rgba(68,255,136,0.15)]"
-                : "opacity-60 border-[#44FF88]/60 text-[#44FF88]/60"
-            }`}
-          >
-            {menuSelection === 2 ? "▸ " : "  "}CO-OP
-          </Button>
-          <Button
-            onClick={() => setGameMode("online_lobby")}
-            className={`text-2xl px-12 py-6 font-mono tracking-wider border-2 transition-all ${
-              menuSelection === 3
-                ? "shadow-[0_0_20px_rgba(68,255,68,0.5)] border-[#44FF44] text-[#44FF44] bg-[rgba(68,255,68,0.15)]"
-                : "opacity-60 border-[#44FF44]/60 text-[#44FF44]/60"
-            }`}
-          >
+         
             {menuSelection === 3 ? "▸ " : "  "}ONLINE
           </Button>
           <Button
