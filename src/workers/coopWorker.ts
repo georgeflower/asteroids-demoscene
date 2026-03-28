@@ -176,7 +176,7 @@ function createPowerUp(x: number, y: number): PowerUp | null {
 }
 
 function createBoss(w: number): Boss {
-  const bossIndex = (w / 5 - 1) % 4;
+  const bossIndex = Math.floor(w / 5 - 1) % 4;
   const bossTypes: Boss["bossType"][] = ["amigaBall", "flyingSaucer", "tentacle", "borgCube"];
   const bossType = bossTypes[bossIndex] || "tentacle";
   const baseHp = 3 + w + (playerCount - 2) * 2; // scale HP with player count

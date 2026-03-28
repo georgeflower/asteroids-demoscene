@@ -3822,7 +3822,7 @@ const Game = () => {
       }
 
       // Power-up active HUD bars (for my own ship in online, all in local)
-      const myIdx = isHostRef.current ? 0 : multiplayer.playerIdxRef.current;
+      const myIdx = multiplayer.playerIdxRef.current;
       const myPa = cs.powerUpActive?.[myIdx];
       if (myPa) {
         const activePowerUps: { label: string; color: string; remaining: number; max: number }[] = [];
