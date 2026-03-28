@@ -256,8 +256,7 @@ interface CoopState {
 type GameMode = "menu" | "solo" | "duel" | "online_lobby" | "online" | "coop" | "online_coop";
 
 /** True for any mode where two ships are on screen (duel, coop, online variants). */
-const isMultiplayerMode = (m: GameMode) =>
-  m === "duel" || m === "online" || m === "coop" || m === "online_coop";
+const isMultiplayerMode = (m: GameMode) => m === "duel" || m === "online" || m === "coop" || m === "online_coop";
 
 const CANVAS_WIDTH = 800;
 const CANVAS_HEIGHT = 600;
@@ -1462,54 +1461,57 @@ const Game = () => {
     }, 50);
   }, []);
 
-  const initOnlineCoop = useCallback((isHost: boolean) => {
-    if (isHost) {
-      initCoop(true);
-    } else {
-      // Guest: set up visual state only; physics run on host's worker
-      keysRef.current = {};
-      coopStateRef.current = {
-        ship1: createShip(CANVAS_WIDTH * 0.25, CANVAS_HEIGHT / 2),
-        ship2: createShip(CANVAS_WIDTH * 0.75, CANVAS_HEIGHT / 2),
-        bullets1: [],
-        bullets2: [],
-        asteroids: [],
-        aliens: [],
-        score: 0,
-        lives1: 3,
-        lives2: 3,
-        wave: 1,
-        respawnTimer: [0, 0],
-        waveComplete: false,
-        waveCompleteTimer: 0,
-        gameOver: false,
-        floatingTexts: [],
-        particles: [],
-        stars: createStars(),
-      };
-      coopStateRef.current.ship1.rotation = 0;
-      coopStateRef.current.ship2.rotation = Math.PI;
-      duelStateRef.current = null;
-      gameStateRef.current = null;
-      setShowGameOver(false);
-      setShowLifeLost(false);
-      showLifeLostRef.current = false;
-      setCoopScore(0);
-      setCoopWave(1);
-      setCoopLives([3, 3]);
-      setCoopGameOver(false);
-      setCoopWaveComplete(false);
-      setGameMode("online_coop");
-      broadcastTickRef.current = 0;
-      checkVersion();
-      // Guest prediction ship (ship2)
-      guestPredictedShipRef.current = createShip(CANVAS_WIDTH * 0.75, CANVAS_HEIGHT / 2);
-      guestPredictedShipRef.current.rotation = Math.PI;
-      setTimeout(() => {
-        canvasRef.current?.focus();
-      }, 50);
-    }
-  }, [initCoop]);
+  const initOnlineCoop = useCallback(
+    (isHost: boolean) => {
+      if (isHost) {
+        initCoop(true);
+      } else {
+        // Guest: set up visual state only; physics run on host's worker
+        keysRef.current = {};
+        coopStateRef.current = {
+          ship1: createShip(CANVAS_WIDTH * 0.25, CANVAS_HEIGHT / 2),
+          ship2: createShip(CANVAS_WIDTH * 0.75, CANVAS_HEIGHT / 2),
+          bullets1: [],
+          bullets2: [],
+          asteroids: [],
+          aliens: [],
+          score: 0,
+          lives1: 3,
+          lives2: 3,
+          wave: 1,
+          respawnTimer: [0, 0],
+          waveComplete: false,
+          waveCompleteTimer: 0,
+          gameOver: false,
+          floatingTexts: [],
+          particles: [],
+          stars: createStars(),
+        };
+        coopStateRef.current.ship1.rotation = 0;
+        coopStateRef.current.ship2.rotation = Math.PI;
+        duelStateRef.current = null;
+        gameStateRef.current = null;
+        setShowGameOver(false);
+        setShowLifeLost(false);
+        showLifeLostRef.current = false;
+        setCoopScore(0);
+        setCoopWave(1);
+        setCoopLives([3, 3]);
+        setCoopGameOver(false);
+        setCoopWaveComplete(false);
+        setGameMode("online_coop");
+        broadcastTickRef.current = 0;
+        checkVersion();
+        // Guest prediction ship (ship2)
+        guestPredictedShipRef.current = createShip(CANVAS_WIDTH * 0.75, CANVAS_HEIGHT / 2);
+        guestPredictedShipRef.current.rotation = Math.PI;
+        setTimeout(() => {
+          canvasRef.current?.focus();
+        }, 50);
+      }
+    },
+    [initCoop],
+  );
 
   const applyCoopNetState = useCallback((net: CoopNetState) => {
     const cs = coopStateRef.current;
@@ -1553,12 +1555,18 @@ const Game = () => {
     cs.ship2.invulnerableTime = net.ship2.invulnTime;
 
     cs.bullets1 = net.bullets1.map((b) => ({
-      pos: { x: b.x, y: b.y }, vel: { x: b.vx, y: b.vy },
-      rotation: b.rot, lifetime: b.lifetime, owner: b.owner,
+      pos: { x: b.x, y: b.y },
+      vel: { x: b.vx, y: b.vy },
+      rotation: b.rot,
+      lifetime: b.lifetime,
+      owner: b.owner,
     }));
     cs.bullets2 = net.bullets2.map((b) => ({
-      pos: { x: b.x, y: b.y }, vel: { x: b.vx, y: b.vy },
-      rotation: b.rot, lifetime: b.lifetime, owner: b.owner,
+      pos: { x: b.x, y: b.y },
+      vel: { x: b.vx, y: b.vy },
+      rotation: b.rot,
+      lifetime: b.lifetime,
+      owner: b.owner,
     }));
 
     cs.asteroids = net.asteroids.map((a) => {
@@ -1567,16 +1575,24 @@ const Game = () => {
         pts.push({ x: a.points[j], y: a.points[j + 1] });
       }
       return {
-        pos: { x: a.x, y: a.y }, vel: { x: a.vx, y: a.vy },
-        rotation: a.rot, size: a.size as "large" | "medium" | "small",
-        rotationSpeed: a.rotSpeed, points: pts,
+        pos: { x: a.x, y: a.y },
+        vel: { x: a.vx, y: a.vy },
+        rotation: a.rot,
+        size: a.size as "large" | "medium" | "small",
+        rotationSpeed: a.rotSpeed,
+        points: pts,
       };
     });
 
     cs.aliens = net.aliens.map((a) => ({
-      pos: { x: a.x, y: a.y }, vel: { x: a.vx, y: a.vy },
-      rotation: 0, type: a.type as Alien["type"],
-      hp: 1, moveTimer: 0, shootTimer: 999, zigzagPhase: 0,
+      pos: { x: a.x, y: a.y },
+      vel: { x: a.vx, y: a.vy },
+      rotation: 0,
+      type: a.type as Alien["type"],
+      hp: 1,
+      moveTimer: 0,
+      shootTimer: 999,
+      zigzagPhase: 0,
     }));
 
     cs.respawnTimer = net.respawnTimer;
@@ -1585,7 +1601,8 @@ const Game = () => {
 
     const prevScore = cs.score;
     const prevWave = cs.wave;
-    const prevL1 = cs.lives1, prevL2 = cs.lives2;
+    const prevL1 = cs.lives1,
+      prevL2 = cs.lives2;
     cs.score = net.score;
     cs.wave = net.wave;
     cs.lives1 = net.lives1;
@@ -4209,15 +4226,27 @@ const Game = () => {
             }
             const maxSpeed = 8;
             const sp = Math.hypot(pred.vel.x, pred.vel.y);
-            if (sp > maxSpeed) { pred.vel.x = (pred.vel.x / sp) * maxSpeed; pred.vel.y = (pred.vel.y / sp) * maxSpeed; }
-            pred.vel.x *= 0.99; pred.vel.y *= 0.99;
-            pred.pos.x = ((pred.pos.x + pred.vel.x) % CANVAS_WIDTH + CANVAS_WIDTH) % CANVAS_WIDTH;
-            pred.pos.y = ((pred.pos.y + pred.vel.y) % CANVAS_HEIGHT + CANVAS_HEIGHT) % CANVAS_HEIGHT;
+            if (sp > maxSpeed) {
+              pred.vel.x = (pred.vel.x / sp) * maxSpeed;
+              pred.vel.y = (pred.vel.y / sp) * maxSpeed;
+            }
+            pred.vel.x *= 0.99;
+            pred.vel.y *= 0.99;
+            pred.pos.x = (((pred.pos.x + pred.vel.x) % CANVAS_WIDTH) + CANVAS_WIDTH) % CANVAS_WIDTH;
+            pred.pos.y = (((pred.pos.y + pred.vel.y) % CANVAS_HEIGHT) + CANVAS_HEIGHT) % CANVAS_HEIGHT;
             // Mirror predicted position into the render state for immediate visual feedback
             const ds = duelStateRef.current;
             const cs = coopStateRef.current;
-            if (ds) { ds.ship2.pos = { ...pred.pos }; ds.ship2.rotation = pred.rotation; ds.ship2.isThrusting = pred.isThrusting; }
-            if (cs) { cs.ship2.pos = { ...pred.pos }; cs.ship2.rotation = pred.rotation; cs.ship2.isThrusting = pred.isThrusting; }
+            if (ds) {
+              ds.ship2.pos = { ...pred.pos };
+              ds.ship2.rotation = pred.rotation;
+              ds.ship2.isThrusting = pred.isThrusting;
+            }
+            if (cs) {
+              cs.ship2.pos = { ...pred.pos };
+              cs.ship2.rotation = pred.rotation;
+              cs.ship2.isThrusting = pred.isThrusting;
+            }
           }
           multiplayer.sendInputs(localInput);
         }
@@ -4232,8 +4261,18 @@ const Game = () => {
         if (workerRef.current) {
           workerRef.current.postMessage({
             type: "inputs",
-            p1: { left: keys[b.p1.left] || gp0.left, right: keys[b.p1.right] || gp0.right, up: keys[b.p1.thrust] || gp0.up, fire: keys[b.p1.fire] || gp0.fire },
-            p2: { left: keys[b.p2.left] || gp1.left, right: keys[b.p2.right] || gp1.right, up: keys[b.p2.thrust] || gp1.up, fire: keys[b.p2.fire] || gp1.fire },
+            p1: {
+              left: keys[b.p1.left] || gp0.left,
+              right: keys[b.p1.right] || gp0.right,
+              up: keys[b.p1.thrust] || gp0.up,
+              fire: keys[b.p1.fire] || gp0.fire,
+            },
+            p2: {
+              left: keys[b.p2.left] || gp1.left,
+              right: keys[b.p2.right] || gp1.right,
+              up: keys[b.p2.thrust] || gp1.up,
+              fire: keys[b.p2.fire] || gp1.fire,
+            },
           });
         }
         updateOnlineVisuals();
@@ -4456,7 +4495,9 @@ const Game = () => {
     multiplayer.onRemoteStateRef.current = (state: DuelNetState) => {
       applyNetStateRef.current(state);
     };
-    return () => { multiplayer.onRemoteStateRef.current = null; };
+    return () => {
+      multiplayer.onRemoteStateRef.current = null;
+    };
   }, [gameMode, multiplayer.isHost]);
 
   // Guest (coop): same zero-polling path for co-op state
@@ -4468,7 +4509,9 @@ const Game = () => {
     multiplayer.onRemoteCoopStateRef.current = (state: CoopNetState) => {
       applyCoopNetStateRef.current(state);
     };
-    return () => { multiplayer.onRemoteCoopStateRef.current = null; };
+    return () => {
+      multiplayer.onRemoteCoopStateRef.current = null;
+    };
   }, [gameMode, multiplayer.isHost]);
 
   // Guest: listen for game_start and start the appropriate mode
@@ -4624,10 +4667,7 @@ const Game = () => {
       }
 
       // Pause toggle on Escape
-      if (
-        e.key === "Escape" &&
-        (gameModeRef.current === "solo" || isMultiplayerMode(gameModeRef.current))
-      ) {
+      if (e.key === "Escape" && (gameModeRef.current === "solo" || isMultiplayerMode(gameModeRef.current))) {
         if (!showLifeLostRef.current && !showGameOver) {
           e.preventDefault();
           togglePause();
@@ -4925,7 +4965,15 @@ const Game = () => {
           >
             {menuSelection === 1 ? "▸ " : "  "}DUEL
           </Button>
-         
+
+          <Button
+            onClick={() => setGameMode("online_lobby")}
+            className={`text-2xl px-12 py-6 font-mono tracking-wider border-2 transition-all ${
+              menuSelection === 3
+                ? "shadow-[0_0_20px_rgba(68,255,68,0.5)] border-[#44FF44] text-[#44FF44] bg-[rgba(68,255,68,0.15)]"
+                : "opacity-60 border-[#44FF44]/60 text-[#44FF44]/60"
+            }`}
+          >
             {menuSelection === 3 ? "▸ " : "  "}ONLINE
           </Button>
           <Button
@@ -5407,13 +5455,9 @@ const Game = () => {
           className="mb-2 sm:mb-4 flex flex-wrap gap-2 sm:gap-6 text-[8px] sm:text-xs tracking-wide justify-center"
           style={{ fontFamily: "'Press Start 2P', monospace" }}
         >
-          <div style={{ color: "#44FF88", textShadow: "0 0 10px #44FF88" }}>
-            WAVE {coopWave}
-          </div>
+          <div style={{ color: "#44FF88", textShadow: "0 0 10px #44FF88" }}>WAVE {coopWave}</div>
           <div className="text-[hsl(var(--game-foreground))] opacity-30">|</div>
-          <div style={{ color: "#FFFF00", textShadow: "0 0 10px #FFFF00" }}>
-            SCORE: {coopScore}
-          </div>
+          <div style={{ color: "#FFFF00", textShadow: "0 0 10px #FFFF00" }}>SCORE: {coopScore}</div>
           <div className="text-[hsl(var(--game-foreground))] opacity-30">|</div>
           <div style={{ color: P1_COLOR, textShadow: `0 0 10px ${P1_COLOR}` }}>
             P1{gameMode === "online_coop" && multiplayer.isHost ? " (YOU)" : ""} ❤{coopLives[0]}
