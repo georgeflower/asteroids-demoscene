@@ -1,93 +1,47 @@
 
 
-# Plan: RLS Lockdown, CAS Heartbeat Updates, HMAC with seq
+# Plan: localStorage High Score List + Fix Build Errors
 
-Three targeted fixes from the security review, plus bonus hardening items.
+## Overview
 
-## What's Being Fixed
-
-1. **Internal tables lack RLS** — `game_sessions`, `game_session_checkpoints`, and `score_audit_log` have RLS disabled, meaning they're accessible via PostgREST if grants exist.
-2. **Heartbeat update is not atomic** — two parallel heartbeats can both read the same `last_seq` and both pass validation before either writes.
-3. **HMAC doesn't include `seq`** — an attacker could replay a signed payload with a different seq value.
-4. **Bonus**: timing-safe HMAC compare, require `seq` strictly, accept both `k`/`gameSessionToken` field names.
+Add a local-only high score list stored in `localStorage`, displayed on the main menu and game over screen. This is independent of the server-side leaderboard (which remains disabled). Also fix all current build errors.
 
 ## Changes
 
-### 1. Database Migration — RLS + deny-all on internal tables
+### 1. Fix build errors in `supabase/functions/submit/index.ts`
 
-Enable RLS and add deny-all policies on `game_sessions`, `game_session_checkpoints`, and `score_audit_log`. The `submission_flags` table already has RLS enabled with a service-role-only policy.
+Replace 6 occurrences of `payload.gameSessionToken` with `payload.token` (the field was renamed in the robust parsing step but log statements still reference the old name).
 
-Service role bypasses RLS, so Edge Functions continue working. Also revoke direct grants from `anon` and `authenticated`.
+### 2. Fix build error in `src/hooks/useMultiplayer.ts`
 
-```sql
-ALTER TABLE public.game_sessions ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.game_session_checkpoints ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.score_audit_log ENABLE ROW LEVEL SECURITY;
+Cast presence objects in `.filter()` callbacks to `PresenceInfo` using `as unknown as PresenceInfo` or type the filter parameter as `any` since the Supabase Presence type doesn't include custom fields.
 
--- Deny-all policies for each table (SELECT, INSERT, UPDATE, DELETE)
--- ...
+### 3. Fix build error in `src/pages/Game.tsx` line 4623
 
-REVOKE ALL ON public.game_sessions FROM anon, authenticated;
-REVOKE ALL ON public.game_session_checkpoints FROM anon, authenticated;
-REVOKE ALL ON public.score_audit_log FROM anon, authenticated;
-```
+Add `hyperspace: false` as default in the fallback object (`InputState` has `hyperspace` as optional but the target type requires it).
 
-### 2. Edge Function — CAS on heartbeat update
+### 4. Add localStorage high score system
 
-Change the session update in `handleHeartbeat` from:
-```
-UPDATE ... WHERE token = ?
-```
-to:
-```
-UPDATE ... WHERE token = ? AND last_seq = ?
-```
+In `Game.tsx`:
 
-Then check that exactly 1 row was updated. If 0 rows, return 409 (concurrent heartbeat won the race).
+- Add a new constant `LOCAL_SCORES_KEY = "asteroids_local_highscores"`
+- Add state: `localHighScores` — array of `{ initials: string; score: number; date: string }`
+- On mount, load from localStorage (starts empty since key won't exist yet)
+- `isHighScore` checks against `localHighScores` (top 10)
+- On game over with a qualifying score, show initials entry (reuse existing `enteringInitials` flow)
+- On submit, save to localStorage (insert sorted, keep top 10), no server call
+- Display top 3 on main menu (replacing the "HIGH SCORES ARE DISABLED" message)
+- Display in the game over screen
+- Show "TOP:" on canvas HUD from local scores
+- Add "CLEAR SCORES" button in the full leaderboard overlay
 
-This applies to both the "first heartbeat" path (guard with `last_seq = 0`) and the "subsequent heartbeat" path.
-
-### 3. Edge Function — Include seq in HMAC + backward compat
-
-**Server**: create a `verifyHMACCompat` function that tries the new format first (`token|score|level|asteroids|bullets|seq`), then falls back to old format (`token|score|level|asteroids|bullets`) for clients that haven't updated yet.
-
-**Client** (`Game.tsx` line 628): update the HMAC message to include seq:
-```typescript
-`${token}|${score}|${level}|${asteroidsDestroyed}|${bulletsFired}|${seq}`
-```
-
-Note: seq must be computed before the HMAC call (move the increment above the HMAC computation).
-
-### 4. Edge Function — Timing-safe HMAC compare
-
-Replace `computed === expectedHmac` in `verifyHMAC` with a constant-time comparison to prevent timing side-channel attacks.
-
-### 5. Edge Function — Require seq strictly
-
-Change seq validation from "if seq is provided" to always required. Reject heartbeats with `seq === undefined` or `seq === null`.
-
-### 6. Edge Function — Robust field-name parsing
-
-Accept both minified and full field names in heartbeat payloads:
-```typescript
-const token = payload.gameSessionToken ?? payload.k;
-const ast = payload.asteroidsDestroyed ?? payload.l ?? 0;
-const bul = payload.bulletsFired ?? payload.u ?? 0;
-```
-
-This prevents silent breakage if the production client sends minified keys due to Terser property mangling.
+This reuses all existing UI patterns (initials entry, leaderboard display) but routes through localStorage instead of the server.
 
 ## Files Changed
 
 | File | Change |
 |------|--------|
-| **Migration SQL** | Enable RLS + deny-all policies on 3 internal tables + revoke grants |
-| `supabase/functions/submit/index.ts` | CAS update, HMAC with seq + backward compat, timing-safe compare, require seq, robust field parsing |
-| `src/pages/Game.tsx` | Include seq in HMAC message (move seq increment before HMAC computation) |
-
-## No breaking changes
-
-- Server accepts both old and new HMAC formats during transition
-- Field-name fallbacks ensure both minified and full payloads work
-- RLS deny-all doesn't affect Edge Functions (service role bypasses RLS)
+| `supabase/functions/submit/index.ts` | Fix 6 `payload.gameSessionToken` → `payload.token` |
+| `src/hooks/useMultiplayer.ts` | Fix presence type cast in 3 filter callbacks |
+| `src/pages/Game.tsx` | Fix `hyperspace` default; add localStorage highscore system |
 
