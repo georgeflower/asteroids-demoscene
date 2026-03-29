@@ -4446,14 +4446,15 @@ const Game = () => {
     ctx.fillText(`${theme.name.toUpperCase()} ZONE`, CANVAS_WIDTH - 10, 18);
     ctx.restore();
 
-    // Top score in top-right corner
-    if (leaderboard.length > 0) {
+    // Top score in top-right corner (from local high scores)
+    const topScoreSource = localHighScores.length > 0 ? localHighScores : leaderboard;
+    if (topScoreSource.length > 0) {
       ctx.save();
       ctx.globalAlpha = 0.5;
       ctx.font = "8px 'Press Start 2P', monospace";
       ctx.fillStyle = "#FFD700";
       ctx.textAlign = "right";
-      ctx.fillText(`TOP: ${leaderboard[0].score.toString().padStart(8, "0")}`, CANVAS_WIDTH - 10, 38);
+      ctx.fillText(`TOP: ${topScoreSource[0].score.toString().padStart(8, "0")}`, CANVAS_WIDTH - 10, 38);
       ctx.restore();
     }
 
