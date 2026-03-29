@@ -6,6 +6,7 @@ interface PresenceInfo {
   role: "host" | "guest";
   playerIdx?: number;
   initials?: string;
+  gameInProgress?: boolean;
 }
 
 interface PresenceState {
@@ -25,6 +26,7 @@ export function useMultiplayer() {
   const [isConnected, setIsConnected] = useState(false);
   const [opponentConnected, setOpponentConnected] = useState(false);
   const [guestCount, setGuestCount] = useState(0);
+  const [gameInProgress, setGameInProgressState] = useState(false);
   // Map from playerIdx → initials for all players in the room
   const [playerInitialsMap, setPlayerInitialsMap] = useState<Map<number, string>>(new Map());
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
@@ -39,6 +41,14 @@ export function useMultiplayer() {
   const playerIdxRef = useRef<number>(0);
   // Local player's initials
   const localInitialsRef = useRef<string>("");
+  // Ref-copy of chatMessages so presence handlers always see latest history
+  const chatHistoryRef = useRef<ChatMessage[]>([]);
+  // Ref-copy of gameInProgress for async/event-handler access
+  const gameInProgressRef = useRef(false);
+  // Ref-copy of guestCount for event-handler access without stale closures
+  const guestCountRef = useRef(0);
+  // Callback invoked when the host adds waiting players mid-game
+  const onPlayersAddedRef = useRef<((newPlayerCount: number) => void) | null>(null);
 
   // Direct state callbacks – called immediately on message receipt, bypassing the
   // 16 ms setInterval polling that was the main source of guest-side lag.
@@ -75,16 +85,26 @@ export function useMultiplayer() {
         const guests = newPresences.filter((p: any) => p.role === "guest");
         if (guests.length > 0) {
           setOpponentConnected(true);
+          // Send current chat history to all (new joiners will merge and deduplicate)
+          if (chatHistoryRef.current.length > 0 && channelRef.current) {
+            channelRef.current.send({
+              type: "broadcast",
+              event: "chat_history",
+              payload: { messages: chatHistoryRef.current },
+            }).catch(() => {});
+          }
         }
         // Recount guests in presence state
         const state = channel.presenceState() as PresenceState;
         const allGuests = Object.values(state).flat().filter((p: PresenceInfo) => p.role === "guest");
+        guestCountRef.current = allGuests.length;
         setGuestCount(allGuests.length);
         rebuildInitialsMap(channel);
       })
       .on("presence", { event: "leave" }, ({ leftPresences: _leftPresences }) => {
         const state = channel.presenceState() as PresenceState;
         const allGuests = Object.values(state).flat().filter((p: PresenceInfo) => p.role === "guest");
+        guestCountRef.current = allGuests.length;
         setGuestCount(allGuests.length);
         if (allGuests.length === 0) {
           setOpponentConnected(false);
@@ -103,7 +123,11 @@ export function useMultiplayer() {
       })
       .on("broadcast", { event: "chat_message" }, ({ payload }) => {
         const msg = payload as ChatMessage;
-        setChatMessages((prev) => [...prev, msg]);
+        setChatMessages((prev) => {
+          const next = [...prev, msg];
+          chatHistoryRef.current = next;
+          return next;
+        });
       })
       .subscribe(async (status) => {
         if (status === "SUBSCRIBED") {
@@ -132,6 +156,7 @@ export function useMultiplayer() {
         }
         const state = channel.presenceState() as PresenceState;
         const allGuests = Object.values(state).flat().filter((p: PresenceInfo) => p.role === "guest");
+        guestCountRef.current = allGuests.length;
         setGuestCount(allGuests.length);
         rebuildInitialsMap(channel);
       })
@@ -141,6 +166,7 @@ export function useMultiplayer() {
         }
         const state = channel.presenceState() as PresenceState;
         const allGuests = Object.values(state).flat().filter((p: PresenceInfo) => p.role === "guest");
+        guestCountRef.current = allGuests.length;
         setGuestCount(allGuests.length);
         rebuildInitialsMap(channel);
       })
@@ -167,7 +193,28 @@ export function useMultiplayer() {
       })
       .on("broadcast", { event: "chat_message" }, ({ payload }) => {
         const msg = payload as ChatMessage;
-        setChatMessages((prev) => [...prev, msg]);
+        setChatMessages((prev) => {
+          const next = [...prev, msg];
+          chatHistoryRef.current = next;
+          return next;
+        });
+      })
+      .on("broadcast", { event: "chat_history" }, ({ payload }) => {
+        // Merge incoming history with existing messages, deduplicating by id
+        const { messages } = payload as { messages: ChatMessage[] };
+        if (!messages?.length) return;
+        setChatMessages((prev) => {
+          const existingIds = new Set(prev.map((m) => m.id));
+          const newMsgs = messages.filter((m) => !existingIds.has(m.id));
+          if (newMsgs.length === 0) return prev;
+          const merged = [...newMsgs, ...prev].sort((a, b) => a.timestamp - b.timestamp);
+          chatHistoryRef.current = merged;
+          return merged;
+        });
+      })
+      .on("broadcast", { event: "players_added" }, ({ payload }) => {
+        const { newPlayerCount } = payload as { newPlayerCount: number };
+        onPlayersAddedRef.current?.(newPlayerCount);
       })
       .subscribe(async (status) => {
         if (status === "SUBSCRIBED") {
@@ -188,15 +235,20 @@ export function useMultiplayer() {
           await channel.track({ role: "guest", playerIdx: assignedIdx, initials: localInitialsRef.current });
           setIsConnected(true);
           rebuildInitialsMap(channel);
-          // Check if host is already present
-          const keys = Object.keys(state);
-          for (const key of keys) {
-            if (state[key]?.some?.((p: PresenceInfo) => p.role === "host")) {
+          // Check if host is already present and whether game is in progress
+          const allPresent2 = Object.values(state).flat() as PresenceInfo[];
+          for (const p of allPresent2) {
+            if (p.role === "host") {
               setOpponentConnected(true);
+              if (p.gameInProgress) {
+                setGameInProgressState(true);
+                gameInProgressRef.current = true;
+              }
               break;
             }
           }
           // guestCount = number of guest presences; join event for self will update it after track
+          guestCountRef.current = existingGuests.length;
           setGuestCount(existingGuests.length);
         }
       });
@@ -255,7 +307,11 @@ export function useMultiplayer() {
       timestamp: now,
     };
     // Add to own messages immediately (channel has self: false)
-    setChatMessages((prev) => [...prev, msg]);
+    setChatMessages((prev) => {
+      const next = [...prev, msg];
+      chatHistoryRef.current = next;
+      return next;
+    });
     channelRef.current.send({
       type: "broadcast",
       event: "chat_message",
@@ -275,14 +331,52 @@ export function useMultiplayer() {
     setRoomCode("");
     setIsHost(false);
     setGuestCount(0);
+    guestCountRef.current = 0;
     setPlayerInitialsMap(new Map());
     setChatMessages([]);
+    chatHistoryRef.current = [];
+    setGameInProgressState(false);
+    gameInProgressRef.current = false;
     localInitialsRef.current = "";
   }, []);
 
   /** Call this before createRoom/joinRoom to set the player's own initials */
   const setLocalInitials = useCallback((initials: string) => {
     localInitialsRef.current = initials.toUpperCase().replace(/[^A-Z]/g, "").slice(0, 3);
+  }, []);
+
+  /** Host: mark game as in-progress (reflected in presence so late joiners can detect it) */
+  const setGameInProgress = useCallback((inProgress: boolean) => {
+    gameInProgressRef.current = inProgress;
+    setGameInProgressState(inProgress);
+    channelRef.current?.track({
+      role: "host",
+      playerIdx: 0,
+      initials: localInitialsRef.current,
+      gameInProgress: inProgress,
+    });
+  }, []);
+
+  /** Host: broadcast that new players have been added mid-game */
+  const sendPlayersAdded = useCallback((newPlayerCount: number) => {
+    channelRef.current?.send({
+      type: "broadcast",
+      event: "players_added",
+      payload: { newPlayerCount },
+    }).catch(() => {});
+  }, []);
+
+  /**
+   * Host: count guests whose playerIdx is >= currentPlayerCount.
+   * These are "waiting" players who joined after the game started.
+   */
+  const getWaitingPlayerCount = useCallback((currentPlayerCount: number): number => {
+    if (!channelRef.current) return 0;
+    const state = channelRef.current.presenceState() as PresenceState;
+    const allPresences = Object.values(state).flat() as PresenceInfo[];
+    return allPresences.filter(
+      (p) => p.role === "guest" && typeof p.playerIdx === "number" && p.playerIdx >= currentPlayerCount
+    ).length;
   }, []);
 
   useEffect(() => {
@@ -299,6 +393,8 @@ export function useMultiplayer() {
     isConnected,
     opponentConnected,
     guestCount,
+    guestCountRef,
+    gameInProgress,
     playerInitialsMap,
     chatMessages,
     localInitialsRef,
@@ -310,6 +406,7 @@ export function useMultiplayer() {
     onGameStartRef,
     onRemoteStateRef,
     onRemoteCoopStateRef,
+    onPlayersAddedRef,
     createRoom,
     joinRoom,
     sendState,
@@ -319,5 +416,8 @@ export function useMultiplayer() {
     sendChatMessage,
     disconnect,
     setLocalInitials,
+    setGameInProgress,
+    sendPlayersAdded,
+    getWaitingPlayerCount,
   };
 }

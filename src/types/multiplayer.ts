@@ -173,6 +173,7 @@ export type WorkerOutMessage = { type: "state"; data: DuelNetState };
 export type CoopWorkerInMessage =
   | { type: "init"; turnSpeed?: number; playerCount?: number }
   | { type: "inputs"; inputs: InputState[] }
+  | { type: "add_players"; count: number }
   | { type: "stop" };
 
 export type CoopWorkerOutMessage = { type: "state"; data: CoopNetState };

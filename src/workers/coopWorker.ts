@@ -1252,6 +1252,33 @@ onmessage = (e: MessageEvent) => {
       workerTurnSpeed = msg.turnSpeed;
       for (const s of ships) s.rotationSpeed = workerTurnSpeed;
     }
+  } else if (msg.type === "add_players") {
+    const addCount = Math.max(0, Math.min(MAX_PLAYERS - playerCount, msg.count));
+    if (addCount > 0) {
+      for (let i = 0; i < addCount; i++) {
+        const idx = playerCount + i;
+        const pos = getStartPos(idx, playerCount + addCount);
+        ships.push(createShip(pos.x, pos.y, idx));
+        bullets.push([]);
+        lives.push(INITIAL_LIVES);
+        eliminated.push(false);
+        powerUpActive.push({ shield: 0, rapidFire: 0, multiplier: 0 });
+        respawnTimer.push(0);
+        lastShotTime.push(0);
+        hyperspacePressed.push(false);
+        inputs.push({ left: false, right: false, up: false, fire: false, hyperspace: false });
+        playerScores.push(0);
+        playerAsteroidsDestroyed.push(0);
+        playerEnemiesKilled.push(0);
+        playerPowerUpsCollected.push(0);
+      }
+      playerCount += addCount;
+      gameOver = false;
+      // If the board is empty (game ended on a clear wave), spawn fresh asteroids
+      if (asteroids.length === 0 && !boss) {
+        spawnWaveAsteroids();
+      }
+    }
   } else if (msg.type === "stop") {
     if (timeoutId !== null) { clearTimeout(timeoutId); timeoutId = null; }
     pendingEvents = [];

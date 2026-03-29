@@ -16,6 +16,7 @@ interface OnlineLobbyProps {
   guestCount?: number;
   chatMessages?: ChatMessage[];
   onSendChatMessage?: (text: string) => void;
+  gameInProgress?: boolean;
 }
 
 const COOP_COLOR = "#44FF88";
@@ -34,6 +35,7 @@ const OnlineLobby = ({
   guestCount = 0,
   chatMessages = [],
   onSendChatMessage,
+  gameInProgress = false,
 }: OnlineLobbyProps) => {
   const [joinCode, setJoinCode] = useState("");
   const [phase, setPhase] = useState<"initials" | "choose" | "hosting" | "joining">("initials");
@@ -305,7 +307,9 @@ const OnlineLobby = ({
               className="text-lg font-mono animate-pulse mt-4"
               style={{ color: sessionMode === "coop" ? COOP_COLOR : "hsl(var(--game-glow))" }}
             >
-              Waiting for host to start...
+              {gameInProgress
+                ? "GAME IN PROGRESS — YOU'LL JOIN NEXT ROUND"
+                : "Waiting for host to start..."}
             </div>
           )}
           <Button
