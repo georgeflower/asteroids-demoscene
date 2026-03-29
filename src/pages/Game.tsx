@@ -813,9 +813,9 @@ const Game = () => {
   const isHighScore = useCallback(
     (score: number) => {
       if (DEBUG_ENABLED) return true;
-      return leaderboard.length < 10 || score > (leaderboard[leaderboard.length - 1]?.score ?? 0);
+      return localHighScores.length < 10 || score > (localHighScores[localHighScores.length - 1]?.score ?? 0);
     },
-    [leaderboard],
+    [localHighScores],
   );
 
   useEffect(() => {
