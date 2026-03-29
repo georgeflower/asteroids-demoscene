@@ -6107,7 +6107,7 @@ const Game = () => {
 
             {/* Local scores on game over */}
             {localHighScores.length > 0 && !enteringInitials && (
-              <div className="mb-4 w-75">
+              <div className="mb-4 w-72">
                 <div className="text-lg font-mono text-[hsl(var(--game-glow))] text-center mb-2">LOCAL HIGH SCORES</div>
                 <div className="border border-[hsl(var(--game-foreground))] p-2">
                   {localHighScores.map((entry, i) => (
@@ -6128,18 +6128,7 @@ const Game = () => {
                 </div>
               </div>
             )}
-<div className="mb-8 w-72 text-center">
-            <div
-              className="text-sm font-mono text-[hsl(var(--game-glow))] mb-1 tracking-wider"
-              style={{ textShadow: "0 0 10px hsl(var(--game-glow))" }}
-            >
-              ★ GLOBAL HIGH SCORES ARE DISABLED ★
-            </div>
-            <div
-              className="text-sm font-mono tracking-wider"
-              style={{ color: "#FFD700", textShadow: "0 0 10px #FFD700" }}
-            >
-              MBD IS THE GRAND CHAMPION with 116 040 !</div>
+
             <div className="flex gap-4">
               <Button
                 onClick={initGame}
