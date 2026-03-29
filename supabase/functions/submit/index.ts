@@ -304,7 +304,7 @@ async function handleHeartbeat(req: Request, supabaseAdmin: any) {
       // Still within the same minute window
       countThisMinute++;
       if (countThisMinute > MAX_HEARTBEATS_PER_MINUTE) {
-        console.log(`Rate limit exceeded: ${countThisMinute} heartbeats in current minute window, token=${payload.gameSessionToken}`);
+        console.log(`Rate limit exceeded: ${countThisMinute} heartbeats in current minute window, token=${payload.token}`);
         return errorResponse('Rate limit exceeded', 429);
       }
     } else {
