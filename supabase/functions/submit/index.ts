@@ -334,7 +334,7 @@ async function handleHeartbeat(req: Request, supabaseAdmin: any) {
     // Score delta must be plausible for elapsed time
     const maxScoreDelta = MAX_SCORE_PER_SECOND * dtSec;
     if (scoreDelta > maxScoreDelta) {
-      console.log(`Score delta too high: +${scoreDelta} in ${dtSec.toFixed(1)}s (max ${maxScoreDelta.toFixed(0)}), token=${payload.gameSessionToken}`);
+      console.log(`Score delta too high: +${scoreDelta} in ${dtSec.toFixed(1)}s (max ${maxScoreDelta.toFixed(0)}), token=${payload.token}`);
       return errorResponse('Score progression anomaly', 403);
     }
 
