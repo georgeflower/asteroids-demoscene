@@ -48,6 +48,14 @@ interface MiniCube {
   pos: Vector; vel: Vector; hp: number; rotAngle: number;
 }
 
+interface UFO {
+  pos: Vector; vel: Vector;
+  size: "large" | "small";
+  shootTimer: number;
+  waveOffset: number;
+  beepTimer: number;
+}
+
 interface Boss {
   pos: Vector; vel: Vector; rotation: number;
   hp: number; maxHp: number;
@@ -67,7 +75,7 @@ interface Boss {
 interface InputState { left: boolean; right: boolean; up: boolean; fire: boolean; hyperspace?: boolean; }
 
 interface GameEvent {
-  type: "explosion" | "kill" | "die_env" | "score_pop" | "boss_spawn" | "powerup";
+  type: "explosion" | "kill" | "die_env" | "score_pop" | "boss_spawn" | "powerup" | "small_explode" | "ufo_beep" | "wave_start";
   x: number; y: number; color: string; count: number;
   player?: number; killer?: number; points?: number; label?: string;
 }
@@ -80,6 +88,7 @@ const MAX_PLAYERS = 8;
 const HYPERSPACE_COOLDOWN = 600;
 
 const SCORE_LARGE = 20, SCORE_MEDIUM = 50, SCORE_SMALL = 100, SCORE_ALIEN = 200, SCORE_BOSS = 1000;
+const UFO_POINTS: Record<string, number> = { large: 200, small: 1000 };
 
 let workerTurnSpeed = 0.05;
 let playerCount = 2;
@@ -91,6 +100,8 @@ let asteroids: Asteroid[] = [];
 let aliens: Alien[] = [];
 let powerUps: PowerUp[] = [];
 let boss: Boss | null = null;
+let ufos: UFO[] = [];
+let ufoSpawnTimer = 900;
 
 let score = 0;
 let lives: number[] = [];
@@ -237,6 +248,20 @@ function createPowerUp(x: number, y: number): PowerUp | null {
   };
 }
 
+function createUFO(): UFO {
+  const size: UFO["size"] = Math.random() < 0.3 ? "small" : "large";
+  const fromLeft = Math.random() < 0.5;
+  const speed = size === "large" ? 1.5 : 2.0;
+  return {
+    pos: { x: fromLeft ? -20 : W + 20, y: 50 + Math.random() * (H - 100) },
+    vel: { x: fromLeft ? speed : -speed, y: 0 },
+    size,
+    shootTimer: 60 + Math.random() * 60,
+    waveOffset: Math.random() * Math.PI * 2,
+    beepTimer: 60,
+  };
+}
+
 function createBoss(w: number): Boss {
   const bossIndex = Math.floor(w / 5 - 1) % 4;
   const bossTypes: Boss["bossType"][] = ["amigaBall", "flyingSaucer", "tentacle", "borgCube"];
@@ -358,6 +383,7 @@ function initGame() {
   }
 
   asteroids = []; aliens = []; powerUps = []; boss = null; bossBullets = []; alienBullets = [];
+  ufos = []; ufoSpawnTimer = 900 + Math.random() * 600;
   score = 0; wave = 1;
   alienSpawnTimer = 800;
   waveComplete = false; waveCompleteTimer = 0;
@@ -632,11 +658,13 @@ function updateTick() {
     if (waveCompleteTimer <= 0) {
       wave++;
       asteroids = []; aliens = []; powerUps = []; boss = null; bossDefeated = false; bossBullets = []; alienBullets = [];
+      ufos = []; ufoSpawnTimer = Math.max(400, 900 - wave * 30) + Math.random() * 400;
       alienSpawnTimer = Math.max(180, 500 - wave * 20);
       waveComplete = false;
       // Boss waves mirror solo: no asteroids during boss fight
       if (!isBossWave(wave)) {
         spawnWaveAsteroids();
+        pendingEvents.push({ type: "wave_start", x: W / 2, y: H / 2 - 20, color: "#FFFFFF", count: 0, label: `WAVE ${wave}` });
       }
       // Brief invulnerability for new wave
       for (let i = 0; i < playerCount; i++) {
@@ -852,6 +880,44 @@ function updateTick() {
     return --pu.lifetime > 0;
   });
 
+  // Spawn and update UFOs (only when no boss is active)
+  if (!boss) {
+    ufoSpawnTimer--;
+    if (ufoSpawnTimer <= 0 && ufos.length === 0) {
+      ufos.push(createUFO());
+      ufoSpawnTimer = Math.max(400, 900 - wave * 30) + Math.random() * 400;
+    }
+  }
+  ufos = ufos.filter(ufo => {
+    ufo.pos.x += ufo.vel.x;
+    ufo.waveOffset += 0.03;
+    ufo.vel.y = Math.sin(ufo.waveOffset) * 1.2;
+    ufo.pos.y += ufo.vel.y;
+    if (ufo.pos.x < -30 || ufo.pos.x > W + 30) return false;
+    ufo.beepTimer--;
+    if (ufo.beepTimer <= 0) {
+      pendingEvents.push({ type: "ufo_beep", x: ufo.pos.x, y: ufo.pos.y, color: "#FFFF00", count: 0 });
+      ufo.beepTimer = 60;
+    }
+    ufo.shootTimer--;
+    if (ufo.shootTimer <= 0) {
+      ufo.shootTimer = 60 + Math.random() * 60;
+      const tgtIdx = getNearestAlivePlayer(ufo.pos);
+      const tgt = ships[tgtIdx];
+      if (tgt) {
+        const angle = ufo.size === "small"
+          ? Math.atan2(tgt.pos.y - ufo.pos.y, tgt.pos.x - ufo.pos.x)
+          : Math.random() * Math.PI * 2;
+        alienBullets.push({
+          pos: { ...ufo.pos },
+          vel: { x: Math.cos(angle) * BULLET_SPEED, y: Math.sin(angle) * BULLET_SPEED },
+          rotation: angle, lifetime: BULLET_LIFETIME, owner: -1,
+        });
+      }
+    }
+    return true;
+  });
+
   // Update boss
   if (boss) updateBoss();
 
@@ -909,6 +975,18 @@ function updateTick() {
     if (boss && boss.entered && dist(ship.pos, boss.pos) < SHIP_SIZE + 40) {
       if (!shielded) killPlayer(p);
     }
+    if (eliminated[p]) continue;
+
+    // Ship vs UFOs
+    for (let ui = ufos.length - 1; ui >= 0; ui--) {
+      const ufo = ufos[ui];
+      const ufoRadius = ufo.size === "large" ? 20 : 10;
+      if (dist(ship.pos, ufo.pos) < SHIP_SIZE + ufoRadius) {
+        ufos.splice(ui, 1);
+        if (!shielded) killPlayer(p);
+        break;
+      }
+    }
   }
 
   // Bullets vs asteroids
@@ -939,7 +1017,8 @@ function updateTick() {
           score += pts;
           playerScores[p] = (playerScores[p] ?? 0) + pts;
           playerAsteroidsDestroyed[p] = (playerAsteroidsDestroyed[p] ?? 0) + 1;
-          pendingEvents.push({ type: "explosion", x: asteroid.pos.x, y: asteroid.pos.y, color: "#FFFFFF", count: 8 });
+          const evtType = asteroid.size === "small" ? "small_explode" : "explosion";
+          pendingEvents.push({ type: evtType, x: asteroid.pos.x, y: asteroid.pos.y, color: "#FFFFFF", count: 8 });
           pendingEvents.push({ type: "score_pop", x: asteroid.pos.x, y: asteroid.pos.y, color: "#FFFF00", count: 0, points: pts });
           return false;
         }
@@ -975,6 +1054,30 @@ function updateTick() {
         return true;
       });
       return alive;
+    });
+  }
+
+  // Bullets vs UFOs
+  for (let p = 0; p < playerCount; p++) {
+    bullets[p] = bullets[p].filter(bullet => {
+      for (let ui = ufos.length - 1; ui >= 0; ui--) {
+        const ufo = ufos[ui];
+        const ufoRadius = ufo.size === "large" ? 20 : 10;
+        if (dist(bullet.pos, ufo.pos) < 2 + ufoRadius) {
+          const multiplier = powerUpActive[bullet.owner >= 0 ? bullet.owner : 0].multiplier > 0 ? 2 : 1;
+          const pts = UFO_POINTS[ufo.size] * multiplier;
+          score += pts;
+          playerScores[p] = (playerScores[p] ?? 0) + pts;
+          playerEnemiesKilled[p] = (playerEnemiesKilled[p] ?? 0) + 1;
+          pendingEvents.push({ type: "explosion", x: ufo.pos.x, y: ufo.pos.y, color: "#FFFF66", count: 15 });
+          pendingEvents.push({ type: "score_pop", x: ufo.pos.x, y: ufo.pos.y, color: "#FFFF00", count: 0, points: pts });
+          const pu = createPowerUp(ufo.pos.x, ufo.pos.y);
+          if (pu) powerUps.push(pu);
+          ufos.splice(ui, 1);
+          return false;
+        }
+      }
+      return true;
     });
   }
 
@@ -1099,6 +1202,7 @@ function buildAndSendState() {
       cubeRotX: boss.cubeRotX, cubeRotY: boss.cubeRotY, regenTimer: boss.regenTimer,
       miniCubes: boss.miniCubes?.map(mc => ({ x: mc.pos.x, y: mc.pos.y, rotAngle: mc.rotAngle })) ?? [],
     } : null,
+    ufos: ufos.map(u => ({ x: u.pos.x, y: u.pos.y, vx: u.vel.x, vy: u.vel.y, size: u.size, waveOffset: u.waveOffset })),
     score,
     lives: [...lives],
     eliminated: [...eliminated],

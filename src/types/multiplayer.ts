@@ -51,7 +51,7 @@ export interface NetAlien {
 }
 
 export interface GameEvent {
-  type: "explosion" | "kill" | "die_env" | "score_pop" | "boss_spawn" | "powerup";
+  type: "explosion" | "kill" | "die_env" | "score_pop" | "boss_spawn" | "powerup" | "small_explode" | "ufo_beep" | "wave_start";
   x: number;
   y: number;
   color: string;
@@ -60,6 +60,15 @@ export interface GameEvent {
   killer?: number;
   points?: number;
   label?: string;
+}
+
+export interface NetUFO {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  size: "large" | "small";
+  waveOffset: number;
 }
 
 export interface DuelNetState {
@@ -133,6 +142,7 @@ export interface CoopNetState {
   hyperspaceCooldown: number[];
   powerUps: NetPowerUp[];
   boss: NetBoss | null;
+  ufos: NetUFO[];
   waveComplete: boolean;
   gameOver: boolean;
   events: GameEvent[];

@@ -240,6 +240,7 @@ interface CoopState {
   alienBullets: Bullet[];
   asteroids: Asteroid[];
   aliens: Alien[];
+  ufos: UFO[];
   score: number;
   lives: number[];
   eliminated: boolean[];
@@ -509,6 +510,11 @@ const Game = () => {
   // Client-side prediction: guest runs local physics for its own ship (P2)
   // to eliminate the feel of input lag between sends and authoritative state updates.
   const guestPredictedShipRef = useRef<Ship | null>(null);
+
+  // Sound state tracking for co-op modes (thrust, fire, hyperspace)
+  const prevCoopThrustRef = useRef(false);
+  const prevCoopFireRef = useRef(false);
+  const prevCoopHyperspaceRef = useRef(false);
 
   // Fixed timestep game loop timing
   const accumulatorRef = useRef(0);
@@ -1461,6 +1467,7 @@ const Game = () => {
       alienBullets: [],
       asteroids: [],
       aliens: [],
+      ufos: [],
       score: 0,
       lives: Array.from({ length: pc }, () => 3),
       eliminated: Array.from({ length: pc }, () => false),
@@ -1494,6 +1501,9 @@ const Game = () => {
     setCoopPlayerStats([]);
     setGameMode(isOnlineHost ? "online_coop" : "coop");
     broadcastTickRef.current = 0;
+    prevCoopThrustRef.current = false;
+    prevCoopFireRef.current = false;
+    prevCoopHyperspaceRef.current = false;
     checkVersion();
 
     // Start the co-op worker
@@ -1534,6 +1544,7 @@ const Game = () => {
           alienBullets: [],
           asteroids: [],
           aliens: [],
+          ufos: [],
           score: 0,
           lives: Array.from({ length: pc }, () => 3),
           eliminated: Array.from({ length: pc }, () => false),
@@ -1566,6 +1577,9 @@ const Game = () => {
         setCoopPlayerStats([]);
         setGameMode("online_coop");
         broadcastTickRef.current = 0;
+        prevCoopThrustRef.current = false;
+        prevCoopFireRef.current = false;
+        prevCoopHyperspaceRef.current = false;
         checkVersion();
         // Guest prediction ship (own player ship)
         const myIdx = multiplayer.playerIdxRef.current;
@@ -1716,6 +1730,17 @@ const Game = () => {
       cs.boss = null;
     }
 
+    // UFO state
+    cs.ufos = (net.ufos ?? []).map((u) => ({
+      pos: { x: u.x, y: u.y },
+      vel: { x: u.vx, y: u.vy },
+      rotation: 0,
+      size: u.size,
+      shootTimer: 999,
+      waveOffset: u.waveOffset,
+      direction: u.vx > 0 ? 1 : -1,
+    }));
+
     // Per-player state
     const prevScore = cs.score;
     const prevWave = cs.wave;
@@ -1737,6 +1762,13 @@ const Game = () => {
         spawnExplosionTo(cs.particles, { x: event.x, y: event.y }, event.color, event.count);
         soundEffects.explode();
       }
+      if (event.type === "small_explode") {
+        spawnExplosionTo(cs.particles, { x: event.x, y: event.y }, event.color, event.count);
+        soundEffects.smallExplode?.();
+      }
+      if (event.type === "ufo_beep") {
+        soundEffects.ufoBeep?.();
+      }
       if (event.type === "score_pop" && event.points) {
         spawnFloatingTextTo(cs.floatingTexts, { x: event.x, y: event.y }, `+${event.points}`, "#FFFF00", 16);
       }
@@ -1746,6 +1778,10 @@ const Game = () => {
       }
       if (event.type === "boss_spawn" && event.label) {
         spawnFloatingTextTo(cs.floatingTexts, { x: event.x, y: event.y }, event.label, "#FF4444", 22);
+      }
+      if (event.type === "wave_start" && event.label) {
+        const waveTheme = getTheme(cs.wave);
+        spawnFloatingTextTo(cs.floatingTexts, { x: event.x, y: event.y }, event.label, waveTheme.ship, 28);
       }
     }
 
@@ -3715,6 +3751,30 @@ const Game = () => {
         ctx.restore();
       });
 
+      // Draw UFOs (same graphics as solo mode)
+      (cs.ufos ?? []).forEach((ufo) => {
+        ctx.save();
+        ctx.translate(ufo.pos.x, ufo.pos.y);
+        const ufoColor = ufo.size === "large" ? coopTheme.enemy : "#FF44FF";
+        ctx.strokeStyle = ufoColor;
+        ctx.lineWidth = 2;
+        const radius = ufo.size === "large" ? 20 : 10;
+        ctx.beginPath();
+        ctx.ellipse(0, 0, radius, radius / 2, 0, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.ellipse(0, -radius / 4, radius / 2, radius / 3, 0, 0, Math.PI, true);
+        ctx.stroke();
+        const pulse = 0.3 + Math.sin(Date.now() * 0.005) * 0.2;
+        ctx.globalAlpha = pulse;
+        ctx.fillStyle = ufoColor;
+        ctx.beginPath();
+        ctx.ellipse(0, 0, radius, radius / 2, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+        ctx.restore();
+      });
+
       // Draw boss (same rendering as solo mode)
       if (cs.boss) {
         const boss = cs.boss;
@@ -4638,6 +4698,17 @@ const Game = () => {
           hyperspace: !!(keys[b.p1.hyperspace] || gp0.hyperspace),
         };
 
+        // Sound effects for online co-op local player
+        if (gameModeRef.current === "online_coop") {
+          if (localInput.up && !prevCoopThrustRef.current) soundEffects.startThrust();
+          else if (!localInput.up && prevCoopThrustRef.current) soundEffects.stopThrust();
+          prevCoopThrustRef.current = localInput.up;
+          if (localInput.fire && !prevCoopFireRef.current) soundEffects.shoot();
+          prevCoopFireRef.current = localInput.fire;
+          if (localInput.hyperspace && !prevCoopHyperspaceRef.current) soundEffects.warpCharge?.();
+          prevCoopHyperspaceRef.current = localInput.hyperspace;
+        }
+
         if (isHostRef.current && workerRef.current && gameModeRef.current === "online_coop") {
           // Coop host: collect all remote inputs and send full array to worker
           const cs = coopStateRef.current;
@@ -4705,6 +4776,19 @@ const Game = () => {
         const gp0 = readGamepad(0);
         const gp1 = readGamepad(1);
         const b = controlBindingsRef.current;
+        const p1Up = keys[b.p1.thrust] || gp0.up;
+        const p1Fire = keys[b.p1.fire] || gp0.fire;
+        const p1Hyperspace = !!(keys[b.p1.hyperspace] || gp0.hyperspace);
+
+        // Sound effects for local co-op (P1 is the primary local player)
+        if (p1Up && !prevCoopThrustRef.current) soundEffects.startThrust();
+        else if (!p1Up && prevCoopThrustRef.current) soundEffects.stopThrust();
+        prevCoopThrustRef.current = p1Up;
+        if (p1Fire && !prevCoopFireRef.current) soundEffects.shoot();
+        prevCoopFireRef.current = p1Fire;
+        if (p1Hyperspace && !prevCoopHyperspaceRef.current) soundEffects.warpCharge?.();
+        prevCoopHyperspaceRef.current = p1Hyperspace;
+
         if (workerRef.current) {
           workerRef.current.postMessage({
             type: "inputs",
@@ -4712,9 +4796,9 @@ const Game = () => {
               {
                 left: keys[b.p1.left] || gp0.left,
                 right: keys[b.p1.right] || gp0.right,
-                up: keys[b.p1.thrust] || gp0.up,
-                fire: keys[b.p1.fire] || gp0.fire,
-                hyperspace: !!(keys[b.p1.hyperspace] || gp0.hyperspace),
+                up: p1Up,
+                fire: p1Fire,
+                hyperspace: p1Hyperspace,
               },
               {
                 left: keys[b.p2.left] || gp1.left,
@@ -5059,6 +5143,9 @@ const Game = () => {
     isPausedRef.current = false;
     setIsPaused(false);
     soundEffects.stopThrust();
+    prevCoopThrustRef.current = false;
+    prevCoopFireRef.current = false;
+    prevCoopHyperspaceRef.current = false;
     // Release canvas focus
     canvasRef.current?.blur();
   }, [multiplayer]);
@@ -5069,6 +5156,7 @@ const Game = () => {
     setPauseSelection(0);
     if (isPausedRef.current) {
       soundEffects.stopThrust();
+      prevCoopThrustRef.current = false;
     }
   }, []);
 
