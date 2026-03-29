@@ -138,6 +138,10 @@ export interface CoopNetState {
   events: GameEvent[];
   tick: number;
   playerCount: number;
+  playerScores?: number[];
+  playerAsteroidsDestroyed?: number[];
+  playerEnemiesKilled?: number[];
+  playerPowerUpsCollected?: number[];
 }
 
 export type SessionMode = "duel" | "coop";
