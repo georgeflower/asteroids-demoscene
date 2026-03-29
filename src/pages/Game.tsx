@@ -4618,7 +4618,7 @@ const Game = () => {
           // Coop host: collect all remote inputs and send full array to worker
           const cs = coopStateRef.current;
           const pc = cs?.playerCount ?? 2;
-          const inputsArr: typeof localInput[] = [localInput];
+          const inputsArr: { left: boolean; right: boolean; up: boolean; fire: boolean; hyperspace: boolean }[] = [localInput];
           for (let i = 1; i < pc; i++) {
             inputsArr.push(multiplayer.remoteInputsRef.current.get(i) ?? { left: false, right: false, up: false, fire: false, hyperspace: false });
           }
