@@ -131,7 +131,7 @@ export function useMultiplayer() {
         rebuildInitialsMap(channel);
       })
       .on("presence", { event: "leave" }, ({ leftPresences }) => {
-        if (leftPresences.some((p: PresenceInfo) => p.role === "host")) {
+        if (leftPresences.some((p: any) => p.role === "host")) {
           setOpponentConnected(false);
         }
         const state = channel.presenceState() as PresenceState;

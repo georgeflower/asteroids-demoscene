@@ -365,7 +365,7 @@ async function handleHeartbeat(req: Request, supabaseAdmin: any) {
       return errorResponse('Invalid level progression', 400);
     }
     if (levelDelta > MAX_LEVEL_JUMP) {
-      console.log(`Level jump too large: +${levelDelta}, token=${payload.gameSessionToken}`);
+      console.log(`Level jump too large: +${levelDelta}, token=${payload.token}`);
       return errorResponse('Impossible wave progression', 403);
     }
 
