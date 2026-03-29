@@ -21,8 +21,13 @@ interface Bullet {
 }
 
 interface Alien {
-  pos: Vector; vel: Vector; type: "brown" | "greenMan";
+  pos: Vector; vel: Vector; type: "brown" | "greenMan" | "blueSentinel" | "purpleSwarm";
   hp: number; moveTimer: number; shootTimer: number; zigzagPhase: number;
+  // Blue Sentinel specific
+  invisTimer?: number; isInvisible?: boolean; burstCount?: number;
+  teleportCooldown?: number; chargeTimer?: number;
+  // Purple Swarm specific
+  flockId?: number;
 }
 
 interface PowerUp {
@@ -97,6 +102,7 @@ let alienSpawnTimer = 800;
 let asteroidsThisWave = 0;
 let asteroidsKilledThisWave = 0;
 let bossBullets: Bullet[] = []; // dedicated array – not tied to any player index
+let alienBullets: Bullet[] = []; // bullets fired by aliens
 let waveComplete = false;
 let waveCompleteTimer = 0;
 let bossDefeated = false;
@@ -109,6 +115,8 @@ let workerAccumulator = 0;
 let pendingEvents: GameEvent[] = [];
 let inputs: InputState[] = [];
 let hyperspacePressed: boolean[] = []; // track edge-detect for hyperspace
+
+function getSpeedScale(w: number): number { return 1.0 + (w - 1) * 0.05; }
 
 function createShip(x: number, y: number, idx: number): Ship {
   const rotations = [0, Math.PI, Math.PI / 2, -Math.PI / 2, Math.PI / 4, -Math.PI / 4, 3 * Math.PI / 4, -3 * Math.PI / 4];
@@ -149,11 +157,41 @@ function createAsteroid(x: number, y: number, size: "large" | "medium" | "small"
   };
 }
 
-function createAlien(type: "brown" | "greenMan"): Alien {
+function createAlien(type: "brown" | "greenMan" | "blueSentinel" | "purpleSwarm"): Alien {
   const side = Math.random() < 0.5 ? -20 : W + 20;
-  const waveBonus = 1 + (wave - 1) * 0.05;
-  const speed = (type === "brown" ? (2 + Math.random() * 1.5) : (0.8 + Math.random() * 0.4)) * waveBonus;
   const dir = side < 0 ? 1 : -1;
+
+  if (type === "blueSentinel") {
+    return {
+      pos: { x: side, y: 30 + Math.random() * (H - 60) },
+      vel: { x: dir * 0.5, y: 0 },
+      type,
+      hp: 2,
+      moveTimer: 0,
+      shootTimer: 60 + Math.random() * 40,
+      zigzagPhase: 0,
+      invisTimer: 0,
+      isInvisible: false,
+      burstCount: 0,
+      teleportCooldown: 90 + Math.random() * 60,
+      chargeTimer: 0,
+    };
+  }
+  if (type === "purpleSwarm") {
+    return {
+      pos: { x: side, y: 30 + Math.random() * (H - 60) },
+      vel: { x: dir * (0.4 + Math.random() * 0.3) * getSpeedScale(wave), y: (Math.random() - 0.5) * 1 },
+      type,
+      hp: 1,
+      moveTimer: 0,
+      shootTimer: 9999,
+      zigzagPhase: Math.random() * Math.PI * 2,
+      flockId: Math.floor(Math.random() * 1000),
+    };
+  }
+
+  const waveBonus = getSpeedScale(wave);
+  const speed = (type === "brown" ? (2 + Math.random() * 1.5) : (0.8 + Math.random() * 0.4)) * waveBonus;
   return {
     pos: { x: side, y: 30 + Math.random() * (H - 60) },
     vel: { x: dir * speed, y: (Math.random() - 0.5) * speed * 0.5 },
@@ -161,6 +199,21 @@ function createAlien(type: "brown" | "greenMan"): Alien {
     moveTimer: 0, shootTimer: type === "greenMan" ? 90 + Math.random() * 60 : 9999,
     zigzagPhase: Math.random() * Math.PI * 2,
   };
+}
+
+function spawnPurpleSwarmGroup(): Alien[] {
+  const fId = Math.floor(Math.random() * 10000);
+  const side = Math.random() < 0.5 ? -20 : W + 20;
+  const baseY = 60 + Math.random() * (H - 120);
+  const group: Alien[] = [];
+  for (let i = 0; i < 3; i++) {
+    const a = createAlien("purpleSwarm");
+    a.pos.x = side;
+    a.pos.y = baseY + (i - 1) * 25;
+    a.flockId = fId;
+    group.push(a);
+  }
+  return group;
 }
 
 function createPowerUp(x: number, y: number): PowerUp | null {
@@ -216,7 +269,7 @@ function dist(a: Vector, b: Vector): number {
 }
 
 function getAsteroidsPerWave(w: number): number {
-  return Math.min(3 + w, 10);
+  return Math.min(4 + w * 2, 20);
 }
 
 function isBossWave(w: number): boolean { return w % 5 === 0; }
@@ -288,7 +341,7 @@ function initGame() {
     inputs.push({ left: false, right: false, up: false, fire: false, hyperspace: false });
   }
 
-  asteroids = []; aliens = []; powerUps = []; boss = null; bossBullets = [];
+  asteroids = []; aliens = []; powerUps = []; boss = null; bossBullets = []; alienBullets = [];
   score = 0; wave = 1;
   alienSpawnTimer = 800;
   waveComplete = false; waveCompleteTimer = 0;
@@ -562,8 +615,8 @@ function updateTick() {
     waveCompleteTimer--;
     if (waveCompleteTimer <= 0) {
       wave++;
-      asteroids = []; aliens = []; powerUps = []; boss = null; bossDefeated = false; bossBullets = [];
-      alienSpawnTimer = Math.max(300, 800 - wave * 30);
+      asteroids = []; aliens = []; powerUps = []; boss = null; bossDefeated = false; bossBullets = []; alienBullets = [];
+      alienSpawnTimer = Math.max(180, 500 - wave * 20);
       waveComplete = false;
       // Boss waves mirror solo: no asteroids during boss fight
       if (!isBossWave(wave)) {
@@ -646,19 +699,129 @@ function updateTick() {
     a.pos = wrap(a.pos); a.rotation += a.rotationSpeed;
   });
 
-  // Spawn aliens (not on boss waves while boss is alive)
+  // Spawn aliens (not on boss waves while boss is alive) – mirrors solo wave conditions
   if (!boss) {
-    const maxAliens = Math.min(1 + Math.floor(wave / 3), 4);
-    if (--alienSpawnTimer <= 0 && aliens.length < maxAliens) {
-      const greenChance = Math.min(0.1 + wave * 0.05, 0.5);
-      aliens.push(createAlien(Math.random() < greenChance ? "greenMan" : "brown"));
-      alienSpawnTimer = Math.max(300, 600 - wave * 20) + Math.random() * 200;
+    if (--alienSpawnTimer <= 0) {
+      if (wave >= 3 && aliens.filter(a => a.type === "brown").length < 3) {
+        aliens.push(createAlien("brown"));
+      }
+      if (wave >= 6 && aliens.filter(a => a.type === "greenMan").length < 2) {
+        aliens.push(createAlien("greenMan"));
+      }
+      if (wave >= 8 && aliens.filter(a => a.type === "blueSentinel").length < 1) {
+        aliens.push(createAlien("blueSentinel"));
+      }
+      if (wave >= 12 && aliens.filter(a => a.type === "purpleSwarm").length < 3) {
+        aliens.push(...spawnPurpleSwarmGroup());
+      }
+      alienSpawnTimer = Math.max(180, 500 - wave * 20) + Math.random() * 200;
     }
   }
 
   // Update aliens
   aliens = aliens.filter(alien => {
     alien.moveTimer++; alien.zigzagPhase += 0.05;
+
+    const targetIdx = getNearestAlivePlayer(alien.pos);
+    const target = ships[targetIdx];
+
+    if (alien.type === "brown") {
+      const toShip = Math.atan2(target.pos.y - alien.pos.y, target.pos.x - alien.pos.x);
+      const zigzag = Math.sin(alien.zigzagPhase * 3) * 0.8;
+      alien.vel.x += Math.cos(toShip + zigzag) * 0.08;
+      alien.vel.y += Math.sin(toShip + zigzag) * 0.08;
+      const curSpd = Math.hypot(alien.vel.x, alien.vel.y);
+      const maxSpd = 3 * getSpeedScale(wave);
+      if (curSpd > maxSpd) {
+        alien.vel.x = (alien.vel.x / curSpd) * maxSpd;
+        alien.vel.y = (alien.vel.y / curSpd) * maxSpd;
+      }
+    } else if (alien.type === "greenMan") {
+      alien.vel.x *= 0.99;
+      alien.vel.y += Math.sin(alien.zigzagPhase) * 0.02;
+      alien.shootTimer--;
+      if (alien.shootTimer <= 0) {
+        alien.shootTimer = Math.max(40, 80 - wave * 2) + Math.random() * 40;
+        const angle = Math.atan2(target.pos.y - alien.pos.y, target.pos.x - alien.pos.x);
+        alienBullets.push({
+          pos: { ...alien.pos },
+          vel: { x: Math.cos(angle) * 6, y: Math.sin(angle) * 6 },
+          rotation: angle, lifetime: 80, owner: -1,
+        });
+      }
+    } else if (alien.type === "blueSentinel") {
+      alien.teleportCooldown = (alien.teleportCooldown ?? 90) - 1;
+      alien.vel.x *= 0.95;
+      alien.vel.y *= 0.95;
+
+      if (alien.isInvisible) {
+        alien.invisTimer = (alien.invisTimer ?? 0) - 1;
+        if ((alien.invisTimer ?? 0) <= 0) alien.isInvisible = false;
+      } else {
+        alien.shootTimer--;
+        if (alien.shootTimer <= 0 && (alien.burstCount ?? 0) < 3) {
+          alien.burstCount = (alien.burstCount ?? 0) + 1;
+          alien.shootTimer = 15;
+          const angle = Math.atan2(target.pos.y - alien.pos.y, target.pos.x - alien.pos.x);
+          const spread = ((alien.burstCount ?? 0) - 2) * 0.15;
+          alienBullets.push({
+            pos: { ...alien.pos },
+            vel: { x: Math.cos(angle + spread) * 3.5, y: Math.sin(angle + spread) * 3.5 },
+            rotation: angle + spread, lifetime: 80, owner: -1,
+          });
+          if ((alien.burstCount ?? 0) >= 3) {
+            alien.burstCount = 0;
+            alien.shootTimer = 120 + Math.random() * 60;
+            alien.isInvisible = true;
+            alien.invisTimer = 60;
+          }
+        }
+        if ((alien.teleportCooldown ?? Infinity) <= 0) {
+          if (!alien.chargeTimer || alien.chargeTimer <= 0) {
+            alien.chargeTimer = 30;
+          }
+        }
+        if (alien.chargeTimer && alien.chargeTimer > 0) {
+          alien.chargeTimer--;
+          alien.vel.x = 0;
+          alien.vel.y = 0;
+          if (alien.chargeTimer <= 0) {
+            alien.pos.x = 50 + Math.random() * (W - 100);
+            alien.pos.y = 50 + Math.random() * (H - 100);
+            alien.vel.x = 0;
+            alien.vel.y = 0;
+            alien.teleportCooldown = 200 + Math.random() * 120;
+            pendingEvents.push({ type: "explosion", x: alien.pos.x, y: alien.pos.y, color: "#4488FF", count: 6 });
+          }
+        }
+      }
+    } else if (alien.type === "purpleSwarm") {
+      const flockMates = aliens.filter(a => a.type === "purpleSwarm" && a.flockId === alien.flockId && a !== alien);
+      let cx = target.pos.x, cy = target.pos.y;
+      if (flockMates.length > 0) {
+        cx = flockMates.reduce((s, a) => s + a.pos.x, alien.pos.x) / (flockMates.length + 1);
+        cy = flockMates.reduce((s, a) => s + a.pos.y, alien.pos.y) / (flockMates.length + 1);
+        cx = cx * 0.4 + target.pos.x * 0.6;
+        cy = cy * 0.4 + target.pos.y * 0.6;
+      }
+      const toTarget = Math.atan2(cy - alien.pos.y, cx - alien.pos.x);
+      alien.vel.x += Math.cos(toTarget) * 0.015;
+      alien.vel.y += Math.sin(toTarget) * 0.015;
+      flockMates.forEach(mate => {
+        const d = Math.hypot(mate.pos.x - alien.pos.x, mate.pos.y - alien.pos.y);
+        if (d < 25 && d > 0) {
+          alien.vel.x -= ((mate.pos.x - alien.pos.x) / d) * 0.3;
+          alien.vel.y -= ((mate.pos.y - alien.pos.y) / d) * 0.3;
+        }
+      });
+      const curSpd = Math.hypot(alien.vel.x, alien.vel.y);
+      const maxSpd = 0.8 * getSpeedScale(wave);
+      if (curSpd > maxSpd) {
+        alien.vel.x = (alien.vel.x / curSpd) * maxSpd;
+        alien.vel.y = (alien.vel.y / curSpd) * maxSpd;
+      }
+    }
+
     alien.pos.x += alien.vel.x; alien.pos.y += alien.vel.y;
     if ((alien.pos.x < -60 || alien.pos.x > W + 60) && alien.moveTimer > 120) return false;
     if (alien.pos.y < 0) alien.pos.y = H;
@@ -701,7 +864,8 @@ function updateTick() {
     if (eliminated[p]) continue;
 
     for (const alien of aliens) {
-      if (dist(ship.pos, alien.pos) < SHIP_SIZE + 12) {
+      const alienRadius = alien.type === "purpleSwarm" ? 8 : 12;
+      if (!alien.isInvisible && dist(ship.pos, alien.pos) < SHIP_SIZE + alienRadius) {
         if (!shielded) killPlayer(p); break;
       }
     }
@@ -709,6 +873,14 @@ function updateTick() {
 
     // Ship vs boss bullets
     for (const b of bossBullets) {
+      if (dist(ship.pos, b.pos) < SHIP_SIZE + 3) {
+        if (!shielded) killPlayer(p); break;
+      }
+    }
+    if (eliminated[p]) continue;
+
+    // Ship vs alien bullets
+    for (const b of alienBullets) {
       if (dist(ship.pos, b.pos) < SHIP_SIZE + 3) {
         if (!shielded) killPlayer(p); break;
       }
@@ -763,13 +935,15 @@ function updateTick() {
     bullets[p] = bullets[p].filter(bullet => {
       let alive = true;
       aliens = aliens.filter(alien => {
-        if (dist(bullet.pos, alien.pos) < 14) {
+        const alienRadius = alien.type === "purpleSwarm" ? 8 : 14;
+        if (!alien.isInvisible && dist(bullet.pos, alien.pos) < alienRadius) {
           alive = false;
           if (--alien.hp <= 0) {
             const multiplier = powerUpActive[bullet.owner >= 0 ? bullet.owner : 0].multiplier > 0 ? 2 : 1;
             const pts = SCORE_ALIEN * multiplier;
             score += pts;
-            pendingEvents.push({ type: "explosion", x: alien.pos.x, y: alien.pos.y, color: "#AA6633", count: 10 });
+            const explosionColor = alien.type === "blueSentinel" ? "#4488FF" : alien.type === "purpleSwarm" ? "#AA44FF" : "#AA6633";
+            pendingEvents.push({ type: "explosion", x: alien.pos.x, y: alien.pos.y, color: explosionColor, count: 10 });
             pendingEvents.push({ type: "score_pop", x: alien.pos.x, y: alien.pos.y, color: "#FFFF00", count: 0, points: pts });
             const pu = createPowerUp(alien.pos.x, alien.pos.y);
             if (pu) powerUps.push(pu);
@@ -844,6 +1018,13 @@ function updateTick() {
     return --b.lifetime > 0;
   });
 
+  // Move and expire alien bullets
+  alienBullets = alienBullets.filter(b => {
+    b.pos.x += b.vel.x; b.pos.y += b.vel.y;
+    b.pos = wrap(b.pos);
+    return --b.lifetime > 0;
+  });
+
   // Check game over: all players eliminated
   const aliveCount = eliminated.filter(e => !e).length;
   if (aliveCount === 0) {
@@ -870,12 +1051,16 @@ function buildAndSendState() {
       arr.map(b => ({ x: b.pos.x, y: b.pos.y, vx: b.vel.x, vy: b.vel.y, rot: b.rotation, lifetime: b.lifetime, owner: b.owner }))
     ),
     bossBullets: bossBullets.map(b => ({ x: b.pos.x, y: b.pos.y, vx: b.vel.x, vy: b.vel.y, rot: b.rotation, lifetime: b.lifetime, owner: b.owner })),
+    alienBullets: alienBullets.map(b => ({ x: b.pos.x, y: b.pos.y, vx: b.vel.x, vy: b.vel.y, rot: b.rotation, lifetime: b.lifetime, owner: b.owner })),
     asteroids: asteroids.map(a => ({
       id: a.id, x: a.pos.x, y: a.pos.y, vx: a.vel.x, vy: a.vel.y,
       size: a.size, rot: a.rotation, rotSpeed: a.rotationSpeed,
       points: a.points.flatMap(p => [p.x, p.y]),
     })),
-    aliens: aliens.map(a => ({ x: a.pos.x, y: a.pos.y, vx: a.vel.x, vy: a.vel.y, type: a.type })),
+    aliens: aliens.map(a => ({
+      x: a.pos.x, y: a.pos.y, vx: a.vel.x, vy: a.vel.y, type: a.type,
+      isInvisible: a.isInvisible, chargeTimer: a.chargeTimer,
+    })),
     powerUps: powerUps.map(pu => ({ x: pu.pos.x, y: pu.pos.y, rotation: pu.rotation, type: pu.type })),
     boss: boss ? {
       x: boss.pos.x, y: boss.pos.y, rotation: boss.rotation,
