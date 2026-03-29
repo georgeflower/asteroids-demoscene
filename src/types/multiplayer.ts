@@ -48,7 +48,7 @@ export interface NetAlien {
 }
 
 export interface GameEvent {
-  type: "explosion" | "kill" | "die_env" | "score_pop";
+  type: "explosion" | "kill" | "die_env" | "score_pop" | "boss_spawn" | "powerup";
   x: number;
   y: number;
   color: string;
@@ -56,6 +56,7 @@ export interface GameEvent {
   player?: number;
   killer?: number;
   points?: number;
+  label?: string;
 }
 
 export interface DuelNetState {
@@ -116,6 +117,7 @@ export interface NetPowerUpActive {
 export interface CoopNetState {
   ships: NetShip[];
   bullets: NetBullet[][];
+  bossBullets: NetBullet[];
   asteroids: NetAsteroid[];
   aliens: NetAlien[];
   score: number;

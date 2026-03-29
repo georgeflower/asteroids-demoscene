@@ -96,6 +96,7 @@ let respawnTimer: number[] = [];
 let alienSpawnTimer = 800;
 let asteroidsThisWave = 0;
 let asteroidsKilledThisWave = 0;
+let bossBullets: Bullet[] = []; // dedicated array – not tied to any player index
 let waveComplete = false;
 let waveCompleteTimer = 0;
 let bossDefeated = false;
@@ -287,7 +288,7 @@ function initGame() {
     inputs.push({ left: false, right: false, up: false, fire: false, hyperspace: false });
   }
 
-  asteroids = []; aliens = []; powerUps = []; boss = null;
+  asteroids = []; aliens = []; powerUps = []; boss = null; bossBullets = [];
   score = 0; wave = 1;
   alienSpawnTimer = 800;
   waveComplete = false; waveCompleteTimer = 0;
@@ -372,11 +373,11 @@ function updateBoss() {
       boss.shootTimer = Math.max(40, 90 - wave * 3);
       const baseAngle = Math.atan2(targetPos.y - boss.pos.y, targetPos.x - boss.pos.x);
       for (let i = -1; i <= 1; i++) {
-        bullets[0].push({
+        bossBullets.push({
           pos: { ...boss.pos },
           vel: { x: Math.cos(baseAngle + i * 0.3) * 4, y: Math.sin(baseAngle + i * 0.3) * 4 },
           rotation: baseAngle + i * 0.3, lifetime: BULLET_LIFETIME * 1.5,
-          owner: -1, isBoss: true,
+          owner: -1,
         });
       }
     }
@@ -409,10 +410,10 @@ function updateBoss() {
       boss.shootTimer = Math.max(90, 180 - wave * 2);
       for (let i = 0; i < 8; i++) {
         const ang = (i / 8) * Math.PI * 2;
-        bullets[0].push({
+        bossBullets.push({
           pos: { ...boss.pos },
           vel: { x: Math.cos(ang) * 2, y: Math.sin(ang) * 2 },
-          rotation: ang, lifetime: BULLET_LIFETIME * 2.5, owner: -1, isBoss: true,
+          rotation: ang, lifetime: BULLET_LIFETIME * 2.5, owner: -1,
         });
       }
     }
@@ -446,9 +447,9 @@ function updateBoss() {
         const tgt = getNearestAlivePlayer(ms.pos);
         const tgtPos = ships[tgt]?.pos ?? targetPos;
         const ang = Math.atan2(tgtPos.y - ms.pos.y, tgtPos.x - ms.pos.x);
-        bullets[0].push({
+        bossBullets.push({
           pos: { ...ms.pos }, vel: { x: Math.cos(ang) * 4, y: Math.sin(ang) * 4 },
-          rotation: ang, lifetime: BULLET_LIFETIME, owner: -1, isBoss: true,
+          rotation: ang, lifetime: BULLET_LIFETIME, owner: -1,
         });
       }
       return ms.pos.y < H + 30 && ms.pos.x > -30 && ms.pos.x < W + 30;
@@ -458,10 +459,10 @@ function updateBoss() {
       boss.shootTimer = Math.max(80, 160 - wave * 2);
       const laserAngle = boss.sweepAngle!;
       for (let d = 0; d < 300; d += 20) {
-        bullets[0].push({
+        bossBullets.push({
           pos: { x: boss.pos.x + Math.cos(laserAngle) * d, y: boss.pos.y + Math.sin(laserAngle) * d },
           vel: { x: Math.cos(laserAngle) * 3.5, y: Math.sin(laserAngle) * 3.5 },
-          rotation: laserAngle, lifetime: 20, owner: -1, isBoss: true,
+          rotation: laserAngle, lifetime: 20, owner: -1,
         });
       }
     }
@@ -482,9 +483,9 @@ function updateBoss() {
       boss.gridLaserTimer = Math.max(120, 240 - wave * 3);
       for (let i = 0; i < 8; i++) {
         const ang = (i / 8) * Math.PI * 2 + (boss.cubeRotX ?? 0);
-        bullets[0].push({
+        bossBullets.push({
           pos: { ...boss.pos }, vel: { x: Math.cos(ang) * 2.5, y: Math.sin(ang) * 2.5 },
-          rotation: ang, lifetime: BULLET_LIFETIME * 1.5, owner: -1, isBoss: true,
+          rotation: ang, lifetime: BULLET_LIFETIME * 1.5, owner: -1,
         });
       }
     }
@@ -492,9 +493,9 @@ function updateBoss() {
     if (boss.shootTimer <= 0) {
       boss.shootTimer = Math.max(60, 120 - wave * 2);
       const ang = Math.atan2(targetPos.y - boss.pos.y, targetPos.x - boss.pos.x);
-      bullets[0].push({
+      bossBullets.push({
         pos: { ...boss.pos }, vel: { x: Math.cos(ang) * 2.8, y: Math.sin(ang) * 2.8 },
-        rotation: ang, lifetime: BULLET_LIFETIME * 1.5, owner: -1, isBoss: true,
+        rotation: ang, lifetime: BULLET_LIFETIME * 1.5, owner: -1,
       });
     }
     boss.miniCubeTimer = (boss.miniCubeTimer ?? 300) - 1;
@@ -516,7 +517,7 @@ function updateBoss() {
       let alive = true;
       for (let pi = 0; pi < playerCount; pi++) {
         bullets[pi] = bullets[pi].filter(b => {
-          if (!b.isBoss && Math.hypot(b.pos.x - mc.pos.x, b.pos.y - mc.pos.y) < 12) {
+          if (Math.hypot(b.pos.x - mc.pos.x, b.pos.y - mc.pos.y) < 12) {
             alive = false;
             pendingEvents.push({ type: "explosion", x: mc.pos.x, y: mc.pos.y, color: "#00FF44", count: 4 });
             return false;
@@ -561,10 +562,13 @@ function updateTick() {
     waveCompleteTimer--;
     if (waveCompleteTimer <= 0) {
       wave++;
-      asteroids = []; aliens = []; powerUps = []; boss = null; bossDefeated = false;
+      asteroids = []; aliens = []; powerUps = []; boss = null; bossDefeated = false; bossBullets = [];
       alienSpawnTimer = Math.max(300, 800 - wave * 30);
       waveComplete = false;
-      spawnWaveAsteroids();
+      // Boss waves mirror solo: no asteroids during boss fight
+      if (!isBossWave(wave)) {
+        spawnWaveAsteroids();
+      }
       // Brief invulnerability for new wave
       for (let i = 0; i < playerCount; i++) {
         if (!eliminated[i]) { ships[i].invulnerable = true; ships[i].invulnerableTime = 90; }
@@ -704,8 +708,7 @@ function updateTick() {
     if (eliminated[p]) continue;
 
     // Ship vs boss bullets
-    const allBossBullets = bullets[0].filter(b => b.isBoss);
-    for (const b of allBossBullets) {
+    for (const b of bossBullets) {
       if (dist(ship.pos, b.pos) < SHIP_SIZE + 3) {
         if (!shielded) killPlayer(p); break;
       }
@@ -722,7 +725,6 @@ function updateTick() {
   const newAsteroids: Asteroid[] = [];
   for (let p = 0; p < playerCount; p++) {
     bullets[p] = bullets[p].filter(bullet => {
-      if (bullet.isBoss) return true; // boss bullets handled elsewhere
       let alive = true;
       asteroids = asteroids.filter(asteroid => {
         const radius = asteroid.size === "large" ? 40 : asteroid.size === "medium" ? 25 : 12;
@@ -759,7 +761,6 @@ function updateTick() {
   // Bullets vs aliens
   for (let p = 0; p < playerCount; p++) {
     bullets[p] = bullets[p].filter(bullet => {
-      if (bullet.isBoss) return true;
       let alive = true;
       aliens = aliens.filter(alien => {
         if (dist(bullet.pos, alien.pos) < 14) {
@@ -785,7 +786,6 @@ function updateTick() {
   if (boss) {
     for (let p = 0; p < playerCount; p++) {
       bullets[p] = bullets[p].filter(bullet => {
-        if (bullet.isBoss) return true;
         const bossRadius = boss!.bossType === "amigaBall" ? 50 : boss!.bossType === "flyingSaucer" ? 55 : boss!.bossType === "borgCube" ? 45 : 45;
         if (dist(bullet.pos, boss!.pos) < 2 + bossRadius) {
           boss!.hp--;
@@ -798,6 +798,7 @@ function updateTick() {
             pendingEvents.push({ type: "score_pop", x: boss!.pos.x, y: boss!.pos.y, color: "#FFFF00", count: 0, points: pts });
             boss = null;
             bossDefeated = true;
+            bossBullets = []; // clear boss projectiles when boss dies
             waveComplete = true;
             waveCompleteTimer = 180;
           }
@@ -836,10 +837,12 @@ function updateTick() {
     });
   }
 
-  // Remove boss bullets from shared array after collision processing
-  if (bullets[0]) {
-    bullets[0] = bullets[0].filter(b => !b.isBoss || b.lifetime > 0);
-  }
+  // Move and expire boss bullets (handled separately from player bullets)
+  bossBullets = bossBullets.filter(b => {
+    b.pos.x += b.vel.x; b.pos.y += b.vel.y;
+    b.pos = wrap(b.pos);
+    return --b.lifetime > 0;
+  });
 
   // Check game over: all players eliminated
   const aliveCount = eliminated.filter(e => !e).length;
@@ -863,10 +866,10 @@ function buildAndSendState() {
       rot: s.rotation, thrust: s.isThrusting, invuln: s.invulnerable,
       invulnTime: s.invulnerableTime, hyperspaceCooldown: s.hyperspaceCooldown,
     })),
-    bullets: bullets.map(arr => arr
-      .filter(b => !b.isBoss)
-      .map(b => ({ x: b.pos.x, y: b.pos.y, vx: b.vel.x, vy: b.vel.y, rot: b.rotation, lifetime: b.lifetime, owner: b.owner }))
+    bullets: bullets.map(arr =>
+      arr.map(b => ({ x: b.pos.x, y: b.pos.y, vx: b.vel.x, vy: b.vel.y, rot: b.rotation, lifetime: b.lifetime, owner: b.owner }))
     ),
+    bossBullets: bossBullets.map(b => ({ x: b.pos.x, y: b.pos.y, vx: b.vel.x, vy: b.vel.y, rot: b.rotation, lifetime: b.lifetime, owner: b.owner })),
     asteroids: asteroids.map(a => ({
       id: a.id, x: a.pos.x, y: a.pos.y, vx: a.vel.x, vy: a.vel.y,
       size: a.size, rot: a.rotation, rotSpeed: a.rotationSpeed,

@@ -236,6 +236,7 @@ interface DuelState {
 interface CoopState {
   ships: Ship[];
   bullets: Bullet[][];
+  bossBullets: Bullet[];
   asteroids: Asteroid[];
   aliens: Alien[];
   score: number;
@@ -1436,6 +1437,7 @@ const Game = () => {
     const cs: CoopState = {
       ships: initShips,
       bullets: Array.from({ length: pc }, () => []),
+      bossBullets: [],
       asteroids: [],
       aliens: [],
       score: 0,
@@ -1506,6 +1508,7 @@ const Game = () => {
             return s;
           }),
           bullets: Array.from({ length: pc }, () => []),
+          bossBullets: [],
           asteroids: [],
           aliens: [],
           score: 0,
@@ -1608,6 +1611,14 @@ const Game = () => {
         owner: b.owner,
       }));
     }
+    // Apply boss bullet states
+    cs.bossBullets = (net.bossBullets ?? []).map((b) => ({
+      pos: { x: b.x, y: b.y },
+      vel: { x: b.vx, y: b.vy },
+      rotation: b.rot,
+      lifetime: b.lifetime,
+      owner: b.owner,
+    }));
 
     cs.asteroids = net.asteroids.map((a) => {
       const pts: Vector[] = [];
@@ -1670,6 +1681,9 @@ const Game = () => {
     }
 
     // Per-player state
+    const prevScore = cs.score;
+    const prevWave = cs.wave;
+    const prevLives = [...(cs.lives ?? [])]; // capture BEFORE overwriting cs.lives
     cs.lives = net.lives ?? [3, 3];
     cs.eliminated = net.eliminated ?? Array.from({ length: pc }, () => false);
     cs.respawnTimer = net.respawnTimer;
@@ -1679,9 +1693,6 @@ const Game = () => {
     cs.gameOver = net.gameOver;
     cs.playerCount = pc;
 
-    const prevScore = cs.score;
-    const prevWave = cs.wave;
-    const prevLives = [...(cs.lives ?? [])];
     cs.score = net.score;
     cs.wave = net.wave;
 
@@ -3611,6 +3622,10 @@ const Game = () => {
       // Draw all players' bullets
       for (let i = 0; i < pc && i < cs.bullets.length; i++) {
         drawBullets(ctx, cs.bullets[i], PLAYER_COLORS[i % PLAYER_COLORS.length]);
+      }
+      // Draw boss bullets in a distinct orange-red colour
+      if (cs.bossBullets?.length) {
+        drawBullets(ctx, cs.bossBullets, "#FF4400");
       }
 
       // Draw power-ups on the field

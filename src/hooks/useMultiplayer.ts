@@ -162,11 +162,19 @@ export function useMultiplayer() {
       })
       .subscribe(async (status) => {
         if (status === "SUBSCRIBED") {
-          // Determine player index: count existing guests and take the next slot
+          // Determine player index: use max(existingGuestIdx)+1 to avoid collisions
+          // when guests leave and indices become non-contiguous
           const state = channel.presenceState() as PresenceState;
           const allPresent = Object.values(state).flat();
           const existingGuests = allPresent.filter((p: PresenceInfo) => p.role === "guest");
-          const assignedIdx = existingGuests.length + 1; // host=0, guests start at 1
+          const maxGuestIdx = existingGuests.reduce((max, p) => {
+            return typeof p.playerIdx === "number" && p.playerIdx > max ? p.playerIdx : max;
+          }, 0);
+          const assignedIdx = maxGuestIdx + 1; // host=0, guests start at 1
+          if (assignedIdx > 7) {
+            console.warn("[coop] Room is full (max 8 players); cannot join.");
+            return;
+          }
           playerIdxRef.current = assignedIdx;
           await channel.track({ role: "guest", playerIdx: assignedIdx, initials: localInitialsRef.current });
           setIsConnected(true);
@@ -179,13 +187,13 @@ export function useMultiplayer() {
               break;
             }
           }
-          const allGuests = allPresent.filter((p: PresenceInfo) => p.role === "guest");
-          setGuestCount(allGuests.length + 1); // +1 for self
+          // guestCount = number of guest presences; join event for self will update it after track
+          setGuestCount(existingGuests.length);
         }
       });
 
     channelRef.current = channel;
-  }, []);
+  }, [rebuildInitialsMap]);
 
   const sendState = useCallback((state: DuelNetState) => {
     channelRef.current?.send({
