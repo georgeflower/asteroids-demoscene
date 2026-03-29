@@ -5557,7 +5557,7 @@ const Game = () => {
                 : "opacity-60 border-[#44FF44]/60 text-[#44FF44]/60"
             }`}
           >
-            {menuSelection === 3 ? "▸ " : "  "}ONLINE
+            {menuSelection === 3 ? "▸ " : "  "}ONLINE<span className="text-xs text-red-500 ml-1 align-middle">BETA</span>
           </Button>
           <Button
             onClick={() => setShowSettings(true)}
