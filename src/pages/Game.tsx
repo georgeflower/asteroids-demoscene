@@ -274,7 +274,10 @@ const FRAME_TIME_TOLERANCE = 1;
 
 const GAME_VERSION = "0.2.1";
 
-// Set to true to re-enable the high scores system.
+const LOCAL_SCORES_KEY = "asteroids_local_highscores";
+interface LocalScore { initials: string; score: number; date: string }
+
+// Set to true to re-enable the server high scores system.
 const HIGH_SCORES_ENABLED = false;
 
 const SHIP_SIZE = 10;
