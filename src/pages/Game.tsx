@@ -237,6 +237,7 @@ interface CoopState {
   ships: Ship[];
   bullets: Bullet[][];
   bossBullets: Bullet[];
+  alienBullets: Bullet[];
   asteroids: Asteroid[];
   aliens: Alien[];
   score: number;
@@ -1438,6 +1439,7 @@ const Game = () => {
       ships: initShips,
       bullets: Array.from({ length: pc }, () => []),
       bossBullets: [],
+      alienBullets: [],
       asteroids: [],
       aliens: [],
       score: 0,
@@ -1509,6 +1511,7 @@ const Game = () => {
           }),
           bullets: Array.from({ length: pc }, () => []),
           bossBullets: [],
+          alienBullets: [],
           asteroids: [],
           aliens: [],
           score: 0,
@@ -1620,6 +1623,16 @@ const Game = () => {
       owner: b.owner,
     }));
 
+    // Apply alien bullet states
+    cs.alienBullets = (net.alienBullets ?? []).map((b) => ({
+      pos: { x: b.x, y: b.y },
+      vel: { x: b.vx, y: b.vy },
+      rotation: b.rot,
+      lifetime: b.lifetime,
+      owner: b.owner,
+      isAlien: true,
+    }));
+
     cs.asteroids = net.asteroids.map((a) => {
       const pts: Vector[] = [];
       for (let j = 0; j < a.points.length; j += 2) {
@@ -1643,7 +1656,9 @@ const Game = () => {
       hp: 1,
       moveTimer: 0,
       shootTimer: 999,
-      zigzagPhase: 0,
+      zigzagPhase: a.zigzagPhase ?? 0,
+      isInvisible: a.isInvisible,
+      chargeTimer: a.chargeTimer,
     }));
 
     // Power-ups on the field
@@ -3626,6 +3641,10 @@ const Game = () => {
       // Draw boss bullets in a distinct orange-red colour
       if (cs.bossBullets?.length) {
         drawBullets(ctx, cs.bossBullets, "#FF4400");
+      }
+      // Draw alien bullets in green/cyan colour
+      if (cs.alienBullets?.length) {
+        drawBullets(ctx, cs.alienBullets, "#44FF44");
       }
 
       // Draw power-ups on the field

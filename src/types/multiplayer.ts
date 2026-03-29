@@ -44,7 +44,10 @@ export interface NetAlien {
   y: number;
   vx: number;
   vy: number;
-  type: "brown" | "greenMan";
+  type: "brown" | "greenMan" | "blueSentinel" | "purpleSwarm";
+  isInvisible?: boolean;
+  chargeTimer?: number;
+  zigzagPhase?: number;
 }
 
 export interface GameEvent {
@@ -118,6 +121,7 @@ export interface CoopNetState {
   ships: NetShip[];
   bullets: NetBullet[][];
   bossBullets: NetBullet[];
+  alienBullets: NetBullet[];
   asteroids: NetAsteroid[];
   aliens: NetAlien[];
   score: number;
