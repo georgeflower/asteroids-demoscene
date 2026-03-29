@@ -5062,6 +5062,18 @@ const Game = () => {
     };
   }, [initOnline, initOnlineCoop]);
 
+  // Guest/late-joiner: listen for players_added to enter an in-progress game
+  useEffect(() => {
+    multiplayer.onPlayersAddedRef.current = (newPlayerCount: number) => {
+      if (gameModeRef.current === "online_lobby") {
+        // Late joiner: transition from lobby into the game
+        initOnlineCoop(false, newPlayerCount);
+      }
+      // Existing online_coop guests don't need to re-init; applyCoopNetState handles the
+      // expanded player count automatically as new state arrives from the host.
+    };
+  }, [initOnlineCoop]);
+
   // Host (duel): worker message handler – broadcast every tick for minimum lag
   useEffect(() => {
     if (gameMode !== "online" || !multiplayer.isHost) return;
@@ -5079,18 +5091,38 @@ const Game = () => {
   }, [gameMode, multiplayer.isHost]);
 
   // Host (coop online): co-op worker message handler
+  const addingWaitingPlayersRef = useRef(false);
   useEffect(() => {
     if (gameMode !== "online_coop" || !multiplayer.isHost) return;
     const worker = workerRef.current;
     if (!worker) return;
+    // Reset guard whenever the effect re-runs (new game)
+    addingWaitingPlayersRef.current = false;
     worker.onmessage = (e: MessageEvent) => {
       if (e.data.type === "state") {
         const net: CoopNetState = e.data.data;
+        // When game is over, check if any "waiting" players (joined after game start) exist
+        if (net.gameOver && !addingWaitingPlayersRef.current) {
+          const waitingCount = multiplayer.getWaitingPlayerCount(net.playerCount);
+          if (waitingCount > 0) {
+            addingWaitingPlayersRef.current = true;
+            const newPlayerCount = net.playerCount + waitingCount;
+            // Expand the worker to include the waiting players
+            worker.postMessage({ type: "add_players", count: waitingCount });
+            // Notify late joiners so they transition from lobby to game
+            multiplayer.sendPlayersAdded(newPlayerCount);
+            return; // Skip applying this game-over state frame
+          }
+        }
+        // Reset guard once the worker is no longer in game-over state
+        if (!net.gameOver && addingWaitingPlayersRef.current) {
+          addingWaitingPlayersRef.current = false;
+        }
         applyCoopNetStateRef.current(net);
         sendCoopStateRef.current(net);
       }
     };
-  }, [gameMode, multiplayer.isHost]);
+  }, [gameMode, multiplayer.isHost, multiplayer.getWaitingPlayerCount, multiplayer.sendPlayersAdded]);
 
   // Local coop: worker → coopStateRef
   useEffect(() => {
@@ -5461,6 +5493,7 @@ const Game = () => {
             const pc = playerCount ?? (multiplayer.guestCount + 1);
             multiplayer.startGame(mode, pc);
             if (mode === "coop") {
+              multiplayer.setGameInProgress(true);
               initOnlineCoop(true, pc);
             } else {
               initOnline(true);
@@ -5473,6 +5506,7 @@ const Game = () => {
           guestCount={multiplayer.guestCount}
           chatMessages={multiplayer.chatMessages}
           onSendChatMessage={(text) => multiplayer.sendChatMessage(text)}
+          gameInProgress={multiplayer.gameInProgress}
         />
       </div>
     );
