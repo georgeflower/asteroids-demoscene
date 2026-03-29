@@ -307,6 +307,10 @@ function getAsteroidsPerWave(w: number): number {
 
 function isBossWave(w: number): boolean { return w % 5 === 0; }
 
+function getScoreMultiplier(owner: number): number {
+  return powerUpActive[owner >= 0 ? owner : 0]?.multiplier > 0 ? 2 : 1;
+}
+
 function getAlivePlayers(): number[] {
   return ships.map((_, i) => i).filter(i => !eliminated[i]);
 }
@@ -998,7 +1002,7 @@ function updateTick() {
         const radius = asteroid.size === "large" ? 40 : asteroid.size === "medium" ? 25 : 12;
         if (dist(bullet.pos, asteroid.pos) < 2 + radius) {
           alive = false;
-          const multiplier = powerUpActive[bullet.owner >= 0 ? bullet.owner : 0].multiplier > 0 ? 2 : 1;
+          const multiplier = getScoreMultiplier(bullet.owner);
           let pts = 0;
           if (asteroid.size === "large") {
             pts = SCORE_LARGE * multiplier;
@@ -1038,7 +1042,7 @@ function updateTick() {
         if (!alien.isInvisible && dist(bullet.pos, alien.pos) < alienRadius) {
           alive = false;
           if (--alien.hp <= 0) {
-            const multiplier = powerUpActive[bullet.owner >= 0 ? bullet.owner : 0].multiplier > 0 ? 2 : 1;
+            const multiplier = getScoreMultiplier(bullet.owner);
             const pts = SCORE_ALIEN * multiplier;
             score += pts;
             playerScores[p] = (playerScores[p] ?? 0) + pts;
@@ -1064,7 +1068,7 @@ function updateTick() {
         const ufo = ufos[ui];
         const ufoRadius = ufo.size === "large" ? 20 : 10;
         if (dist(bullet.pos, ufo.pos) < 2 + ufoRadius) {
-          const multiplier = powerUpActive[bullet.owner >= 0 ? bullet.owner : 0].multiplier > 0 ? 2 : 1;
+          const multiplier = getScoreMultiplier(bullet.owner);
           const pts = UFO_POINTS[ufo.size] * multiplier;
           score += pts;
           playerScores[p] = (playerScores[p] ?? 0) + pts;
@@ -1090,7 +1094,7 @@ function updateTick() {
           boss!.hp--;
           boss!.hitFlash = 8;
           if (boss!.hp <= 0) {
-            const multiplier = powerUpActive[p].multiplier > 0 ? 2 : 1;
+            const multiplier = getScoreMultiplier(p);
             const pts = SCORE_BOSS * multiplier;
             score += pts;
             playerScores[p] = (playerScores[p] ?? 0) + pts;

@@ -5157,6 +5157,8 @@ const Game = () => {
     if (isPausedRef.current) {
       soundEffects.stopThrust();
       prevCoopThrustRef.current = false;
+      prevCoopFireRef.current = false;
+      prevCoopHyperspaceRef.current = false;
     }
   }, []);
 
