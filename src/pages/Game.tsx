@@ -258,6 +258,15 @@ interface CoopState {
   playerCount: number;
 }
 
+interface CoopPlayerStat {
+  playerIndex: number;
+  label: string;
+  score: number;
+  asteroidsDestroyed: number;
+  enemiesKilled: number;
+  powerUpsCollected: number;
+}
+
 type GameMode = "menu" | "solo" | "duel" | "online_lobby" | "online" | "coop" | "online_coop";
 
 /** True for any mode where two ships are on screen (duel, coop, online variants). */
@@ -390,6 +399,7 @@ const Game = () => {
   const [coopEliminated, setCoopEliminated] = useState<boolean[]>([false, false]);
   const [coopGameOver, setCoopGameOver] = useState(false);
   const [coopWaveComplete, setCoopWaveComplete] = useState(false);
+  const [coopPlayerStats, setCoopPlayerStats] = useState<CoopPlayerStat[]>([]);
   const [menuSelection, setMenuSelection] = useState(0); // 0=solo, 1=duel, 2=coop, 3=online, 4=settings
   const [gameOverSelection, setGameOverSelection] = useState(0); // 0=play again, 1=menu
   const [isPaused, setIsPaused] = useState(false);
@@ -1481,6 +1491,7 @@ const Game = () => {
     setCoopEliminated(Array.from({ length: pc }, () => false));
     setCoopGameOver(false);
     setCoopWaveComplete(false);
+    setCoopPlayerStats([]);
     setGameMode(isOnlineHost ? "online_coop" : "coop");
     broadcastTickRef.current = 0;
     checkVersion();
@@ -1552,7 +1563,7 @@ const Game = () => {
         setCoopEliminated(Array.from({ length: pc }, () => false));
         setCoopGameOver(false);
         setCoopWaveComplete(false);
-        setGameMode("online_coop");
+        setCoopPlayerStats([]);
         broadcastTickRef.current = 0;
         checkVersion();
         // Guest prediction ship (own player ship)
@@ -1742,7 +1753,22 @@ const Game = () => {
     const livesChanged = cs.lives.some((l, i) => l !== prevLives[i]);
     if (livesChanged) setCoopLives([...cs.lives]);
     setCoopEliminated([...cs.eliminated]);
-    if (net.gameOver) setCoopGameOver(true);
+    if (net.gameOver) {
+      setCoopGameOver(true);
+      if (net.playerScores) {
+        const pc = net.playerCount ?? net.ships?.length ?? 2;
+        const stats: CoopPlayerStat[] = Array.from({ length: pc }, (_, i) => ({
+          playerIndex: i,
+          label: `P${i + 1}`,
+          score: net.playerScores?.[i] ?? 0,
+          asteroidsDestroyed: net.playerAsteroidsDestroyed?.[i] ?? 0,
+          enemiesKilled: net.playerEnemiesKilled?.[i] ?? 0,
+          powerUpsCollected: net.playerPowerUpsCollected?.[i] ?? 0,
+        }));
+        stats.sort((a, b) => b.score - a.score);
+        setCoopPlayerStats(stats);
+      }
+    }
     if (net.waveComplete) setCoopWaveComplete(true);
     else setCoopWaveComplete(false);
   }, [multiplayer.playerIdxRef]);
@@ -3930,21 +3956,7 @@ const Game = () => {
         ctx.restore();
       }
 
-      // Game over overlay
-      if (cs.gameOver) {
-        ctx.save();
-        ctx.globalAlpha = 0.85;
-        ctx.font = "26px 'Press Start 2P', monospace";
-        ctx.fillStyle = "#FF4444";
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        ctx.fillText("GAME OVER", CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 - 20);
-        ctx.globalAlpha = 0.5;
-        ctx.font = "12px 'Press Start 2P', monospace";
-        ctx.fillStyle = "#FFFFFF";
-        ctx.fillText(`SCORE: ${cs.score}`, CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 + 20);
-        ctx.restore();
-      }
+      // Game over overlay – handled by HTML overlay below (coopGameOver state)
 
       // Spectator overlay for eliminated players in online coop
       if (gameModeRef.current === "online_coop" && !isHostRef.current) {
@@ -5042,7 +5054,7 @@ const Game = () => {
     showLifeLostRef.current = false;
     setCoopGameOver(false);
     setCoopWaveComplete(false);
-    isPausedRef.current = false;
+    setCoopPlayerStats([]);
     setIsPaused(false);
     soundEffects.stopThrust();
     // Release canvas focus
@@ -6150,6 +6162,124 @@ const Game = () => {
                 }`}
               >
                 {gameOverSelection === 1 ? "▸ " : ""}MENU
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* Co-op game over statistics overlay */}
+        {coopGameOver && (gameMode === "coop" || gameMode === "online_coop") && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/85 z-10 overflow-auto py-4">
+            <div
+              className="text-3xl sm:text-4xl font-mono text-[hsl(var(--game-danger))] mb-2 animate-pulse"
+              style={{ fontFamily: "'Press Start 2P', monospace" }}
+            >
+              GAME OVER
+            </div>
+            <div
+              className="text-base sm:text-lg font-mono mb-5"
+              style={{ fontFamily: "'Press Start 2P', monospace", color: "#44FF88", textShadow: "0 0 10px #44FF88" }}
+            >
+              WAVE {coopWave} — TOTAL: {coopScore.toString().padStart(8, "0")}
+            </div>
+
+            {/* Statistics table */}
+            <div className="w-full max-w-xl px-4 mb-6">
+              <div
+                className="text-xs font-mono mb-3 text-center tracking-widest opacity-70"
+                style={{ fontFamily: "'Press Start 2P', monospace", color: "#FFFF00" }}
+              >
+                PLAYER STATISTICS
+              </div>
+
+              {/* Header row */}
+              <div
+                className="grid grid-cols-5 gap-1 text-[7px] sm:text-[8px] font-mono mb-2 opacity-50"
+                style={{ fontFamily: "'Press Start 2P', monospace", color: "#FFFFFF" }}
+              >
+                <div className="text-left pl-1">PLAYER</div>
+                <div className="text-right">SCORE</div>
+                <div className="text-right">ROCKS</div>
+                <div className="text-right">ENEMIES</div>
+                <div className="text-right pr-1">POWER-UPS</div>
+              </div>
+
+              {/* Player rows sorted by score */}
+              {(coopPlayerStats.length > 0
+                ? coopPlayerStats
+                : Array.from({ length: coopPlayerCount }, (_, i) => ({
+                    playerIndex: i,
+                    label: gameMode === "online_coop"
+                      ? (multiplayer.playerInitialsMap.get(i) ?? `P${i + 1}`)
+                      : `P${i + 1}`,
+                    score: 0,
+                    asteroidsDestroyed: 0,
+                    enemiesKilled: 0,
+                    powerUpsCollected: 0,
+                  }))
+              ).map((stat, rank) => {
+                const color = PLAYER_COLORS[stat.playerIndex % PLAYER_COLORS.length];
+                const label = gameMode === "online_coop"
+                  ? (multiplayer.playerInitialsMap.get(stat.playerIndex) ?? stat.label)
+                  : stat.label;
+                return (
+                  <div
+                    key={stat.playerIndex}
+                    className="grid grid-cols-5 gap-1 py-2 border-b border-white/10"
+                    style={{ borderColor: `${color}22` }}
+                  >
+                    <div
+                      className="flex items-center gap-1 text-[8px] sm:text-[9px] font-mono pl-1"
+                      style={{ fontFamily: "'Press Start 2P', monospace", color, textShadow: `0 0 8px ${color}` }}
+                    >
+                      <span className="opacity-50 text-white">{rank + 1}.</span> {label}
+                    </div>
+                    <div
+                      className="text-right text-[8px] sm:text-[9px] font-mono"
+                      style={{ fontFamily: "'Press Start 2P', monospace", color: "#FFFF00" }}
+                    >
+                      {stat.score.toString().padStart(6, "0")}
+                    </div>
+                    <div
+                      className="text-right text-[8px] sm:text-[9px] font-mono"
+                      style={{ fontFamily: "'Press Start 2P', monospace", color: "#FFFFFF" }}
+                    >
+                      {stat.asteroidsDestroyed}
+                    </div>
+                    <div
+                      className="text-right text-[8px] sm:text-[9px] font-mono"
+                      style={{ fontFamily: "'Press Start 2P', monospace", color: "#FF8844" }}
+                    >
+                      {stat.enemiesKilled}
+                    </div>
+                    <div
+                      className="text-right text-[8px] sm:text-[9px] font-mono pr-1"
+                      style={{ fontFamily: "'Press Start 2P', monospace", color: "#CC66FF" }}
+                    >
+                      {stat.powerUpsCollected}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="flex gap-4">
+              {gameMode === "coop" && (
+                <Button
+                  onClick={() => initCoop(false, coopPlayerCount)}
+                  className="text-base sm:text-lg px-6 py-3 font-mono"
+                  style={{ fontFamily: "'Press Start 2P', monospace" }}
+                >
+                  PLAY AGAIN
+                </Button>
+              )}
+              <Button
+                onClick={quitToMenu}
+                variant="outline"
+                className="text-base sm:text-lg px-6 py-3 font-mono border-[hsl(var(--game-foreground))] text-[hsl(var(--game-foreground))]"
+                style={{ fontFamily: "'Press Start 2P', monospace" }}
+              >
+                MENU
               </Button>
             </div>
           </div>

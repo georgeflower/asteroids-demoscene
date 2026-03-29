@@ -116,6 +116,12 @@ let pendingEvents: GameEvent[] = [];
 let inputs: InputState[] = [];
 let hyperspacePressed: boolean[] = []; // track edge-detect for hyperspace
 
+// Per-player statistics
+let playerScores: number[] = [];
+let playerAsteroidsDestroyed: number[] = [];
+let playerEnemiesKilled: number[] = [];
+let playerPowerUpsCollected: number[] = [];
+
 function getSpeedScale(w: number): number { return 1.0 + (w - 1) * 0.05; }
 
 function createShip(x: number, y: number, idx: number): Ship {
@@ -325,6 +331,10 @@ function initGame() {
   lastShotTime = [];
   hyperspacePressed = [];
   inputs = [];
+  playerScores = [];
+  playerAsteroidsDestroyed = [];
+  playerEnemiesKilled = [];
+  playerPowerUpsCollected = [];
 
   const positions = playerCount <= 2
     ? [{ x: W * 0.25, y: H / 2 }, { x: W * 0.75, y: H / 2 }]
@@ -341,6 +351,10 @@ function initGame() {
     lastShotTime.push(0);
     hyperspacePressed.push(false);
     inputs.push({ left: false, right: false, up: false, fire: false, hyperspace: false });
+    playerScores.push(0);
+    playerAsteroidsDestroyed.push(0);
+    playerEnemiesKilled.push(0);
+    playerPowerUpsCollected.push(0);
   }
 
   asteroids = []; aliens = []; powerUps = []; boss = null; bossBullets = []; alienBullets = [];
@@ -923,6 +937,8 @@ function updateTick() {
             if (pu) powerUps.push(pu);
           }
           score += pts;
+          playerScores[p] = (playerScores[p] ?? 0) + pts;
+          playerAsteroidsDestroyed[p] = (playerAsteroidsDestroyed[p] ?? 0) + 1;
           pendingEvents.push({ type: "explosion", x: asteroid.pos.x, y: asteroid.pos.y, color: "#FFFFFF", count: 8 });
           pendingEvents.push({ type: "score_pop", x: asteroid.pos.x, y: asteroid.pos.y, color: "#FFFF00", count: 0, points: pts });
           return false;
@@ -946,6 +962,8 @@ function updateTick() {
             const multiplier = powerUpActive[bullet.owner >= 0 ? bullet.owner : 0].multiplier > 0 ? 2 : 1;
             const pts = SCORE_ALIEN * multiplier;
             score += pts;
+            playerScores[p] = (playerScores[p] ?? 0) + pts;
+            playerEnemiesKilled[p] = (playerEnemiesKilled[p] ?? 0) + 1;
             const explosionColor = alien.type === "blueSentinel" ? "#4488FF" : alien.type === "purpleSwarm" ? "#AA44FF" : "#AA6633";
             pendingEvents.push({ type: "explosion", x: alien.pos.x, y: alien.pos.y, color: explosionColor, count: 10 });
             pendingEvents.push({ type: "score_pop", x: alien.pos.x, y: alien.pos.y, color: "#FFFF00", count: 0, points: pts });
@@ -972,6 +990,8 @@ function updateTick() {
             const multiplier = powerUpActive[p].multiplier > 0 ? 2 : 1;
             const pts = SCORE_BOSS * multiplier;
             score += pts;
+            playerScores[p] = (playerScores[p] ?? 0) + pts;
+            playerEnemiesKilled[p] = (playerEnemiesKilled[p] ?? 0) + 1;
             pendingEvents.push({ type: "explosion", x: boss!.pos.x, y: boss!.pos.y, color: "#FF44CC", count: 30 });
             pendingEvents.push({ type: "score_pop", x: boss!.pos.x, y: boss!.pos.y, color: "#FFFF00", count: 0, points: pts });
             boss = null;
@@ -998,6 +1018,7 @@ function updateTick() {
           shield: "SHIELD!", rapidFire: "RAPID FIRE!", extraLife: "+1 LIFE!", multiplier: "2× SCORE!",
         };
         pendingEvents.push({ type: "powerup", x: pu.pos.x, y: pu.pos.y, color: "#FFFFFF", count: 0, player: p, label: labels[pu.type] });
+        playerPowerUpsCollected[p] = (playerPowerUpsCollected[p] ?? 0) + 1;
         switch (pu.type) {
           case "shield": powerUpActive[p].shield = 300; break;
           case "rapidFire": powerUpActive[p].rapidFire = 600; break;
@@ -1090,6 +1111,10 @@ function buildAndSendState() {
     events: pendingEvents,
     tick,
     playerCount,
+    playerScores: [...playerScores],
+    playerAsteroidsDestroyed: [...playerAsteroidsDestroyed],
+    playerEnemiesKilled: [...playerEnemiesKilled],
+    playerPowerUpsCollected: [...playerPowerUpsCollected],
   };
   pendingEvents = [];
   postMessage({ type: "state", data: state });
