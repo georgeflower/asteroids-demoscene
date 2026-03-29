@@ -5471,6 +5471,8 @@ const Game = () => {
           isConnected={multiplayer.isConnected}
           opponentConnected={multiplayer.opponentConnected}
           guestCount={multiplayer.guestCount}
+          chatMessages={multiplayer.chatMessages}
+          onSendChatMessage={(text) => multiplayer.sendChatMessage(text)}
         />
       </div>
     );

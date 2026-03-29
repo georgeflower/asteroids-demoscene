@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import type { SessionMode } from "@/types/multiplayer";
+import type { SessionMode, ChatMessage } from "@/types/multiplayer";
+import LobbyChat from "@/components/LobbyChat";
 
 interface OnlineLobbyProps {
   onCreateRoom: () => string;
@@ -13,6 +14,8 @@ interface OnlineLobbyProps {
   isConnected: boolean;
   opponentConnected: boolean;
   guestCount?: number;
+  chatMessages?: ChatMessage[];
+  onSendChatMessage?: (text: string) => void;
 }
 
 const COOP_COLOR = "#44FF88";
@@ -29,6 +32,8 @@ const OnlineLobby = ({
   isConnected,
   opponentConnected,
   guestCount = 0,
+  chatMessages = [],
+  onSendChatMessage,
 }: OnlineLobbyProps) => {
   const [joinCode, setJoinCode] = useState("");
   const [phase, setPhase] = useState<"initials" | "choose" | "hosting" | "joining">("initials");
@@ -310,6 +315,14 @@ const OnlineLobby = ({
           >
             ← CANCEL
           </Button>
+
+          {/* Chat panel — visible once connected to a room */}
+          {isConnected && onSendChatMessage && (
+            <LobbyChat
+              messages={chatMessages}
+              onSend={onSendChatMessage}
+            />
+          )}
         </>
       )}
     </div>

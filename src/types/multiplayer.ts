@@ -156,6 +156,13 @@ export interface CoopNetState {
 
 export type SessionMode = "duel" | "coop";
 
+export interface ChatMessage {
+  id: string;
+  sender: string;
+  text: string;
+  timestamp: number;
+}
+
 export type WorkerInMessage =
   | { type: "init"; turnSpeed?: number }
   | { type: "inputs"; p1: InputState; p2: InputState }

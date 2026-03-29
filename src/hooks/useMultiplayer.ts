@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import type { InputState, DuelNetState, CoopNetState, SessionMode } from "@/types/multiplayer";
+import type { InputState, DuelNetState, CoopNetState, SessionMode, ChatMessage } from "@/types/multiplayer";
 
 interface PresenceInfo {
   role: "host" | "guest";
@@ -27,6 +27,7 @@ export function useMultiplayer() {
   const [guestCount, setGuestCount] = useState(0);
   // Map from playerIdx → initials for all players in the room
   const [playerInitialsMap, setPlayerInitialsMap] = useState<Map<number, string>>(new Map());
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const remoteStateRef = useRef<DuelNetState | null>(null);
   const remoteCoopStateRef = useRef<CoopNetState | null>(null);
@@ -100,6 +101,10 @@ export function useMultiplayer() {
           remoteInputsRef.current.set(1, inp as InputState);
         }
       })
+      .on("broadcast", { event: "chat_message" }, ({ payload }) => {
+        const msg = payload as ChatMessage;
+        setChatMessages((prev) => [...prev, msg]);
+      })
       .subscribe(async (status) => {
         if (status === "SUBSCRIBED") {
           await channel.track({ role: "host", playerIdx: 0, initials: localInitialsRef.current });
@@ -159,6 +164,10 @@ export function useMultiplayer() {
         const mode: SessionMode = (raw?.mode === "coop" || raw?.mode === "duel") ? raw.mode : "duel";
         const pc = raw?.playerCount ?? 2;
         onGameStartRef.current?.(mode, pc);
+      })
+      .on("broadcast", { event: "chat_message" }, ({ payload }) => {
+        const msg = payload as ChatMessage;
+        setChatMessages((prev) => [...prev, msg]);
       })
       .subscribe(async (status) => {
         if (status === "SUBSCRIBED") {
@@ -228,6 +237,34 @@ export function useMultiplayer() {
     });
   }, []);
 
+  const MAX_CHAT_MESSAGE_LENGTH = 200;
+  const CHAT_RATE_LIMIT_MS = 500;
+  const lastChatSentRef = useRef<number>(0);
+  const chatMsgCounterRef = useRef<number>(0);
+
+  const sendChatMessage = useCallback((text: string) => {
+    const trimmed = text.trim().slice(0, MAX_CHAT_MESSAGE_LENGTH);
+    if (!trimmed || !channelRef.current) return;
+    const now = Date.now();
+    if (now - lastChatSentRef.current < CHAT_RATE_LIMIT_MS) return;
+    lastChatSentRef.current = now;
+    const msg: ChatMessage = {
+      id: `${now}-${++chatMsgCounterRef.current}`,
+      sender: localInitialsRef.current || "???",
+      text: trimmed,
+      timestamp: now,
+    };
+    // Add to own messages immediately (channel has self: false)
+    setChatMessages((prev) => [...prev, msg]);
+    channelRef.current.send({
+      type: "broadcast",
+      event: "chat_message",
+      payload: msg,
+    }).catch((err: unknown) => {
+      console.warn("[chat] Failed to send message:", err);
+    });
+  }, []);
+
   const disconnect = useCallback(() => {
     if (channelRef.current) {
       supabase.removeChannel(channelRef.current);
@@ -239,6 +276,7 @@ export function useMultiplayer() {
     setIsHost(false);
     setGuestCount(0);
     setPlayerInitialsMap(new Map());
+    setChatMessages([]);
     localInitialsRef.current = "";
   }, []);
 
@@ -262,6 +300,7 @@ export function useMultiplayer() {
     opponentConnected,
     guestCount,
     playerInitialsMap,
+    chatMessages,
     localInitialsRef,
     remoteStateRef,
     remoteCoopStateRef,
@@ -277,6 +316,7 @@ export function useMultiplayer() {
     sendCoopState,
     sendInputs,
     startGame,
+    sendChatMessage,
     disconnect,
     setLocalInitials,
   };
