@@ -406,6 +406,12 @@ const Game = () => {
   const onelinerGifsRef = useRef<Record<string, HTMLImageElement>>({});
   const [userPaused, setUserPaused] = useState(false);
   const [showFullLeaderboard, setShowFullLeaderboard] = useState(false);
+  const [localHighScores, setLocalHighScores] = useState<LocalScore[]>(() => {
+    try {
+      const stored = localStorage.getItem(LOCAL_SCORES_KEY);
+      return stored ? JSON.parse(stored) : [];
+    } catch { return []; }
+  });
   const radioStartedRef = useRef(false);
   const onelinerRef = useRef<{ author: string; message: string; flag: string }[] | null>(null);
   const lastOnelinerTimeRef = useRef<string>("");
