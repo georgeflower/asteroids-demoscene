@@ -304,7 +304,7 @@ async function handleHeartbeat(req: Request, supabaseAdmin: any) {
       // Still within the same minute window
       countThisMinute++;
       if (countThisMinute > MAX_HEARTBEATS_PER_MINUTE) {
-        console.log(`Rate limit exceeded: ${countThisMinute} heartbeats in current minute window, token=${payload.gameSessionToken}`);
+        console.log(`Rate limit exceeded: ${countThisMinute} heartbeats in current minute window, token=${payload.token}`);
         return errorResponse('Rate limit exceeded', 429);
       }
     } else {
@@ -327,14 +327,14 @@ async function handleHeartbeat(req: Request, supabaseAdmin: any) {
 
     // Score cannot decrease
     if (scoreDelta < 0) {
-      console.log(`Score decreased: ${payload.score} < ${lastScore}, token=${payload.gameSessionToken}`);
+      console.log(`Score decreased: ${payload.score} < ${lastScore}, token=${payload.token}`);
       return errorResponse('Invalid score progression', 400);
     }
 
     // Score delta must be plausible for elapsed time
     const maxScoreDelta = MAX_SCORE_PER_SECOND * dtSec;
     if (scoreDelta > maxScoreDelta) {
-      console.log(`Score delta too high: +${scoreDelta} in ${dtSec.toFixed(1)}s (max ${maxScoreDelta.toFixed(0)}), token=${payload.gameSessionToken}`);
+      console.log(`Score delta too high: +${scoreDelta} in ${dtSec.toFixed(1)}s (max ${maxScoreDelta.toFixed(0)}), token=${payload.token}`);
       return errorResponse('Score progression anomaly', 403);
     }
 
@@ -345,7 +345,7 @@ async function handleHeartbeat(req: Request, supabaseAdmin: any) {
     // Asteroids delta must be plausible
     const maxAsteroidsDelta = MAX_ASTEROIDS_PER_SEC * dtSec;
     if (asteroidsDelta > maxAsteroidsDelta) {
-      console.log(`Asteroids delta too high: +${asteroidsDelta} in ${dtSec.toFixed(1)}s (max ${maxAsteroidsDelta.toFixed(0)}), token=${payload.gameSessionToken}`);
+      console.log(`Asteroids delta too high: +${asteroidsDelta} in ${dtSec.toFixed(1)}s (max ${maxAsteroidsDelta.toFixed(0)}), token=${payload.token}`);
       return errorResponse('Metric progression anomaly', 403);
     }
 
@@ -356,7 +356,7 @@ async function handleHeartbeat(req: Request, supabaseAdmin: any) {
     // Bullets delta must be plausible
     const maxBulletsDelta = MAX_BULLETS_PER_SEC * dtSec;
     if (bulletsDelta > maxBulletsDelta) {
-      console.log(`Bullets delta too high: +${bulletsDelta} in ${dtSec.toFixed(1)}s (max ${maxBulletsDelta.toFixed(0)}), token=${payload.gameSessionToken}`);
+      console.log(`Bullets delta too high: +${bulletsDelta} in ${dtSec.toFixed(1)}s (max ${maxBulletsDelta.toFixed(0)}), token=${payload.token}`);
       return errorResponse('Metric progression anomaly', 403);
     }
 
@@ -365,7 +365,7 @@ async function handleHeartbeat(req: Request, supabaseAdmin: any) {
       return errorResponse('Invalid level progression', 400);
     }
     if (levelDelta > MAX_LEVEL_JUMP) {
-      console.log(`Level jump too large: +${levelDelta}, token=${payload.gameSessionToken}`);
+      console.log(`Level jump too large: +${levelDelta}, token=${payload.token}`);
       return errorResponse('Impossible wave progression', 403);
     }
 

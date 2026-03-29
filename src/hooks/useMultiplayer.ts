@@ -71,7 +71,7 @@ export function useMultiplayer() {
 
     channel
       .on("presence", { event: "join" }, ({ newPresences }) => {
-        const guests = newPresences.filter((p: PresenceInfo) => p.role === "guest");
+        const guests = newPresences.filter((p: any) => p.role === "guest");
         if (guests.length > 0) {
           setOpponentConnected(true);
         }
@@ -122,7 +122,7 @@ export function useMultiplayer() {
 
     channel
       .on("presence", { event: "join" }, ({ newPresences }) => {
-        if (newPresences.some((p: PresenceInfo) => p.role === "host")) {
+        if (newPresences.some((p: any) => p.role === "host")) {
           setOpponentConnected(true);
         }
         const state = channel.presenceState() as PresenceState;
@@ -131,7 +131,7 @@ export function useMultiplayer() {
         rebuildInitialsMap(channel);
       })
       .on("presence", { event: "leave" }, ({ leftPresences }) => {
-        if (leftPresences.some((p: PresenceInfo) => p.role === "host")) {
+        if (leftPresences.some((p: any) => p.role === "host")) {
           setOpponentConnected(false);
         }
         const state = channel.presenceState() as PresenceState;

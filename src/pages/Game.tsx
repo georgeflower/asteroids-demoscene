@@ -274,7 +274,10 @@ const FRAME_TIME_TOLERANCE = 1;
 
 const GAME_VERSION = "0.2.1";
 
-// Set to true to re-enable the high scores system.
+const LOCAL_SCORES_KEY = "asteroids_local_highscores";
+interface LocalScore { initials: string; score: number; date: string }
+
+// Set to true to re-enable the server high scores system.
 const HIGH_SCORES_ENABLED = false;
 
 const SHIP_SIZE = 10;
@@ -403,6 +406,12 @@ const Game = () => {
   const onelinerGifsRef = useRef<Record<string, HTMLImageElement>>({});
   const [userPaused, setUserPaused] = useState(false);
   const [showFullLeaderboard, setShowFullLeaderboard] = useState(false);
+  const [localHighScores, setLocalHighScores] = useState<LocalScore[]>(() => {
+    try {
+      const stored = localStorage.getItem(LOCAL_SCORES_KEY);
+      return stored ? JSON.parse(stored) : [];
+    } catch { return []; }
+  });
   const radioStartedRef = useRef(false);
   const onelinerRef = useRef<{ author: string; message: string; flag: string }[] | null>(null);
   const lastOnelinerTimeRef = useRef<string>("");
@@ -804,9 +813,9 @@ const Game = () => {
   const isHighScore = useCallback(
     (score: number) => {
       if (DEBUG_ENABLED) return true;
-      return leaderboard.length < 10 || score > (leaderboard[leaderboard.length - 1]?.score ?? 0);
+      return localHighScores.length < 10 || score > (localHighScores[localHighScores.length - 1]?.score ?? 0);
     },
-    [leaderboard],
+    [localHighScores],
   );
 
   useEffect(() => {
@@ -1874,10 +1883,11 @@ const Game = () => {
         state.gameOver = true;
         stopHeartbeatInterval();
         setShowGameOver(true);
-        // Trainer mode: don't offer score saving
-        if (HIGH_SCORES_ENABLED && !(DEBUG_ENABLED && trainerModeRef.current) && isHighScore(state.score))
+        // Offer local high score entry (skip in trainer mode)
+        if (!(DEBUG_ENABLED && trainerModeRef.current) && isHighScore(state.score))
           setEnteringInitials(true);
-        loadLeaderboard().then(setLeaderboard);
+        // Also refresh server leaderboard if enabled
+        if (HIGH_SCORES_ENABLED) loadLeaderboard().then(setLeaderboard);
         // Game over
         haptics.gameOver();
       } else {
@@ -4436,14 +4446,15 @@ const Game = () => {
     ctx.fillText(`${theme.name.toUpperCase()} ZONE`, CANVAS_WIDTH - 10, 18);
     ctx.restore();
 
-    // Top score in top-right corner
-    if (leaderboard.length > 0) {
+    // Top score in top-right corner (from local high scores)
+    const topScoreSource = localHighScores.length > 0 ? localHighScores : leaderboard;
+    if (topScoreSource.length > 0) {
       ctx.save();
       ctx.globalAlpha = 0.5;
       ctx.font = "8px 'Press Start 2P', monospace";
       ctx.fillStyle = "#FFD700";
       ctx.textAlign = "right";
-      ctx.fillText(`TOP: ${leaderboard[0].score.toString().padStart(8, "0")}`, CANVAS_WIDTH - 10, 38);
+      ctx.fillText(`TOP: ${topScoreSource[0].score.toString().padStart(8, "0")}`, CANVAS_WIDTH - 10, 38);
       ctx.restore();
     }
 
@@ -4618,9 +4629,10 @@ const Game = () => {
           // Coop host: collect all remote inputs and send full array to worker
           const cs = coopStateRef.current;
           const pc = cs?.playerCount ?? 2;
-          const inputsArr: typeof localInput[] = [localInput];
+          const inputsArr: { left: boolean; right: boolean; up: boolean; fire: boolean; hyperspace: boolean }[] = [localInput];
           for (let i = 1; i < pc; i++) {
-            inputsArr.push(multiplayer.remoteInputsRef.current.get(i) ?? { left: false, right: false, up: false, fire: false, hyperspace: false });
+            const remote = multiplayer.remoteInputsRef.current.get(i);
+            inputsArr.push(remote ? { ...remote, hyperspace: remote.hyperspace ?? false } : { left: false, right: false, up: false, fire: false, hyperspace: false });
           }
           workerRef.current.postMessage({ type: "inputs", inputs: inputsArr });
         } else if (isHostRef.current && workerRef.current) {
@@ -5497,24 +5509,114 @@ const Game = () => {
         )}
 
         {/* High scores disabled message */}
-        {!HIGH_SCORES_ENABLED && (
+        {!HIGH_SCORES_ENABLED && localHighScores.length === 0 && (
           <div className="mb-8 w-72 text-center">
             <div
               className="text-sm font-mono text-[hsl(var(--game-glow))] mb-1 tracking-wider"
               style={{ textShadow: "0 0 10px hsl(var(--game-glow))" }}
             >
-              ★ HIGH SCORES ARE DISABLED ★
+              ★ NO HIGH SCORES YET ★
             </div>
             <div
               className="text-sm font-mono tracking-wider"
               style={{ color: "#FFD700", textShadow: "0 0 10px #FFD700" }}
             >
-              MBD IS THE GRAND CHAMPION!
+              PLAY A GAME TO SET A RECORD!
             </div>
           </div>
         )}
 
-        {/* Full leaderboard overlay (current scores) */}
+        {/* Local high scores on main menu */}
+        {!HIGH_SCORES_ENABLED && localHighScores.length > 0 && (
+          <div className="mb-4 w-72">
+            <div
+              className="text-sm font-mono text-[hsl(var(--game-glow))] text-center mb-2 tracking-wider"
+              style={{ textShadow: "0 0 10px hsl(var(--game-glow))" }}
+            >
+              ★ LOCAL HIGH SCORES ★
+            </div>
+            <div className="border border-[hsl(var(--game-foreground))]/30 p-2">
+              {localHighScores.slice(0, 3).map((entry, i) => (
+                <div
+                  key={i}
+                  className="flex justify-between font-mono text-sm py-0.5 text-[hsl(var(--game-foreground))]"
+                >
+                  <span
+                    className={i === 0 ? "text-[#FFD700]" : i === 1 ? "text-[#C0C0C0]" : "text-[#CD7F32]"}
+                    style={{ whiteSpace: "pre" }}
+                  >
+                    {(i + 1).toString().padStart(2, " ")}. {entry.initials.padEnd(3, " ")}
+                  </span>
+                  <span className={i === 0 ? "text-[#FFD700]" : i === 1 ? "text-[#C0C0C0]" : "text-[#CD7F32]"}>
+                    {entry.score.toString().padStart(8, "0")}
+                  </span>
+                </div>
+              ))}
+            </div>
+            <button
+              onClick={() => setShowFullLeaderboard(true)}
+              className="w-full mt-1 font-mono text-[10px] text-[hsl(var(--game-foreground))] opacity-50 hover:opacity-100 transition-opacity uppercase tracking-widest text-center py-1"
+            >
+              VIEW ALL SCORES ▸
+            </button>
+          </div>
+        )}
+
+        {/* Full local leaderboard overlay */}
+        {!HIGH_SCORES_ENABLED && showFullLeaderboard && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/85"
+            onClick={() => setShowFullLeaderboard(false)}
+          >
+            <div
+              className="bg-[hsl(var(--game-background))] border-2 border-[hsl(var(--game-foreground))]/40 p-6 max-w-sm w-full max-h-[80vh] overflow-auto"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div
+                className="text-lg font-mono text-[hsl(var(--game-glow))] text-center mb-4 tracking-wider"
+                style={{ textShadow: "0 0 10px hsl(var(--game-glow))" }}
+              >
+                ★ LOCAL HIGH SCORES ★
+              </div>
+              {localHighScores.length === 0 ? (
+                <div className="text-center font-mono text-sm text-[hsl(var(--game-foreground))]/60">No scores yet</div>
+              ) : (
+                localHighScores.map((entry, i) => (
+                  <div
+                    key={i}
+                    className="flex justify-between font-mono text-sm py-0.5 text-[hsl(var(--game-foreground))]"
+                  >
+                    <span style={{ whiteSpace: "pre" }}>
+                      {(i + 1).toString().padStart(2, " ")}. {entry.initials.padEnd(3, " ")}
+                    </span>
+                    <span>{entry.score.toString().padStart(8, "0")}</span>
+                  </div>
+                ))
+              )}
+              <div className="flex gap-2 mt-4">
+                <button
+                  onClick={() => setShowFullLeaderboard(false)}
+                  className="flex-1 font-mono text-xs text-[hsl(var(--game-foreground))] opacity-60 hover:opacity-100 transition-opacity uppercase tracking-widest text-center py-2 border border-[hsl(var(--game-foreground))]/30"
+                >
+                  CLOSE
+                </button>
+                {localHighScores.length > 0 && (
+                  <button
+                    onClick={() => {
+                      localStorage.removeItem(LOCAL_SCORES_KEY);
+                      setLocalHighScores([]);
+                    }}
+                    className="flex-1 font-mono text-xs text-[hsl(var(--game-danger))] opacity-60 hover:opacity-100 transition-opacity uppercase tracking-widest text-center py-2 border border-[hsl(var(--game-danger))]/30"
+                  >
+                    CLEAR SCORES
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Full server leaderboard overlay (current scores) */}
         {HIGH_SCORES_ENABLED && showFullLeaderboard && (
           <div
             className="fixed inset-0 z-50 flex items-center justify-center bg-black/85"
@@ -5951,7 +6053,8 @@ const Game = () => {
               FINAL SCORE: {displayScore.toString().padStart(8, "0")}
             </div>
 
-            {HIGH_SCORES_ENABLED && enteringInitials && (
+            {/* Local high score entry */}
+            {enteringInitials && (
               <div className="mb-4 flex flex-col items-center gap-2">
                 <div className="text-lg font-mono text-[hsl(var(--game-glow))]">NEW HIGH SCORE! ENTER INITIALS:</div>
                 {initialsError && (
@@ -5965,14 +6068,16 @@ const Game = () => {
                     onChange={(e) => {
                       const newInitials = e.target.value.toUpperCase().replace(/[^A-Z]/g, "");
                       setInitials(newInitials);
-                      setInitialsError(""); // Clear error on change
+                      setInitialsError("");
                     }}
-                    onKeyDown={async (e) => {
+                    onKeyDown={(e) => {
                       if (e.key === "Enter" && initials.length > 0) {
-                        const success = await saveToLeaderboard(initials, displayScore);
-                        if (success) {
-                          setEnteringInitials(false);
-                        }
+                        const updated = [...localHighScores, { initials: initials.toUpperCase(), score: displayScore, date: new Date().toISOString() }]
+                          .sort((a, b) => b.score - a.score)
+                          .slice(0, 10);
+                        localStorage.setItem(LOCAL_SCORES_KEY, JSON.stringify(updated));
+                        setLocalHighScores(updated);
+                        setEnteringInitials(false);
                       }
                       e.stopPropagation();
                     }}
@@ -5981,12 +6086,14 @@ const Game = () => {
                     placeholder="___"
                   />
                   <Button
-                    onClick={async () => {
+                    onClick={() => {
                       if (initials.length > 0) {
-                        const success = await saveToLeaderboard(initials, displayScore);
-                        if (success) {
-                          setEnteringInitials(false);
-                        }
+                        const updated = [...localHighScores, { initials: initials.toUpperCase(), score: displayScore, date: new Date().toISOString() }]
+                          .sort((a, b) => b.score - a.score)
+                          .slice(0, 10);
+                        localStorage.setItem(LOCAL_SCORES_KEY, JSON.stringify(updated));
+                        setLocalHighScores(updated);
+                        setEnteringInitials(false);
                       }
                     }}
                     disabled={initials.length === 0 || !!initialsError}
@@ -5998,11 +6105,12 @@ const Game = () => {
               </div>
             )}
 
-            {HIGH_SCORES_ENABLED && leaderboard.length > 0 && (
+            {/* Local scores on game over */}
+            {localHighScores.length > 0 && !enteringInitials && (
               <div className="mb-4 w-72">
-                <div className="text-lg font-mono text-[hsl(var(--game-glow))] text-center mb-2">TOP SCORES</div>
+                <div className="text-lg font-mono text-[hsl(var(--game-glow))] text-center mb-2">LOCAL HIGH SCORES</div>
                 <div className="border border-[hsl(var(--game-foreground))] p-2">
-                  {leaderboard.map((entry, i) => (
+                  {localHighScores.map((entry, i) => (
                     <div
                       key={i}
                       className={`flex justify-between font-mono text-sm py-0.5 ${
