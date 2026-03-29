@@ -3,6 +3,7 @@ export interface InputState {
   right: boolean;
   up: boolean;
   fire: boolean;
+  hyperspace?: boolean;
 }
 
 export interface NetShip {
@@ -47,7 +48,7 @@ export interface NetAlien {
 }
 
 export interface GameEvent {
-  type: "explosion" | "kill" | "die_env" | "score_pop";
+  type: "explosion" | "kill" | "die_env" | "score_pop" | "boss_spawn" | "powerup";
   x: number;
   y: number;
   color: string;
@@ -55,6 +56,7 @@ export interface GameEvent {
   player?: number;
   killer?: number;
   points?: number;
+  label?: string;
 }
 
 export interface DuelNetState {
@@ -71,22 +73,67 @@ export interface DuelNetState {
   tick: number;
 }
 
+export interface NetBoss {
+  x: number;
+  y: number;
+  rotation: number;
+  hp: number;
+  maxHp: number;
+  phase: number;
+  hitFlash: number;
+  entered: boolean;
+  targetY: number;
+  bossType: "tentacle" | "amigaBall" | "flyingSaucer" | "borgCube";
+  tentacles: number;
+  shootTimer: number;
+  // amigaBall
+  bounceVelX?: number;
+  bounceVelY?: number;
+  rotAngle?: number;
+  // flyingSaucer
+  tractorBeamActive?: boolean;
+  sweepAngle?: number;
+  miniSaucers?: { x: number; y: number }[];
+  // borgCube
+  cubeRotX?: number;
+  cubeRotY?: number;
+  regenTimer?: number;
+  miniCubes?: { x: number; y: number; rotAngle: number }[];
+}
+
+export interface NetPowerUp {
+  x: number;
+  y: number;
+  rotation: number;
+  type: "shield" | "rapidFire" | "extraLife" | "multiplier";
+}
+
+export interface NetPowerUpActive {
+  shield: number;
+  rapidFire: number;
+  multiplier: number;
+}
+
 export interface CoopNetState {
-  ship1: NetShip;
-  ship2: NetShip;
-  bullets1: NetBullet[];
-  bullets2: NetBullet[];
+  ships: NetShip[];
+  bullets: NetBullet[][];
+  bossBullets: NetBullet[];
   asteroids: NetAsteroid[];
   aliens: NetAlien[];
   score: number;
-  lives1: number;
-  lives2: number;
+  lives: number[];
+  eliminated: boolean[];
   wave: number;
-  respawnTimer: [number, number];
+  respawnTimer: number[];
+  powerUpActive: NetPowerUpActive[];
+  hyperspaceCooldown: number[];
+  powerUps: NetPowerUp[];
+  boss: NetBoss | null;
   waveComplete: boolean;
   gameOver: boolean;
   events: GameEvent[];
   tick: number;
+  playerCount: number;
 }
 
 export type SessionMode = "duel" | "coop";
@@ -99,8 +146,8 @@ export type WorkerInMessage =
 export type WorkerOutMessage = { type: "state"; data: DuelNetState };
 
 export type CoopWorkerInMessage =
-  | { type: "init"; turnSpeed?: number }
-  | { type: "inputs"; p1: InputState; p2: InputState }
+  | { type: "init"; turnSpeed?: number; playerCount?: number }
+  | { type: "inputs"; inputs: InputState[] }
   | { type: "stop" };
 
 export type CoopWorkerOutMessage = { type: "state"; data: CoopNetState };

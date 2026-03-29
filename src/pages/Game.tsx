@@ -234,23 +234,27 @@ interface DuelState {
 }
 
 interface CoopState {
-  ship1: Ship;
-  ship2: Ship;
-  bullets1: Bullet[];
-  bullets2: Bullet[];
+  ships: Ship[];
+  bullets: Bullet[][];
+  bossBullets: Bullet[];
   asteroids: Asteroid[];
   aliens: Alien[];
   score: number;
-  lives1: number;
-  lives2: number;
+  lives: number[];
+  eliminated: boolean[];
   wave: number;
-  respawnTimer: [number, number];
+  respawnTimer: number[];
+  powerUpActive: { shield: number; rapidFire: number; multiplier: number }[];
+  hyperspaceCooldown: number[];
+  powerUps: PowerUp[];
+  boss: Boss | null;
   waveComplete: boolean;
   waveCompleteTimer: number;
   gameOver: boolean;
   floatingTexts: FloatingText[];
   particles: Particle[];
   stars: Star[];
+  playerCount: number;
 }
 
 type GameMode = "menu" | "solo" | "duel" | "online_lobby" | "online" | "coop" | "online_coop";
@@ -283,6 +287,7 @@ const MARQUEE_SPEED = 0.8; // pixels per frame (~48px/sec at 60fps)
 
 const P1_COLOR = "#00FFFF";
 const P2_COLOR = "#FF8844";
+const PLAYER_COLORS = ["#00FFFF", "#FF8844", "#FF44FF", "#FFFF44", "#44FF44", "#FF4444", "#44FFFF", "#FF88FF"];
 
 const getTheme = (wave: number): ColorTheme => {
   const idx = Math.floor((wave - 1) / 5) % COLOR_THEMES.length;
@@ -376,7 +381,9 @@ const Game = () => {
   const [duelDeaths, setDuelDeaths] = useState<[number, number]>([0, 0]);
   const [coopScore, setCoopScore] = useState(0);
   const [coopWave, setCoopWave] = useState(1);
-  const [coopLives, setCoopLives] = useState<[number, number]>([3, 3]);
+  const [coopLives, setCoopLives] = useState<number[]>([3, 3]);
+  const [coopPlayerCount, setCoopPlayerCount] = useState(2);
+  const [coopEliminated, setCoopEliminated] = useState<boolean[]>([false, false]);
   const [coopGameOver, setCoopGameOver] = useState(false);
   const [coopWaveComplete, setCoopWaveComplete] = useState(false);
   const [menuSelection, setMenuSelection] = useState(0); // 0=solo, 1=duel, 2=coop, 3=online, 4=settings
@@ -1409,29 +1416,47 @@ const Game = () => {
 
   // ===== CO-OP HELPERS =====
 
-  const initCoop = useCallback((isOnlineHost = false) => {
+  const initCoop = useCallback((isOnlineHost = false, playerCount = 2) => {
+    const pc = Math.max(1, Math.min(8, playerCount));
     keysRef.current = {};
+    const startPositions = pc <= 2
+      ? [{ x: CANVAS_WIDTH * 0.25, y: CANVAS_HEIGHT / 2 }, { x: CANVAS_WIDTH * 0.75, y: CANVAS_HEIGHT / 2 }]
+      : Array.from({ length: pc }, (_, i) => {
+          const angle = (i / pc) * Math.PI * 2 - Math.PI / 2;
+          return {
+            x: CANVAS_WIDTH / 2 + (CANVAS_WIDTH / 2 - 100) * Math.cos(angle),
+            y: CANVAS_HEIGHT / 2 + (CANVAS_HEIGHT / 2 - 80) * Math.sin(angle),
+          };
+        });
+    const rotations = [0, Math.PI, Math.PI / 2, -Math.PI / 2, Math.PI / 4, -Math.PI / 4, 3 * Math.PI / 4, -3 * Math.PI / 4];
+    const initShips = startPositions.map((pos, i) => {
+      const s = createShip(pos.x, pos.y);
+      s.rotation = rotations[i % rotations.length];
+      return s;
+    });
     const cs: CoopState = {
-      ship1: createShip(CANVAS_WIDTH * 0.25, CANVAS_HEIGHT / 2),
-      ship2: createShip(CANVAS_WIDTH * 0.75, CANVAS_HEIGHT / 2),
-      bullets1: [],
-      bullets2: [],
+      ships: initShips,
+      bullets: Array.from({ length: pc }, () => []),
+      bossBullets: [],
       asteroids: [],
       aliens: [],
       score: 0,
-      lives1: 3,
-      lives2: 3,
+      lives: Array.from({ length: pc }, () => 3),
+      eliminated: Array.from({ length: pc }, () => false),
       wave: 1,
-      respawnTimer: [0, 0],
+      respawnTimer: Array.from({ length: pc }, () => 0),
+      powerUpActive: Array.from({ length: pc }, () => ({ shield: 0, rapidFire: 0, multiplier: 0 })),
+      hyperspaceCooldown: Array.from({ length: pc }, () => 0),
+      powerUps: [],
+      boss: null,
       waveComplete: false,
       waveCompleteTimer: 0,
       gameOver: false,
       floatingTexts: [],
       particles: [],
       stars: createStars(),
+      playerCount: pc,
     };
-    cs.ship1.rotation = 0;
-    cs.ship2.rotation = Math.PI;
     coopStateRef.current = cs;
     duelStateRef.current = null;
     gameStateRef.current = null;
@@ -1440,7 +1465,9 @@ const Game = () => {
     showLifeLostRef.current = false;
     setCoopScore(0);
     setCoopWave(1);
-    setCoopLives([3, 3]);
+    setCoopLives(Array.from({ length: pc }, () => 3));
+    setCoopPlayerCount(pc);
+    setCoopEliminated(Array.from({ length: pc }, () => false));
     setCoopGameOver(false);
     setCoopWaveComplete(false);
     setGameMode(isOnlineHost ? "online_coop" : "coop");
@@ -1454,7 +1481,7 @@ const Game = () => {
     }
     const worker = new Worker(new URL("../workers/coopWorker.ts", import.meta.url), { type: "module" });
     workerRef.current = worker;
-    worker.postMessage({ type: "init", turnSpeed: controlBindingsRef.current.turnSpeed || 0.05 });
+    worker.postMessage({ type: "init", turnSpeed: controlBindingsRef.current.turnSpeed || 0.05, playerCount: pc });
 
     setTimeout(() => {
       canvasRef.current?.focus();
@@ -1462,33 +1489,45 @@ const Game = () => {
   }, []);
 
   const initOnlineCoop = useCallback(
-    (isHost: boolean) => {
+    (isHost: boolean, playerCount = 2) => {
       if (isHost) {
-        initCoop(true);
+        initCoop(true, playerCount);
       } else {
         // Guest: set up visual state only; physics run on host's worker
+        const pc = Math.max(1, Math.min(8, playerCount));
         keysRef.current = {};
+        const guestShip = createShip(CANVAS_WIDTH * 0.75, CANVAS_HEIGHT / 2);
+        guestShip.rotation = Math.PI;
         coopStateRef.current = {
-          ship1: createShip(CANVAS_WIDTH * 0.25, CANVAS_HEIGHT / 2),
-          ship2: createShip(CANVAS_WIDTH * 0.75, CANVAS_HEIGHT / 2),
-          bullets1: [],
-          bullets2: [],
+          ships: Array.from({ length: pc }, (_, i) => {
+            const s = createShip(
+              i === 0 ? CANVAS_WIDTH * 0.25 : CANVAS_WIDTH * 0.75,
+              CANVAS_HEIGHT / 2,
+            );
+            s.rotation = i === 0 ? 0 : Math.PI;
+            return s;
+          }),
+          bullets: Array.from({ length: pc }, () => []),
+          bossBullets: [],
           asteroids: [],
           aliens: [],
           score: 0,
-          lives1: 3,
-          lives2: 3,
+          lives: Array.from({ length: pc }, () => 3),
+          eliminated: Array.from({ length: pc }, () => false),
           wave: 1,
-          respawnTimer: [0, 0],
+          respawnTimer: Array.from({ length: pc }, () => 0),
+          powerUpActive: Array.from({ length: pc }, () => ({ shield: 0, rapidFire: 0, multiplier: 0 })),
+          hyperspaceCooldown: Array.from({ length: pc }, () => 0),
+          powerUps: [],
+          boss: null,
           waveComplete: false,
           waveCompleteTimer: 0,
           gameOver: false,
           floatingTexts: [],
           particles: [],
           stars: createStars(),
+          playerCount: pc,
         };
-        coopStateRef.current.ship1.rotation = 0;
-        coopStateRef.current.ship2.rotation = Math.PI;
         duelStateRef.current = null;
         gameStateRef.current = null;
         setShowGameOver(false);
@@ -1496,13 +1535,16 @@ const Game = () => {
         showLifeLostRef.current = false;
         setCoopScore(0);
         setCoopWave(1);
-        setCoopLives([3, 3]);
+        setCoopLives(Array.from({ length: pc }, () => 3));
+        setCoopPlayerCount(pc);
+        setCoopEliminated(Array.from({ length: pc }, () => false));
         setCoopGameOver(false);
         setCoopWaveComplete(false);
         setGameMode("online_coop");
         broadcastTickRef.current = 0;
         checkVersion();
-        // Guest prediction ship (ship2)
+        // Guest prediction ship (own player ship)
+        const myIdx = multiplayer.playerIdxRef.current;
         guestPredictedShipRef.current = createShip(CANVAS_WIDTH * 0.75, CANVAS_HEIGHT / 2);
         guestPredictedShipRef.current.rotation = Math.PI;
         setTimeout(() => {
@@ -1510,58 +1552,67 @@ const Game = () => {
         }, 50);
       }
     },
-    [initCoop],
+    [initCoop, multiplayer.playerIdxRef],
   );
 
   const applyCoopNetState = useCallback((net: CoopNetState) => {
     const cs = coopStateRef.current;
     if (!cs) return;
 
-    // Reconcile guest's own ship (P2) with client-side prediction
-    if (!isHostRef.current && guestPredictedShipRef.current && net.respawnTimer[1] === 0) {
-      const pred = guestPredictedShipRef.current;
-      const dx = net.ship2.x - pred.pos.x;
-      const dy = net.ship2.y - pred.pos.y;
-      const d = Math.hypot(dx, dy);
-      if (d < 40) {
-        pred.pos.x += dx * 0.25;
-        pred.pos.y += dy * 0.25;
-      } else {
-        pred.pos.x = net.ship2.x;
-        pred.pos.y = net.ship2.y;
-      }
-      pred.vel.x = net.ship2.vx;
-      pred.vel.y = net.ship2.vy;
-      pred.rotation = net.ship2.rot;
-      pred.invulnerable = net.ship2.invuln;
-      pred.invulnerableTime = net.ship2.invulnTime;
-      cs.ship2.pos = { ...pred.pos };
-      cs.ship2.rotation = pred.rotation;
-    } else {
-      cs.ship2.pos = { x: net.ship2.x, y: net.ship2.y };
-      cs.ship2.rotation = net.ship2.rot;
+    const pc = net.playerCount ?? net.ships?.length ?? 2;
+    const myIdx = multiplayer.playerIdxRef.current;
+
+    // Ensure arrays are the right length
+    while (cs.ships.length < pc) {
+      cs.ships.push(createShip(CANVAS_WIDTH * 0.75, CANVAS_HEIGHT / 2));
+      cs.bullets.push([]);
     }
 
-    cs.ship1.pos = { x: net.ship1.x, y: net.ship1.y };
-    cs.ship1.vel = { x: net.ship1.vx, y: net.ship1.vy };
-    cs.ship1.rotation = net.ship1.rot;
-    cs.ship1.isThrusting = net.ship1.thrust;
-    cs.ship1.invulnerable = net.ship1.invuln;
-    cs.ship1.invulnerableTime = net.ship1.invulnTime;
+    // Apply ship states from network
+    for (let i = 0; i < pc && i < net.ships.length; i++) {
+      const ns = net.ships[i];
+      // For guest's own ship: reconcile with client-side prediction
+      if (!isHostRef.current && i === myIdx && guestPredictedShipRef.current && net.respawnTimer[i] === 0) {
+        const pred = guestPredictedShipRef.current;
+        const dx = ns.x - pred.pos.x;
+        const dy = ns.y - pred.pos.y;
+        const d = Math.hypot(dx, dy);
+        if (d < 40) {
+          pred.pos.x += dx * 0.25;
+          pred.pos.y += dy * 0.25;
+        } else {
+          pred.pos.x = ns.x;
+          pred.pos.y = ns.y;
+        }
+        pred.vel.x = ns.vx; pred.vel.y = ns.vy;
+        pred.rotation = ns.rot;
+        pred.invulnerable = ns.invuln;
+        pred.invulnerableTime = ns.invulnTime;
+        cs.ships[i].pos = { ...pred.pos };
+        cs.ships[i].rotation = pred.rotation;
+      } else {
+        cs.ships[i].pos = { x: ns.x, y: ns.y };
+        cs.ships[i].rotation = ns.rot;
+      }
+      cs.ships[i].vel = { x: ns.vx, y: ns.vy };
+      cs.ships[i].isThrusting = ns.thrust;
+      cs.ships[i].invulnerable = ns.invuln;
+      cs.ships[i].invulnerableTime = ns.invulnTime;
+      cs.ships[i].hyperspaceCooldown = net.hyperspaceCooldown?.[i] ?? 0;
+    }
 
-    cs.ship2.vel = { x: net.ship2.vx, y: net.ship2.vy };
-    cs.ship2.isThrusting = net.ship2.thrust;
-    cs.ship2.invulnerable = net.ship2.invuln;
-    cs.ship2.invulnerableTime = net.ship2.invulnTime;
-
-    cs.bullets1 = net.bullets1.map((b) => ({
-      pos: { x: b.x, y: b.y },
-      vel: { x: b.vx, y: b.vy },
-      rotation: b.rot,
-      lifetime: b.lifetime,
-      owner: b.owner,
-    }));
-    cs.bullets2 = net.bullets2.map((b) => ({
+    // Apply bullet states
+    for (let i = 0; i < pc && i < net.bullets.length; i++) {
+      cs.bullets[i] = net.bullets[i].map((b) => ({
+        pos: { x: b.x, y: b.y },
+        vel: { x: b.vx, y: b.vy },
+        rotation: b.rot,
+        lifetime: b.lifetime,
+        owner: b.owner,
+      }));
+    }
+    // Apply boss bullet states
+    cs.bossBullets = (net.bossBullets ?? []).map((b) => ({
       pos: { x: b.x, y: b.y },
       vel: { x: b.vx, y: b.vy },
       rotation: b.rot,
@@ -1595,18 +1646,55 @@ const Game = () => {
       zigzagPhase: 0,
     }));
 
-    cs.respawnTimer = net.respawnTimer;
-    cs.waveComplete = net.waveComplete;
-    cs.gameOver = net.gameOver;
+    // Power-ups on the field
+    cs.powerUps = (net.powerUps ?? []).map((pu) => ({
+      pos: { x: pu.x, y: pu.y },
+      vel: { x: 0, y: 0 },
+      rotation: pu.rotation,
+      type: pu.type,
+      lifetime: 300,
+    }));
 
+    // Boss state
+    if (net.boss) {
+      const nb = net.boss;
+      cs.boss = {
+        pos: { x: nb.x, y: nb.y },
+        vel: { x: 0, y: 0 },
+        rotation: nb.rotation,
+        hp: nb.hp, maxHp: nb.maxHp,
+        tentacles: nb.tentacles,
+        shootTimer: nb.shootTimer,
+        hitFlash: nb.hitFlash,
+        phase: nb.phase,
+        entered: nb.entered,
+        targetY: nb.targetY,
+        bossType: nb.bossType,
+        bounceVelX: nb.bounceVelX, bounceVelY: nb.bounceVelY, rotAngle: nb.rotAngle,
+        tractorBeamActive: nb.tractorBeamActive, sweepAngle: nb.sweepAngle,
+        miniSaucers: nb.miniSaucers?.map((ms) => ({ pos: { x: ms.x, y: ms.y }, vel: { x: 0, y: 0 }, hp: 1, shootTimer: 999 })),
+        cubeRotX: nb.cubeRotX, cubeRotY: nb.cubeRotY, regenTimer: nb.regenTimer,
+        miniCubes: nb.miniCubes?.map((mc) => ({ pos: { x: mc.x, y: mc.y }, vel: { x: 0, y: 0 }, hp: 1, rotAngle: mc.rotAngle })),
+      } as Boss;
+    } else {
+      cs.boss = null;
+    }
+
+    // Per-player state
     const prevScore = cs.score;
     const prevWave = cs.wave;
-    const prevL1 = cs.lives1,
-      prevL2 = cs.lives2;
+    const prevLives = [...(cs.lives ?? [])]; // capture BEFORE overwriting cs.lives
+    cs.lives = net.lives ?? [3, 3];
+    cs.eliminated = net.eliminated ?? Array.from({ length: pc }, () => false);
+    cs.respawnTimer = net.respawnTimer;
+    cs.powerUpActive = net.powerUpActive ?? Array.from({ length: pc }, () => ({ shield: 0, rapidFire: 0, multiplier: 0 }));
+    cs.hyperspaceCooldown = net.hyperspaceCooldown ?? Array.from({ length: pc }, () => 0);
+    cs.waveComplete = net.waveComplete;
+    cs.gameOver = net.gameOver;
+    cs.playerCount = pc;
+
     cs.score = net.score;
     cs.wave = net.wave;
-    cs.lives1 = net.lives1;
-    cs.lives2 = net.lives2;
 
     for (const event of net.events) {
       if (event.type === "explosion" || event.type === "die_env") {
@@ -1616,15 +1704,24 @@ const Game = () => {
       if (event.type === "score_pop" && event.points) {
         spawnFloatingTextTo(cs.floatingTexts, { x: event.x, y: event.y }, `+${event.points}`, "#FFFF00", 16);
       }
+      if (event.type === "powerup" && event.label) {
+        spawnFloatingTextTo(cs.floatingTexts, { x: event.x, y: event.y }, event.label, "#CC66FF", 18);
+        soundEffects.powerUp?.();
+      }
+      if (event.type === "boss_spawn" && event.label) {
+        spawnFloatingTextTo(cs.floatingTexts, { x: event.x, y: event.y }, event.label, "#FF4444", 22);
+      }
     }
 
     if (cs.score !== prevScore) setCoopScore(cs.score);
     if (cs.wave !== prevWave) setCoopWave(cs.wave);
-    if (cs.lives1 !== prevL1 || cs.lives2 !== prevL2) setCoopLives([cs.lives1, cs.lives2]);
+    const livesChanged = cs.lives.some((l, i) => l !== prevLives[i]);
+    if (livesChanged) setCoopLives([...cs.lives]);
+    setCoopEliminated([...cs.eliminated]);
     if (net.gameOver) setCoopGameOver(true);
     if (net.waveComplete) setCoopWaveComplete(true);
     else setCoopWaveComplete(false);
-  }, []);
+  }, [multiplayer.playerIdxRef]);
 
   const nextWave = useCallback(() => {
     if (!gameStateRef.current) return;
@@ -3493,8 +3590,10 @@ const Game = () => {
       ]);
 
       // Draw ships
-      if (ds.respawnTimer[0] === 0) drawShip(ctx, ds.ship1, P1_COLOR, "P1");
-      if (ds.respawnTimer[1] === 0) drawShip(ctx, ds.ship2, P2_COLOR, "P2");
+      const duelLabel1 = gameModeRef.current === "online" ? (multiplayer.playerInitialsMap.get(0) ?? "P1") : "P1";
+      const duelLabel2 = gameModeRef.current === "online" ? (multiplayer.playerInitialsMap.get(1) ?? "P2") : "P2";
+      if (ds.respawnTimer[0] === 0) drawShip(ctx, ds.ship1, P1_COLOR, duelLabel1);
+      if (ds.respawnTimer[1] === 0) drawShip(ctx, ds.ship2, P2_COLOR, duelLabel2);
 
       // Draw bullets
       drawBullets(ctx, ds.bullets1, P1_COLOR);
@@ -3505,16 +3604,287 @@ const Game = () => {
 
     if ((gameModeRef.current === "coop" || gameModeRef.current === "online_coop") && coopStateRef.current) {
       const cs = coopStateRef.current;
-      drawCommon(ctx, cs.stars, cs.particles, cs.floatingTexts, cs.asteroids, cs.aliens, "#050510", [
-        "#FFFFFF",
-        "#88DDFF",
-        "#44AAFF",
-      ]);
+      const coopTheme = getTheme(cs.wave);
+      drawCommon(ctx, cs.stars, cs.particles, cs.floatingTexts, cs.asteroids, cs.aliens, coopTheme.bg, coopTheme.asteroids);
 
-      if (cs.respawnTimer[0] === 0) drawShip(ctx, cs.ship1, P1_COLOR, "P1");
-      if (cs.respawnTimer[1] === 0) drawShip(ctx, cs.ship2, P2_COLOR, "P2");
-      drawBullets(ctx, cs.bullets1, P1_COLOR);
-      drawBullets(ctx, cs.bullets2, P2_COLOR);
+      // Draw all players' ships
+      const pc = cs.playerCount ?? cs.ships.length;
+      for (let i = 0; i < pc && i < cs.ships.length; i++) {
+        if (cs.eliminated[i]) continue;
+        if (cs.respawnTimer[i] === 0) {
+          const color = PLAYER_COLORS[i % PLAYER_COLORS.length];
+          const shielded = cs.powerUpActive?.[i]?.shield > 0;
+          const shipLabel = multiplayer.playerInitialsMap.get(i) ?? `P${i + 1}`;
+          drawShip(ctx, cs.ships[i], shielded ? "#7FFF7F" : color, shipLabel);
+        }
+      }
+
+      // Draw all players' bullets
+      for (let i = 0; i < pc && i < cs.bullets.length; i++) {
+        drawBullets(ctx, cs.bullets[i], PLAYER_COLORS[i % PLAYER_COLORS.length]);
+      }
+      // Draw boss bullets in a distinct orange-red colour
+      if (cs.bossBullets?.length) {
+        drawBullets(ctx, cs.bossBullets, "#FF4400");
+      }
+
+      // Draw power-ups on the field
+      (cs.powerUps ?? []).forEach((powerUp) => {
+        ctx.save();
+        ctx.translate(powerUp.pos.x, powerUp.pos.y);
+        ctx.rotate(powerUp.rotation);
+        const color =
+          powerUp.type === "shield" ? "#7FFF7F"
+          : powerUp.type === "rapidFire" ? "#FF6666"
+          : powerUp.type === "multiplier" ? "#FFFF66"
+          : "#CC66FF";
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        for (let i = 0; i < 6; i++) {
+          const angle = (i / 6) * Math.PI * 2 - Math.PI / 2;
+          const x = Math.cos(angle) * 14;
+          const y = Math.sin(angle) * 14;
+          if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        }
+        ctx.closePath();
+        ctx.stroke();
+        ctx.rotate(-powerUp.rotation);
+        ctx.fillStyle = color;
+        ctx.font = "bold 9px monospace";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        const icon = powerUp.type === "shield" ? "SH" : powerUp.type === "rapidFire" ? "RF" : powerUp.type === "extraLife" ? "+1" : "2X";
+        ctx.fillText(icon, 0, 0);
+        ctx.restore();
+      });
+
+      // Draw boss (same rendering as solo mode)
+      if (cs.boss) {
+        const boss = cs.boss;
+        ctx.save();
+        ctx.translate(boss.pos.x, boss.pos.y);
+
+        if (boss.bossType === "tentacle") {
+          const bossColor = boss.hitFlash > 0 ? "#FFFFFF" : "#FF44CC";
+          const tentCount = boss.tentacles;
+          for (let i = 0; i < tentCount; i++) {
+            const baseAngle = (i / tentCount) * Math.PI * 2;
+            ctx.strokeStyle = boss.hitFlash > 0 ? "#FFFFFF" : "#CC44AA";
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(0, 0);
+            const segments = 5;
+            for (let s = 1; s <= segments; s++) {
+              const d = s * 18;
+              const w = Math.sin(boss.phase * 2 + i + s * 0.8) * 15;
+              const tx = Math.cos(baseAngle) * d + Math.cos(baseAngle + Math.PI / 2) * w;
+              const ty = Math.sin(baseAngle) * d + Math.sin(baseAngle + Math.PI / 2) * w;
+              ctx.lineTo(tx, ty);
+            }
+            ctx.stroke();
+          }
+          const pulse = 1 + Math.sin(boss.phase * 3) * 0.05;
+          const bodyR = 45 * pulse;
+          ctx.fillStyle = boss.hitFlash > 0 ? "#FFFFFF" : "#331133";
+          ctx.strokeStyle = bossColor;
+          ctx.lineWidth = 3;
+          ctx.beginPath();
+          ctx.arc(0, 0, bodyR, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.stroke();
+          ctx.fillStyle = bossColor;
+          ctx.beginPath();
+          ctx.arc(0, -5, 12, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = "#000000";
+          ctx.beginPath();
+          ctx.arc(0, -5, 6, 0, Math.PI * 2);
+          ctx.fill();
+        } else if (boss.bossType === "amigaBall") {
+          const radius = 50;
+          const rotAngle = boss.rotAngle ?? 0;
+          const lightDir = { x: -0.5, y: -0.7, z: 0.5 };
+          const lightLen = Math.hypot(lightDir.x, lightDir.y, lightDir.z);
+          lightDir.x /= lightLen; lightDir.y /= lightLen; lightDir.z /= lightLen;
+          const step = 3;
+          for (let py = -radius; py < radius; py += step) {
+            const xRange = Math.sqrt(radius * radius - py * py);
+            for (let px = -xRange; px < xRange; px += step) {
+              const nz = Math.sqrt(Math.max(0, radius * radius - px * px - py * py)) / radius;
+              const nx = px / radius;
+              const ny = py / radius;
+              const theta = Math.atan2(ny, nx);
+              const phi = Math.asin(Math.min(1, Math.max(-1, nz)));
+              const u = (((theta + rotAngle) / Math.PI) * 4 + 100) % 1;
+              const v = (((phi + Math.PI / 2) / Math.PI) * 4 + 100) % 1;
+              const checkerU = Math.floor(u * 2) % 2;
+              const checkerV = Math.floor(v * 2) % 2;
+              const isRed = (checkerU + checkerV) % 2 === 0;
+              const dot = nx * lightDir.x + ny * lightDir.y + nz * lightDir.z;
+              const diffuse = Math.max(0.15, dot);
+              const reflX = 2 * dot * nx - lightDir.x;
+              const reflY = 2 * dot * ny - lightDir.y;
+              const reflZ = 2 * dot * nz - lightDir.z;
+              const spec = Math.pow(Math.max(0, reflZ), 20) * 0.6;
+              let r, g, b: number;
+              if (isRed) {
+                r = Math.min(255, Math.floor(204 * diffuse + spec * 255));
+                g = Math.min(255, Math.floor(spec * 255));
+                b = Math.min(255, Math.floor(spec * 255));
+              } else {
+                r = Math.min(255, Math.floor(255 * diffuse + spec * 255));
+                g = Math.min(255, Math.floor(255 * diffuse + spec * 255));
+                b = Math.min(255, Math.floor(255 * diffuse + spec * 255));
+              }
+              if (boss.hitFlash > 0) { r = 255; g = 255; b = 255; }
+              ctx.fillStyle = `rgb(${r},${g},${b})`;
+              ctx.fillRect(px - step / 2, py - step / 2, step, step);
+            }
+          }
+        } else if (boss.bossType === "flyingSaucer") {
+          const flash = boss.hitFlash > 0;
+          ctx.fillStyle = flash ? "#FFFFFF" : "#446688";
+          ctx.strokeStyle = flash ? "#FFFFFF" : "#88AACC";
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.ellipse(0, -12, 25, 18, 0, Math.PI, 0);
+          ctx.fill(); ctx.stroke();
+          ctx.fillStyle = flash ? "#FFFFFF" : "#334455";
+          ctx.strokeStyle = flash ? "#FFFFFF" : "#667788";
+          ctx.beginPath();
+          ctx.ellipse(0, 0, 55, 14, 0, 0, Math.PI * 2);
+          ctx.fill(); ctx.stroke();
+          const lightCount = 8;
+          for (let i = 0; i < lightCount; i++) {
+            const lAngle = (i / lightCount) * Math.PI * 2 + boss.phase * 2;
+            const lx = Math.cos(lAngle) * 45;
+            const ly = Math.sin(lAngle) * 10;
+            const brightness = (Math.sin(boss.phase * 3 + i) + 1) / 2;
+            ctx.fillStyle = `rgba(${flash ? 255 : 255}, ${flash ? 255 : Math.floor(200 * brightness)}, ${flash ? 255 : 0}, ${0.5 + brightness * 0.5})`;
+            ctx.beginPath();
+            ctx.arc(lx, ly, 3, 0, Math.PI * 2);
+            ctx.fill();
+          }
+          if (boss.tractorBeamActive) {
+            ctx.save();
+            ctx.globalAlpha = 0.15 + Math.sin(boss.phase * 5) * 0.1;
+            const grad = ctx.createLinearGradient(0, 14, 0, 200);
+            grad.addColorStop(0, "#00FF88");
+            grad.addColorStop(1, "rgba(0,255,136,0)");
+            ctx.fillStyle = grad;
+            ctx.beginPath();
+            ctx.moveTo(-20, 14); ctx.lineTo(20, 14); ctx.lineTo(60, 200); ctx.lineTo(-60, 200);
+            ctx.closePath(); ctx.fill();
+            ctx.restore();
+          }
+        } else if (boss.bossType === "borgCube") {
+          const flash = boss.hitFlash > 0;
+          const cubeSize = 45;
+          const rotX = boss.cubeRotX ?? 0;
+          const rotY = boss.cubeRotY ?? 0;
+          const verts = [[-1,-1,-1],[1,-1,-1],[1,1,-1],[-1,1,-1],[-1,-1,1],[1,-1,1],[1,1,1],[-1,1,1]].map(([x, y, z]) => {
+            const x2 = x * Math.cos(rotY) - z * Math.sin(rotY);
+            const z2 = x * Math.sin(rotY) + z * Math.cos(rotY);
+            const y2 = y * Math.cos(rotX) - z2 * Math.sin(rotX);
+            const z3 = y * Math.sin(rotX) + z2 * Math.cos(rotX);
+            const scale = 150 / (150 + z3 * cubeSize * 0.3);
+            return { x: x2 * cubeSize * scale, y: y2 * cubeSize * scale };
+          });
+          const edges = [[0,1],[1,2],[2,3],[3,0],[4,5],[5,6],[6,7],[7,4],[0,4],[1,5],[2,6],[3,7]];
+          ctx.save();
+          ctx.globalAlpha = 0.2;
+          ctx.fillStyle = "#00FF44";
+          ctx.beginPath();
+          ctx.arc(0, 0, cubeSize * 1.5, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+          ctx.strokeStyle = flash ? "#FFFFFF" : "#00FF44";
+          ctx.lineWidth = 2;
+          edges.forEach(([a, b]) => {
+            ctx.beginPath();
+            ctx.moveTo(verts[a].x, verts[a].y);
+            ctx.lineTo(verts[b].x, verts[b].y);
+            ctx.stroke();
+          });
+          ctx.fillStyle = flash ? "#FFFFFF" : "#88FF88";
+          verts.forEach((v) => {
+            ctx.beginPath();
+            ctx.arc(v.x, v.y, 3, 0, Math.PI * 2);
+            ctx.fill();
+          });
+        }
+
+        ctx.restore();
+
+        // Boss HP bar
+        const barW = 200, barH = 8;
+        const barX = (CANVAS_WIDTH - barW) / 2;
+        const barY = CANVAS_HEIGHT - 48;
+        const hpFrac = boss.hp / boss.maxHp;
+        ctx.save();
+        ctx.globalAlpha = 0.7;
+        const bossBarColors: Record<string, string> = { tentacle: "#FF44CC", amigaBall: "#CC0000", flyingSaucer: "#00FF88", borgCube: "#00FF44" };
+        const barColor = bossBarColors[boss.bossType] || "#FF44CC";
+        ctx.strokeStyle = barColor; ctx.lineWidth = 1;
+        ctx.strokeRect(barX, barY, barW, barH);
+        ctx.fillStyle = hpFrac > 0.3 ? barColor : "#FF0000";
+        ctx.fillRect(barX, barY, barW * hpFrac, barH);
+        ctx.globalAlpha = 0.9;
+        ctx.font = "8px 'Press Start 2P', monospace";
+        ctx.fillStyle = "#FFFFFF";
+        ctx.textAlign = "center";
+        const bossNames: Record<string, string> = { tentacle: "BOSS", amigaBall: "AMIGA BALL", flyingSaucer: "FLYING SAUCER", borgCube: "BORG CUBE" };
+        ctx.fillText(bossNames[boss.bossType] || "BOSS", CANVAS_WIDTH / 2, barY - 4);
+        ctx.restore();
+      }
+
+      // Power-up active HUD bars (for my own ship in online, all in local)
+      const myIdx = multiplayer.playerIdxRef.current;
+      const myPa = cs.powerUpActive?.[myIdx];
+      if (myPa) {
+        const activePowerUps: { label: string; color: string; remaining: number; max: number }[] = [];
+        if (myPa.shield > 0) activePowerUps.push({ label: "SHIELD", color: "#7FFF7F", remaining: myPa.shield, max: 300 });
+        if (myPa.rapidFire > 0) activePowerUps.push({ label: "RAPID", color: "#FF6666", remaining: myPa.rapidFire, max: 600 });
+        if (myPa.multiplier > 0) activePowerUps.push({ label: "2x", color: "#FFFF66", remaining: myPa.multiplier, max: 900 });
+        activePowerUps.forEach((pu, i) => {
+          const barX = 10, barY = 10 + i * 18, barW = 120, barH = 12;
+          const fill = pu.remaining / pu.max;
+          ctx.save();
+          ctx.globalAlpha = 0.6;
+          ctx.strokeStyle = pu.color; ctx.lineWidth = 1;
+          ctx.strokeRect(barX, barY, barW, barH);
+          ctx.fillStyle = pu.color; ctx.globalAlpha = 0.35;
+          ctx.fillRect(barX, barY, barW * fill, barH);
+          ctx.globalAlpha = 0.9;
+          ctx.font = "7px 'Press Start 2P', monospace";
+          ctx.fillStyle = pu.color;
+          ctx.fillText(pu.label, barX + 3, barY + 10);
+          ctx.restore();
+        });
+      }
+
+      // Hyperspace cooldown indicator for own ship
+      const myHsCooldown = cs.hyperspaceCooldown?.[myIdx] ?? 0;
+      if (myHsCooldown > 0) {
+        const chargePercent = Math.round(((600 - myHsCooldown) / 600) * 100);
+        ctx.save();
+        ctx.globalAlpha = 0.5;
+        ctx.font = "7px 'Press Start 2P', monospace";
+        ctx.fillStyle = "#88FFFF";
+        ctx.textAlign = "right";
+        ctx.fillText(`HYPER ${chargePercent}%`, CANVAS_WIDTH - 10, 18);
+        ctx.restore();
+      }
+
+      // Wave/theme indicator
+      ctx.save();
+      ctx.globalAlpha = 0.4;
+      ctx.font = "8px 'Press Start 2P', monospace";
+      ctx.fillStyle = coopTheme.accent;
+      ctx.textAlign = "right";
+      ctx.fillText(`${coopTheme.name.toUpperCase()} ZONE`, CANVAS_WIDTH - 10, cs.boss ? 58 : 38);
+      ctx.restore();
 
       // Wave complete banner
       if (cs.waveComplete) {
@@ -3547,12 +3917,29 @@ const Game = () => {
         ctx.restore();
       }
 
-      return;
-    }
+      // Spectator overlay for eliminated players in online coop
+      if (gameModeRef.current === "online_coop" && !isHostRef.current) {
+        const myI = multiplayer.playerIdxRef.current;
+        if (cs.eliminated[myI]) {
+          ctx.save();
+          ctx.globalAlpha = 0.5;
+          ctx.fillStyle = "#000000";
+          ctx.fillRect(CANVAS_WIDTH / 2 - 130, CANVAS_HEIGHT - 55, 260, 20);
+          ctx.globalAlpha = 0.9;
+          ctx.font = "8px 'Press Start 2P', monospace";
+          ctx.fillStyle = "#FF4444";
+          ctx.textAlign = "center";
+          ctx.fillText("YOU WERE ELIMINATED — SPECTATING", CANVAS_WIDTH / 2, CANVAS_HEIGHT - 40);
+          ctx.restore();
+        }
+      }
 
-    if (!gameStateRef.current) return;
-    const state = gameStateRef.current;
-    const theme = getTheme(state.wave);
+      // NOTE: fall through to draw nectarine overlay / CRT effects below
+    } else if (!gameStateRef.current) {
+      // No game state at all: skip solo drawing but still draw CRT/nectarine
+    } else {
+      const state = gameStateRef.current;
+      const theme = getTheme(state.wave);
 
     drawCommon(
       ctx,
@@ -3800,11 +4187,11 @@ const Game = () => {
           [-1, 1, 1],
         ].map(([x, y, z]) => {
           // Rotate around Y
-          let x2 = x * Math.cos(rotY) - z * Math.sin(rotY);
-          let z2 = x * Math.sin(rotY) + z * Math.cos(rotY);
+          const x2 = x * Math.cos(rotY) - z * Math.sin(rotY);
+          const z2 = x * Math.sin(rotY) + z * Math.cos(rotY);
           // Rotate around X
-          let y2 = y * Math.cos(rotX) - z2 * Math.sin(rotX);
-          let z3 = y * Math.sin(rotX) + z2 * Math.cos(rotX);
+          const y2 = y * Math.cos(rotX) - z2 * Math.sin(rotX);
+          const z3 = y * Math.sin(rotX) + z2 * Math.cos(rotX);
           // Project
           const scale = 150 / (150 + z3 * cubeSize * 0.3);
           return { x: x2 * cubeSize * scale, y: y2 * cubeSize * scale };
@@ -4041,6 +4428,8 @@ const Game = () => {
       ctx.restore();
     }
 
+    } // end of else (solo mode drawing)
+
     // Version number removed from canvas (moved to HUD)
 
     // Now playing marquee at bottom of canvas
@@ -4203,9 +4592,20 @@ const Game = () => {
           right: keys[b.p1.right] || gp0.right,
           up: keys[b.p1.thrust] || gp0.up,
           fire: keys[b.p1.fire] || gp0.fire,
+          hyperspace: !!(keys[b.p1.hyperspace] || gp0.hyperspace),
         };
 
-        if (isHostRef.current && workerRef.current) {
+        if (isHostRef.current && workerRef.current && gameModeRef.current === "online_coop") {
+          // Coop host: collect all remote inputs and send full array to worker
+          const cs = coopStateRef.current;
+          const pc = cs?.playerCount ?? 2;
+          const inputsArr: typeof localInput[] = [localInput];
+          for (let i = 1; i < pc; i++) {
+            inputsArr.push(multiplayer.remoteInputsRef.current.get(i) ?? { left: false, right: false, up: false, fire: false, hyperspace: false });
+          }
+          workerRef.current.postMessage({ type: "inputs", inputs: inputsArr });
+        } else if (isHostRef.current && workerRef.current) {
+          // Duel host
           workerRef.current.postMessage({
             type: "inputs",
             p1: localInput,
@@ -4243,12 +4643,15 @@ const Game = () => {
               ds.ship2.isThrusting = pred.isThrusting;
             }
             if (cs) {
-              cs.ship2.pos = { ...pred.pos };
-              cs.ship2.rotation = pred.rotation;
-              cs.ship2.isThrusting = pred.isThrusting;
+              const myIdx = multiplayer.playerIdxRef.current;
+              if (cs.ships[myIdx]) {
+                cs.ships[myIdx].pos = { ...pred.pos };
+                cs.ships[myIdx].rotation = pred.rotation;
+                cs.ships[myIdx].isThrusting = pred.isThrusting;
+              }
             }
           }
-          multiplayer.sendInputs(localInput);
+          multiplayer.sendInputs(localInput, multiplayer.playerIdxRef.current);
         }
         updateOnlineVisuals();
         // Physics run in the worker; updatesThisFrame stays 0 (already initialised)
@@ -4261,18 +4664,22 @@ const Game = () => {
         if (workerRef.current) {
           workerRef.current.postMessage({
             type: "inputs",
-            p1: {
-              left: keys[b.p1.left] || gp0.left,
-              right: keys[b.p1.right] || gp0.right,
-              up: keys[b.p1.thrust] || gp0.up,
-              fire: keys[b.p1.fire] || gp0.fire,
-            },
-            p2: {
-              left: keys[b.p2.left] || gp1.left,
-              right: keys[b.p2.right] || gp1.right,
-              up: keys[b.p2.thrust] || gp1.up,
-              fire: keys[b.p2.fire] || gp1.fire,
-            },
+            inputs: [
+              {
+                left: keys[b.p1.left] || gp0.left,
+                right: keys[b.p1.right] || gp0.right,
+                up: keys[b.p1.thrust] || gp0.up,
+                fire: keys[b.p1.fire] || gp0.fire,
+                hyperspace: !!(keys[b.p1.hyperspace] || gp0.hyperspace),
+              },
+              {
+                left: keys[b.p2.left] || gp1.left,
+                right: keys[b.p2.right] || gp1.right,
+                up: keys[b.p2.thrust] || gp1.up,
+                fire: keys[b.p2.fire] || gp1.fire,
+                hyperspace: !!(keys[b.p2.hyperspace] || gp1.hyperspace),
+              },
+            ],
           });
         }
         updateOnlineVisuals();
@@ -4516,9 +4923,9 @@ const Game = () => {
 
   // Guest: listen for game_start and start the appropriate mode
   useEffect(() => {
-    multiplayer.onGameStartRef.current = (mode: SessionMode) => {
+    multiplayer.onGameStartRef.current = (mode: SessionMode, playerCount?: number) => {
       if (mode === "coop") {
-        initOnlineCoop(false);
+        initOnlineCoop(false, playerCount ?? 2);
       } else {
         initOnline(false);
       }
@@ -4912,10 +5319,12 @@ const Game = () => {
             multiplayer.disconnect();
             setGameMode("menu");
           }}
-          onStartGame={(mode) => {
-            multiplayer.startGame(mode);
+          onInitialsSet={(inits) => multiplayer.setLocalInitials(inits)}
+          onStartGame={(mode, playerCount) => {
+            const pc = playerCount ?? (multiplayer.guestCount + 1);
+            multiplayer.startGame(mode, pc);
             if (mode === "coop") {
-              initOnlineCoop(true);
+              initOnlineCoop(true, pc);
             } else {
               initOnline(true);
             }
@@ -4924,6 +5333,7 @@ const Game = () => {
           isHost={multiplayer.isHost}
           isConnected={multiplayer.isConnected}
           opponentConnected={multiplayer.opponentConnected}
+          guestCount={multiplayer.guestCount}
         />
       </div>
     );
@@ -5459,12 +5869,19 @@ const Game = () => {
           <div className="text-[hsl(var(--game-foreground))] opacity-30">|</div>
           <div style={{ color: "#FFFF00", textShadow: "0 0 10px #FFFF00" }}>SCORE: {coopScore}</div>
           <div className="text-[hsl(var(--game-foreground))] opacity-30">|</div>
-          <div style={{ color: P1_COLOR, textShadow: `0 0 10px ${P1_COLOR}` }}>
-            P1{gameMode === "online_coop" && multiplayer.isHost ? " (YOU)" : ""} ❤{coopLives[0]}
-          </div>
-          <div style={{ color: P2_COLOR, textShadow: `0 0 10px ${P2_COLOR}` }}>
-            P2{gameMode === "online_coop" && !multiplayer.isHost ? " (YOU)" : ""} ❤{coopLives[1]}
-          </div>
+          {Array.from({ length: coopPlayerCount }, (_, i) => {
+            const color = PLAYER_COLORS[i % PLAYER_COLORS.length];
+            const isMe = gameMode === "online_coop" && (multiplayer.isHost ? i === 0 : i === multiplayer.playerIdxRef.current);
+            const eliminated = coopEliminated[i];
+            const label = gameMode === "online_coop"
+              ? (multiplayer.playerInitialsMap.get(i) ?? `P${i + 1}`)
+              : `P${i + 1}`;
+            return (
+              <div key={i} style={{ color, textShadow: `0 0 10px ${color}`, opacity: eliminated ? 0.4 : 1 }}>
+                {label}{isMe ? " (YOU)" : ""} {eliminated ? "💀" : `❤${coopLives[i] ?? 0}`}
+              </div>
+            );
+          })}
           {gameMode === "online_coop" && multiplayer.roomCode && (
             <div className="text-[hsl(var(--game-foreground))] opacity-40 text-xs self-center">
               ROOM: {multiplayer.roomCode}
