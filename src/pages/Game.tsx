@@ -1883,10 +1883,11 @@ const Game = () => {
         state.gameOver = true;
         stopHeartbeatInterval();
         setShowGameOver(true);
-        // Trainer mode: don't offer score saving
-        if (HIGH_SCORES_ENABLED && !(DEBUG_ENABLED && trainerModeRef.current) && isHighScore(state.score))
+        // Offer local high score entry (skip in trainer mode)
+        if (!(DEBUG_ENABLED && trainerModeRef.current) && isHighScore(state.score))
           setEnteringInitials(true);
-        loadLeaderboard().then(setLeaderboard);
+        // Also refresh server leaderboard if enabled
+        if (HIGH_SCORES_ENABLED) loadLeaderboard().then(setLeaderboard);
         // Game over
         haptics.gameOver();
       } else {
