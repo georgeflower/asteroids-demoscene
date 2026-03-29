@@ -7,6 +7,7 @@ import { soundEffects } from "@/utils/soundEffects";
 import { haptics } from "@/utils/haptics";
 import { useMultiplayer } from "@/hooks/useMultiplayer";
 import OnlineLobby from "@/components/OnlineLobby";
+import LobbyChat from "@/components/LobbyChat";
 import CRTBootOverlay from "@/components/CRTBootOverlay";
 import ControlSettings from "@/components/ControlSettings";
 import { loadBindings, displayKeyName, type ControlBindings } from "@/hooks/useControlSettings";
@@ -401,6 +402,8 @@ const Game = () => {
   const [coopGameOver, setCoopGameOver] = useState(false);
   const [coopWaveComplete, setCoopWaveComplete] = useState(false);
   const [coopPlayerStats, setCoopPlayerStats] = useState<CoopPlayerStat[]>([]);
+  const [hostRestarted, setHostRestarted] = useState(false);
+  const [isSpectating, setIsSpectating] = useState(false);
   const [menuSelection, setMenuSelection] = useState(0); // 0=solo, 1=duel, 2=coop, 3=online, 4=settings
   const [gameOverSelection, setGameOverSelection] = useState(0); // 0=play again, 1=menu
   const [isPaused, setIsPaused] = useState(false);
@@ -1575,6 +1578,7 @@ const Game = () => {
         setCoopGameOver(false);
         setCoopWaveComplete(false);
         setCoopPlayerStats([]);
+        setHostRestarted(false);
         setGameMode("online_coop");
         broadcastTickRef.current = 0;
         prevCoopThrustRef.current = false;
@@ -5062,17 +5066,50 @@ const Game = () => {
     };
   }, [initOnline, initOnlineCoop]);
 
+  // Guest: listen for game_restart from host and show the READY button
+  useEffect(() => {
+    multiplayer.onGameRestartRef.current = (playerCount?: number) => {
+      // Use gameModeRef (not gameMode state) to get the current value inside the callback closure
+      if (gameModeRef.current === "online_coop") {
+        if (playerCount != null) {
+          setCoopPlayerCount(playerCount);
+        }
+        setHostRestarted(true);
+      }
+    };
+  }, [multiplayer.onGameRestartRef]);
+
   // Guest/late-joiner: listen for players_added to enter an in-progress game
   useEffect(() => {
     multiplayer.onPlayersAddedRef.current = (newPlayerCount: number) => {
-      if (gameModeRef.current === "online_lobby") {
-        // Late joiner: transition from lobby into the game
+      if (gameModeRef.current === "online_lobby" || gameModeRef.current === "online_coop") {
+        // Late joiner from lobby, or spectator already in online_coop who needs a fresh init
+        // with the authoritative player count broadcast by the host.
         initOnlineCoop(false, newPlayerCount);
       }
       // Existing online_coop guests don't need to re-init; applyCoopNetState handles the
       // expanded player count automatically as new state arrives from the host.
     };
   }, [initOnlineCoop]);
+
+  // Guest late-joiner: when gameInProgress is detected in the lobby, mark as spectating.
+  // Actual initOnlineCoop is handled by the players_added event (authoritative player count).
+  const spectatorInitedRef = useRef(false);
+  useEffect(() => {
+    if (
+      gameMode === "online_lobby" &&
+      !multiplayer.isHost &&
+      multiplayer.gameInProgress &&
+      !spectatorInitedRef.current
+    ) {
+      spectatorInitedRef.current = true;
+      setIsSpectating(true);
+    }
+    // Reset the guard when leaving the lobby
+    if (gameMode !== "online_lobby") {
+      spectatorInitedRef.current = false;
+    }
+  }, [gameMode, multiplayer.isHost, multiplayer.gameInProgress]);
 
   // Host (duel): worker message handler – broadcast every tick for minimum lag
   useEffect(() => {
@@ -5174,6 +5211,8 @@ const Game = () => {
     setCoopGameOver(false);
     setCoopWaveComplete(false);
     setCoopPlayerStats([]);
+    setHostRestarted(false);
+    setIsSpectating(false);
     isPausedRef.current = false;
     setIsPaused(false);
     soundEffects.stopThrust();
@@ -6405,11 +6444,32 @@ const Game = () => {
               )}
               {gameMode === "online_coop" && multiplayer.isHost && (
                 <Button
-                  onClick={() => initCoop(true, coopPlayerCount)}
+                  onClick={() => {
+                    multiplayer.sendGameRestart();
+                    initCoop(true, coopPlayerCount);
+                  }}
                   className="text-base sm:text-lg px-6 py-3 font-mono"
                   style={{ fontFamily: "'Press Start 2P', monospace" }}
                 >
                   RESTART
+                </Button>
+              )}
+              {gameMode === "online_coop" && !multiplayer.isHost && hostRestarted && (
+                <Button
+                  onClick={() => {
+                    setHostRestarted(false);
+                    setIsSpectating(false);
+                    initOnlineCoop(false, coopPlayerCount);
+                  }}
+                  className="text-base sm:text-lg px-6 py-3 font-mono animate-pulse"
+                  style={{
+                    fontFamily: "'Press Start 2P', monospace",
+                    background: "#44FF88",
+                    color: "#000000",
+                    boxShadow: "0 0 20px #44FF88",
+                  }}
+                >
+                  READY
                 </Button>
               )}
               <Button
@@ -6503,6 +6563,52 @@ const Game = () => {
 
         {/* FPS overlay – always visible, subtle */}
         <FpsOverlay />
+
+        {/* Spectating indicator for late-joining spectators */}
+        {gameMode === "online_coop" && !multiplayer.isHost && isSpectating && !coopGameOver && (
+          <div className="absolute bottom-10 left-0 right-0 flex justify-center pointer-events-none">
+            <div
+              className="px-3 py-1 font-mono text-xs animate-pulse"
+              style={{
+                background: "rgba(0,0,0,0.6)",
+                color: "#44FF88",
+                fontFamily: "'Press Start 2P', monospace",
+                textShadow: "0 0 8px #44FF88",
+              }}
+            >
+              SPECTATING — You'll join next round
+            </div>
+          </div>
+        )}
+
+        {/* Persistent chat overlay during online gameplay */}
+        {(gameMode === "online_coop" || gameMode === "online") && (
+          <div className="absolute bottom-2 right-2 z-20" style={{ opacity: 0.85 }}>
+            <LobbyChat
+              messages={multiplayer.chatMessages}
+              onSend={(text) => multiplayer.sendChatMessage(text)}
+            />
+          </div>
+        )}
+
+        {/* Host disconnected modal */}
+        {(gameMode === "online_coop" || gameMode === "online") && multiplayer.hostDisconnected && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/90 z-50">
+            <div
+              className="text-3xl sm:text-4xl font-mono text-[hsl(var(--game-danger))] mb-8 animate-pulse text-center"
+              style={{ fontFamily: "'Press Start 2P', monospace", textShadow: "0 0 20px hsl(var(--game-danger))" }}
+            >
+              HOST ENDED GAME!
+            </div>
+            <Button
+              onClick={quitToMenu}
+              className="text-base sm:text-xl px-8 py-4 font-mono"
+              style={{ fontFamily: "'Press Start 2P', monospace" }}
+            >
+              GO BACK TO MAIN MENU
+            </Button>
+          </div>
+        )}
 
         {/* Debug panel overlay */}
         {DEBUG_ENABLED && showDebugPanel && (

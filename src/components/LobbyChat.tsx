@@ -38,7 +38,7 @@ const LobbyChat = ({ messages, onSend, disabled = false }: LobbyChatProps) => {
     >
       {/* Header */}
       <div className="px-3 py-2 border-b border-[hsl(var(--game-foreground))]/20 text-xs font-mono text-[hsl(var(--game-foreground))]/60 tracking-widest uppercase">
-        Lobby Chat
+        Chat
       </div>
 
       {/* Message list */}
