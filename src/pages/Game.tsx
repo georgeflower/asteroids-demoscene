@@ -1564,6 +1564,7 @@ const Game = () => {
         setCoopGameOver(false);
         setCoopWaveComplete(false);
         setCoopPlayerStats([]);
+        setGameMode("online_coop");
         broadcastTickRef.current = 0;
         checkVersion();
         // Guest prediction ship (own player ship)
@@ -5055,6 +5056,7 @@ const Game = () => {
     setCoopGameOver(false);
     setCoopWaveComplete(false);
     setCoopPlayerStats([]);
+    isPausedRef.current = false;
     setIsPaused(false);
     soundEffects.stopThrust();
     // Release canvas focus
