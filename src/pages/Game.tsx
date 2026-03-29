@@ -5508,20 +5508,56 @@ const Game = () => {
         )}
 
         {/* High scores disabled message */}
-        {!HIGH_SCORES_ENABLED && (
+        {!HIGH_SCORES_ENABLED && localHighScores.length === 0 && (
           <div className="mb-8 w-72 text-center">
             <div
               className="text-sm font-mono text-[hsl(var(--game-glow))] mb-1 tracking-wider"
               style={{ textShadow: "0 0 10px hsl(var(--game-glow))" }}
             >
-              ★ HIGH SCORES ARE DISABLED ★
+              ★ NO HIGH SCORES YET ★
             </div>
             <div
               className="text-sm font-mono tracking-wider"
               style={{ color: "#FFD700", textShadow: "0 0 10px #FFD700" }}
             >
-              MBD IS THE GRAND CHAMPION!
+              PLAY A GAME TO SET A RECORD!
             </div>
+          </div>
+        )}
+
+        {/* Local high scores on main menu */}
+        {!HIGH_SCORES_ENABLED && localHighScores.length > 0 && (
+          <div className="mb-4 w-72">
+            <div
+              className="text-sm font-mono text-[hsl(var(--game-glow))] text-center mb-2 tracking-wider"
+              style={{ textShadow: "0 0 10px hsl(var(--game-glow))" }}
+            >
+              ★ LOCAL HIGH SCORES ★
+            </div>
+            <div className="border border-[hsl(var(--game-foreground))]/30 p-2">
+              {localHighScores.slice(0, 3).map((entry, i) => (
+                <div
+                  key={i}
+                  className="flex justify-between font-mono text-sm py-0.5 text-[hsl(var(--game-foreground))]"
+                >
+                  <span
+                    className={i === 0 ? "text-[#FFD700]" : i === 1 ? "text-[#C0C0C0]" : "text-[#CD7F32]"}
+                    style={{ whiteSpace: "pre" }}
+                  >
+                    {(i + 1).toString().padStart(2, " ")}. {entry.initials.padEnd(3, " ")}
+                  </span>
+                  <span className={i === 0 ? "text-[#FFD700]" : i === 1 ? "text-[#C0C0C0]" : "text-[#CD7F32]"}>
+                    {entry.score.toString().padStart(8, "0")}
+                  </span>
+                </div>
+              ))}
+            </div>
+            <button
+              onClick={() => setShowFullLeaderboard(true)}
+              className="w-full mt-1 font-mono text-[10px] text-[hsl(var(--game-foreground))] opacity-50 hover:opacity-100 transition-opacity uppercase tracking-widest text-center py-1"
+            >
+              VIEW ALL SCORES ▸
+            </button>
           </div>
         )}
 
