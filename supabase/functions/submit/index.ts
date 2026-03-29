@@ -327,7 +327,7 @@ async function handleHeartbeat(req: Request, supabaseAdmin: any) {
 
     // Score cannot decrease
     if (scoreDelta < 0) {
-      console.log(`Score decreased: ${payload.score} < ${lastScore}, token=${payload.gameSessionToken}`);
+      console.log(`Score decreased: ${payload.score} < ${lastScore}, token=${payload.token}`);
       return errorResponse('Invalid score progression', 400);
     }
 
