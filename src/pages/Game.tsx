@@ -6128,18 +6128,7 @@ const Game = () => {
                 </div>
               </div>
             )}
-<div className="mb-8 w-72 text-center">
-            <div
-              className="text-sm font-mono text-[hsl(var(--game-glow))] mb-1 tracking-wider"
-              style={{ textShadow: "0 0 10px hsl(var(--game-glow))" }}
-            >
-              ★ GLOBAL HIGH SCORES ARE DISABLED ★
-            </div>
-            <div
-              className="text-sm font-mono tracking-wider"
-              style={{ color: "#FFD700", textShadow: "0 0 10px #FFD700" }}
-            >
-              MBD IS THE GRAND CHAMPION with 116 040 !</div>
+
             <div className="flex gap-4">
               <Button
                 onClick={initGame}
