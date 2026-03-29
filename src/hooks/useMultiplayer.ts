@@ -71,7 +71,7 @@ export function useMultiplayer() {
 
     channel
       .on("presence", { event: "join" }, ({ newPresences }) => {
-        const guests = newPresences.filter((p: PresenceInfo) => p.role === "guest");
+        const guests = newPresences.filter((p: any) => p.role === "guest");
         if (guests.length > 0) {
           setOpponentConnected(true);
         }
