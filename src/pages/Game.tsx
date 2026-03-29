@@ -1805,6 +1805,8 @@ const Game = () => {
         stats.sort((a, b) => b.score - a.score);
         setCoopPlayerStats(stats);
       }
+    } else {
+      setCoopGameOver(false);
     }
     if (net.waveComplete) setCoopWaveComplete(true);
     else setCoopWaveComplete(false);
@@ -6363,6 +6365,15 @@ const Game = () => {
                   style={{ fontFamily: "'Press Start 2P', monospace" }}
                 >
                   PLAY AGAIN
+                </Button>
+              )}
+              {gameMode === "online_coop" && multiplayer.isHost && (
+                <Button
+                  onClick={() => initCoop(true, coopPlayerCount)}
+                  className="text-base sm:text-lg px-6 py-3 font-mono"
+                  style={{ fontFamily: "'Press Start 2P', monospace" }}
+                >
+                  RESTART
                 </Button>
               )}
               <Button
