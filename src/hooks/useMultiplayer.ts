@@ -30,6 +30,7 @@ export function useMultiplayer() {
   // Map from playerIdx → initials for all players in the room
   const [playerInitialsMap, setPlayerInitialsMap] = useState<Map<number, string>>(new Map());
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [hostDisconnected, setHostDisconnected] = useState(false);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const remoteStateRef = useRef<DuelNetState | null>(null);
   const remoteCoopStateRef = useRef<CoopNetState | null>(null);
@@ -37,6 +38,8 @@ export function useMultiplayer() {
   // Map from playerIdx to latest InputState (for N-player coop)
   const remoteInputsRef = useRef<Map<number, InputState>>(new Map());
   const onGameStartRef = useRef<((mode: SessionMode, playerCount?: number) => void) | null>(null);
+  // Callback invoked when host broadcasts a game restart
+  const onGameRestartRef = useRef<(() => void) | null>(null);
   // Own player index assigned when joining (0 = host, 1+ = guests)
   const playerIdxRef = useRef<number>(0);
   // Local player's initials
@@ -163,6 +166,7 @@ export function useMultiplayer() {
       .on("presence", { event: "leave" }, ({ leftPresences }) => {
         if (leftPresences.some((p: any) => p.role === "host")) {
           setOpponentConnected(false);
+          setHostDisconnected(true);
         }
         const state = channel.presenceState() as PresenceState;
         const allGuests = Object.values(state).flat().filter((p: PresenceInfo) => p.role === "guest");
@@ -215,6 +219,9 @@ export function useMultiplayer() {
       .on("broadcast", { event: "players_added" }, ({ payload }) => {
         const { newPlayerCount } = payload as { newPlayerCount: number };
         onPlayersAddedRef.current?.(newPlayerCount);
+      })
+      .on("broadcast", { event: "game_restart" }, () => {
+        onGameRestartRef.current?.();
       })
       .subscribe(async (status) => {
         if (status === "SUBSCRIBED") {
@@ -321,6 +328,15 @@ export function useMultiplayer() {
     });
   }, []);
 
+  /** Host: broadcast a game restart event to all guests */
+  const sendGameRestart = useCallback(() => {
+    channelRef.current?.send({
+      type: "broadcast",
+      event: "game_restart",
+      payload: {},
+    }).catch(() => {});
+  }, []);
+
   const disconnect = useCallback(() => {
     if (channelRef.current) {
       supabase.removeChannel(channelRef.current);
@@ -338,6 +354,7 @@ export function useMultiplayer() {
     setGameInProgressState(false);
     gameInProgressRef.current = false;
     localInitialsRef.current = "";
+    setHostDisconnected(false);
   }, []);
 
   /** Call this before createRoom/joinRoom to set the player's own initials */
@@ -404,9 +421,11 @@ export function useMultiplayer() {
     remoteInputsRef,
     playerIdxRef,
     onGameStartRef,
+    onGameRestartRef,
     onRemoteStateRef,
     onRemoteCoopStateRef,
     onPlayersAddedRef,
+    hostDisconnected,
     createRoom,
     joinRoom,
     sendState,
@@ -414,6 +433,7 @@ export function useMultiplayer() {
     sendInputs,
     startGame,
     sendChatMessage,
+    sendGameRestart,
     disconnect,
     setLocalInitials,
     setGameInProgress,
