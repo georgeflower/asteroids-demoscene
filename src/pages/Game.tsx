@@ -1578,6 +1578,7 @@ const Game = () => {
         setCoopGameOver(false);
         setCoopWaveComplete(false);
         setCoopPlayerStats([]);
+        setHostRestarted(false);
         setGameMode("online_coop");
         broadcastTickRef.current = 0;
         prevCoopThrustRef.current = false;
@@ -5067,16 +5068,23 @@ const Game = () => {
 
   // Guest: listen for game_restart from host and show the READY button
   useEffect(() => {
-    multiplayer.onGameRestartRef.current = () => {
-      setHostRestarted(true);
+    multiplayer.onGameRestartRef.current = (playerCount?: number) => {
+      // Use gameModeRef (not gameMode state) to get the current value inside the callback closure
+      if (gameModeRef.current === "online_coop") {
+        if (playerCount != null) {
+          setCoopPlayerCount(playerCount);
+        }
+        setHostRestarted(true);
+      }
     };
   }, [multiplayer.onGameRestartRef]);
 
   // Guest/late-joiner: listen for players_added to enter an in-progress game
   useEffect(() => {
     multiplayer.onPlayersAddedRef.current = (newPlayerCount: number) => {
-      if (gameModeRef.current === "online_lobby") {
-        // Late joiner: transition from lobby into the game
+      if (gameModeRef.current === "online_lobby" || gameModeRef.current === "online_coop") {
+        // Late joiner from lobby, or spectator already in online_coop who needs a fresh init
+        // with the authoritative player count broadcast by the host.
         initOnlineCoop(false, newPlayerCount);
       }
       // Existing online_coop guests don't need to re-init; applyCoopNetState handles the
@@ -5084,7 +5092,8 @@ const Game = () => {
     };
   }, [initOnlineCoop]);
 
-  // Guest late-joiner: when gameInProgress is detected in the lobby, auto-enter as spectator
+  // Guest late-joiner: when gameInProgress is detected in the lobby, mark as spectating.
+  // Actual initOnlineCoop is handled by the players_added event (authoritative player count).
   const spectatorInitedRef = useRef(false);
   useEffect(() => {
     if (
@@ -5094,15 +5103,13 @@ const Game = () => {
       !spectatorInitedRef.current
     ) {
       spectatorInitedRef.current = true;
-      const pc = multiplayer.guestCount + 1;
       setIsSpectating(true);
-      initOnlineCoop(false, pc);
     }
     // Reset the guard when leaving the lobby
     if (gameMode !== "online_lobby") {
       spectatorInitedRef.current = false;
     }
-  }, [gameMode, multiplayer.isHost, multiplayer.gameInProgress, multiplayer.guestCount, initOnlineCoop]);
+  }, [gameMode, multiplayer.isHost, multiplayer.gameInProgress]);
 
   // Host (duel): worker message handler – broadcast every tick for minimum lag
   useEffect(() => {
@@ -5204,6 +5211,8 @@ const Game = () => {
     setCoopGameOver(false);
     setCoopWaveComplete(false);
     setCoopPlayerStats([]);
+    setHostRestarted(false);
+    setIsSpectating(false);
     isPausedRef.current = false;
     setIsPaused(false);
     soundEffects.stopThrust();

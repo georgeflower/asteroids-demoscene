@@ -39,7 +39,7 @@ export function useMultiplayer() {
   const remoteInputsRef = useRef<Map<number, InputState>>(new Map());
   const onGameStartRef = useRef<((mode: SessionMode, playerCount?: number) => void) | null>(null);
   // Callback invoked when host broadcasts a game restart
-  const onGameRestartRef = useRef<(() => void) | null>(null);
+  const onGameRestartRef = useRef<((playerCount?: number) => void) | null>(null);
   // Own player index assigned when joining (0 = host, 1+ = guests)
   const playerIdxRef = useRef<number>(0);
   // Local player's initials
@@ -156,6 +156,7 @@ export function useMultiplayer() {
       .on("presence", { event: "join" }, ({ newPresences }) => {
         if (newPresences.some((p: any) => p.role === "host")) {
           setOpponentConnected(true);
+          setHostDisconnected(false);
         }
         const state = channel.presenceState() as PresenceState;
         const allGuests = Object.values(state).flat().filter((p: PresenceInfo) => p.role === "guest");
@@ -220,8 +221,9 @@ export function useMultiplayer() {
         const { newPlayerCount } = payload as { newPlayerCount: number };
         onPlayersAddedRef.current?.(newPlayerCount);
       })
-      .on("broadcast", { event: "game_restart" }, () => {
-        onGameRestartRef.current?.();
+      .on("broadcast", { event: "game_restart" }, ({ payload }) => {
+        const { playerCount } = (payload ?? {}) as { playerCount?: number };
+        onGameRestartRef.current?.(playerCount);
       })
       .subscribe(async (status) => {
         if (status === "SUBSCRIBED") {
@@ -330,10 +332,13 @@ export function useMultiplayer() {
 
   /** Host: broadcast a game restart event to all guests */
   const sendGameRestart = useCallback(() => {
-    channelRef.current?.send({
+    const channel = channelRef.current;
+    if (!channel) return;
+    const playerCount = 1 + guestCountRef.current;
+    channel.send({
       type: "broadcast",
       event: "game_restart",
-      payload: {},
+      payload: { playerCount },
     }).catch(() => {});
   }, []);
 
