@@ -5561,7 +5561,61 @@ const Game = () => {
           </div>
         )}
 
-        {/* Full leaderboard overlay (current scores) */}
+        {/* Full local leaderboard overlay */}
+        {!HIGH_SCORES_ENABLED && showFullLeaderboard && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/85"
+            onClick={() => setShowFullLeaderboard(false)}
+          >
+            <div
+              className="bg-[hsl(var(--game-background))] border-2 border-[hsl(var(--game-foreground))]/40 p-6 max-w-sm w-full max-h-[80vh] overflow-auto"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div
+                className="text-lg font-mono text-[hsl(var(--game-glow))] text-center mb-4 tracking-wider"
+                style={{ textShadow: "0 0 10px hsl(var(--game-glow))" }}
+              >
+                ★ LOCAL HIGH SCORES ★
+              </div>
+              {localHighScores.length === 0 ? (
+                <div className="text-center font-mono text-sm text-[hsl(var(--game-foreground))]/60">No scores yet</div>
+              ) : (
+                localHighScores.map((entry, i) => (
+                  <div
+                    key={i}
+                    className="flex justify-between font-mono text-sm py-0.5 text-[hsl(var(--game-foreground))]"
+                  >
+                    <span style={{ whiteSpace: "pre" }}>
+                      {(i + 1).toString().padStart(2, " ")}. {entry.initials.padEnd(3, " ")}
+                    </span>
+                    <span>{entry.score.toString().padStart(8, "0")}</span>
+                  </div>
+                ))
+              )}
+              <div className="flex gap-2 mt-4">
+                <button
+                  onClick={() => setShowFullLeaderboard(false)}
+                  className="flex-1 font-mono text-xs text-[hsl(var(--game-foreground))] opacity-60 hover:opacity-100 transition-opacity uppercase tracking-widest text-center py-2 border border-[hsl(var(--game-foreground))]/30"
+                >
+                  CLOSE
+                </button>
+                {localHighScores.length > 0 && (
+                  <button
+                    onClick={() => {
+                      localStorage.removeItem(LOCAL_SCORES_KEY);
+                      setLocalHighScores([]);
+                    }}
+                    className="flex-1 font-mono text-xs text-[hsl(var(--game-danger))] opacity-60 hover:opacity-100 transition-opacity uppercase tracking-widest text-center py-2 border border-[hsl(var(--game-danger))]/30"
+                  >
+                    CLEAR SCORES
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Full server leaderboard overlay (current scores) */}
         {HIGH_SCORES_ENABLED && showFullLeaderboard && (
           <div
             className="fixed inset-0 z-50 flex items-center justify-center bg-black/85"
