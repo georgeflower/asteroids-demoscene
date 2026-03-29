@@ -47,6 +47,7 @@ export interface NetAlien {
   type: "brown" | "greenMan" | "blueSentinel" | "purpleSwarm";
   isInvisible?: boolean;
   chargeTimer?: number;
+  zigzagPhase?: number;
 }
 
 export interface GameEvent {

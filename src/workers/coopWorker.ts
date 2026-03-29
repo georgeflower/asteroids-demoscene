@@ -204,12 +204,14 @@ function createAlien(type: "brown" | "greenMan" | "blueSentinel" | "purpleSwarm"
 function spawnPurpleSwarmGroup(): Alien[] {
   const fId = Math.floor(Math.random() * 10000);
   const side = Math.random() < 0.5 ? -20 : W + 20;
+  const dir = side < 0 ? 1 : -1;
   const baseY = 60 + Math.random() * (H - 120);
   const group: Alien[] = [];
   for (let i = 0; i < 3; i++) {
     const a = createAlien("purpleSwarm");
     a.pos.x = side;
     a.pos.y = baseY + (i - 1) * 25;
+    a.vel.x = Math.abs(a.vel.x) * dir;
     a.flockId = fId;
     group.push(a);
   }
@@ -711,7 +713,7 @@ function updateTick() {
       if (wave >= 8 && aliens.filter(a => a.type === "blueSentinel").length < 1) {
         aliens.push(createAlien("blueSentinel"));
       }
-      if (wave >= 12 && aliens.filter(a => a.type === "purpleSwarm").length < 3) {
+      if (wave >= 12 && aliens.filter(a => a.type === "purpleSwarm").length === 0) {
         aliens.push(...spawnPurpleSwarmGroup());
       }
       alienSpawnTimer = Math.max(180, 500 - wave * 20) + Math.random() * 200;
@@ -879,12 +881,14 @@ function updateTick() {
     }
     if (eliminated[p]) continue;
 
-    // Ship vs alien bullets
-    for (const b of alienBullets) {
-      if (dist(ship.pos, b.pos) < SHIP_SIZE + 3) {
-        if (!shielded) killPlayer(p); break;
+    // Ship vs alien bullets (bullet is consumed on hit)
+    alienBullets = alienBullets.filter(b => {
+      if (!eliminated[p] && dist(ship.pos, b.pos) < SHIP_SIZE + 3) {
+        if (!shielded) killPlayer(p);
+        return false; // remove bullet regardless of shield
       }
-    }
+      return true;
+    });
     if (eliminated[p]) continue;
 
     // Ship vs boss body
@@ -1059,7 +1063,7 @@ function buildAndSendState() {
     })),
     aliens: aliens.map(a => ({
       x: a.pos.x, y: a.pos.y, vx: a.vel.x, vy: a.vel.y, type: a.type,
-      isInvisible: a.isInvisible, chargeTimer: a.chargeTimer,
+      isInvisible: a.isInvisible, chargeTimer: a.chargeTimer, zigzagPhase: a.zigzagPhase,
     })),
     powerUps: powerUps.map(pu => ({ x: pu.pos.x, y: pu.pos.y, rotation: pu.rotation, type: pu.type })),
     boss: boss ? {

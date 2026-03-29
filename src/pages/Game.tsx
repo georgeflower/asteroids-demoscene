@@ -1656,7 +1656,7 @@ const Game = () => {
       hp: 1,
       moveTimer: 0,
       shootTimer: 999,
-      zigzagPhase: 0,
+      zigzagPhase: a.zigzagPhase ?? 0,
       isInvisible: a.isInvisible,
       chargeTimer: a.chargeTimer,
     }));
