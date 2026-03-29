@@ -166,8 +166,15 @@ export function useMultiplayer() {
       })
       .on("presence", { event: "leave" }, ({ leftPresences }) => {
         if (leftPresences.some((p: any) => p.role === "host")) {
-          setOpponentConnected(false);
-          setHostDisconnected(true);
+          // Check if host is still present (re-track causes a leave+join pair)
+          const currentState = channel.presenceState() as PresenceState;
+          const hostStillPresent = Object.values(currentState)
+            .flat()
+            .some((p: PresenceInfo) => p.role === "host");
+          if (!hostStillPresent) {
+            setOpponentConnected(false);
+            setHostDisconnected(true);
+          }
         }
         const state = channel.presenceState() as PresenceState;
         const allGuests = Object.values(state).flat().filter((p: PresenceInfo) => p.role === "guest");
