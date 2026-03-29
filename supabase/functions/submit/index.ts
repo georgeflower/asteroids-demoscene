@@ -356,7 +356,7 @@ async function handleHeartbeat(req: Request, supabaseAdmin: any) {
     // Bullets delta must be plausible
     const maxBulletsDelta = MAX_BULLETS_PER_SEC * dtSec;
     if (bulletsDelta > maxBulletsDelta) {
-      console.log(`Bullets delta too high: +${bulletsDelta} in ${dtSec.toFixed(1)}s (max ${maxBulletsDelta.toFixed(0)}), token=${payload.gameSessionToken}`);
+      console.log(`Bullets delta too high: +${bulletsDelta} in ${dtSec.toFixed(1)}s (max ${maxBulletsDelta.toFixed(0)}), token=${payload.token}`);
       return errorResponse('Metric progression anomaly', 403);
     }
 
