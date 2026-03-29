@@ -4629,7 +4629,8 @@ const Game = () => {
           const pc = cs?.playerCount ?? 2;
           const inputsArr: { left: boolean; right: boolean; up: boolean; fire: boolean; hyperspace: boolean }[] = [localInput];
           for (let i = 1; i < pc; i++) {
-            inputsArr.push(multiplayer.remoteInputsRef.current.get(i) ?? { left: false, right: false, up: false, fire: false, hyperspace: false });
+            const remote = multiplayer.remoteInputsRef.current.get(i);
+            inputsArr.push(remote ? { ...remote, hyperspace: remote.hyperspace ?? false } : { left: false, right: false, up: false, fire: false, hyperspace: false });
           }
           workerRef.current.postMessage({ type: "inputs", inputs: inputsArr });
         } else if (isHostRef.current && workerRef.current) {
