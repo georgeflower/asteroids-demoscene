@@ -376,6 +376,7 @@ const Game = () => {
   const [showOldLeaderboard, setShowOldLeaderboard] = useState(false);
   const [showChangelog, setShowChangelog] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [isChatOpen, setIsChatOpen] = useState(false);
   const controlBindingsRef = useRef<ControlBindings>(loadBindings());
   const [showLifeLost, setShowLifeLost] = useState(false);
   const showLifeLostRef = useRef(false);
@@ -5184,6 +5185,24 @@ const Game = () => {
     };
   }, []);
 
+  // TAB key toggles the in-game chat panel during online modes
+  useEffect(() => {
+    if (gameMode !== "online_coop" && gameMode !== "online") return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Tab") {
+        e.preventDefault();
+        setIsChatOpen((open) => {
+          if (open) {
+            canvasRef.current?.focus();
+          }
+          return !open;
+        });
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [gameMode]);
+
   const continueAfterLifeLost = useCallback(() => {
     showLifeLostRef.current = false;
     setShowLifeLost(false);
@@ -6581,13 +6600,35 @@ const Game = () => {
           </div>
         )}
 
-        {/* Persistent chat overlay during online gameplay */}
+        {/* Collapsible chat overlay during online gameplay — top-left, toggled with TAB */}
         {(gameMode === "online_coop" || gameMode === "online") && (
-          <div className="absolute bottom-2 right-2 z-20" style={{ opacity: 0.85 }}>
-            <LobbyChat
-              messages={multiplayer.chatMessages}
-              onSend={(text) => multiplayer.sendChatMessage(text)}
-            />
+          <div className="absolute top-2 left-2 z-20" style={{ maxWidth: "20rem" }}>
+            {isChatOpen ? (
+              <div
+                onKeyDown={(e) => {
+                  if (e.key === "Tab") {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setIsChatOpen(false);
+                    canvasRef.current?.focus();
+                  }
+                }}
+              >
+                <LobbyChat
+                  messages={multiplayer.chatMessages}
+                  onSend={(text) => multiplayer.sendChatMessage(text)}
+                />
+              </div>
+            ) : (
+              <button
+                onClick={() => setIsChatOpen(true)}
+                className="font-mono text-xs px-2 py-1 border border-[hsl(var(--game-foreground))]/30 text-[hsl(var(--game-foreground))]/50 hover:text-[hsl(var(--game-foreground))]/80 hover:border-[hsl(var(--game-foreground))]/60 transition-colors"
+                style={{ background: "rgba(0,0,0,0.5)" }}
+                tabIndex={-1}
+              >
+                CHAT [TAB]
+              </button>
+            )}
           </div>
         )}
 
