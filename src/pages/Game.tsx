@@ -6052,7 +6052,8 @@ const Game = () => {
               FINAL SCORE: {displayScore.toString().padStart(8, "0")}
             </div>
 
-            {HIGH_SCORES_ENABLED && enteringInitials && (
+            {/* Local high score entry */}
+            {enteringInitials && (
               <div className="mb-4 flex flex-col items-center gap-2">
                 <div className="text-lg font-mono text-[hsl(var(--game-glow))]">NEW HIGH SCORE! ENTER INITIALS:</div>
                 {initialsError && (
@@ -6066,14 +6067,16 @@ const Game = () => {
                     onChange={(e) => {
                       const newInitials = e.target.value.toUpperCase().replace(/[^A-Z]/g, "");
                       setInitials(newInitials);
-                      setInitialsError(""); // Clear error on change
+                      setInitialsError("");
                     }}
-                    onKeyDown={async (e) => {
+                    onKeyDown={(e) => {
                       if (e.key === "Enter" && initials.length > 0) {
-                        const success = await saveToLeaderboard(initials, displayScore);
-                        if (success) {
-                          setEnteringInitials(false);
-                        }
+                        const updated = [...localHighScores, { initials: initials.toUpperCase(), score: displayScore, date: new Date().toISOString() }]
+                          .sort((a, b) => b.score - a.score)
+                          .slice(0, 10);
+                        localStorage.setItem(LOCAL_SCORES_KEY, JSON.stringify(updated));
+                        setLocalHighScores(updated);
+                        setEnteringInitials(false);
                       }
                       e.stopPropagation();
                     }}
@@ -6082,12 +6085,14 @@ const Game = () => {
                     placeholder="___"
                   />
                   <Button
-                    onClick={async () => {
+                    onClick={() => {
                       if (initials.length > 0) {
-                        const success = await saveToLeaderboard(initials, displayScore);
-                        if (success) {
-                          setEnteringInitials(false);
-                        }
+                        const updated = [...localHighScores, { initials: initials.toUpperCase(), score: displayScore, date: new Date().toISOString() }]
+                          .sort((a, b) => b.score - a.score)
+                          .slice(0, 10);
+                        localStorage.setItem(LOCAL_SCORES_KEY, JSON.stringify(updated));
+                        setLocalHighScores(updated);
+                        setEnteringInitials(false);
                       }
                     }}
                     disabled={initials.length === 0 || !!initialsError}
@@ -6099,11 +6104,12 @@ const Game = () => {
               </div>
             )}
 
-            {HIGH_SCORES_ENABLED && leaderboard.length > 0 && (
+            {/* Local scores on game over */}
+            {localHighScores.length > 0 && !enteringInitials && (
               <div className="mb-4 w-72">
-                <div className="text-lg font-mono text-[hsl(var(--game-glow))] text-center mb-2">TOP SCORES</div>
+                <div className="text-lg font-mono text-[hsl(var(--game-glow))] text-center mb-2">LOCAL HIGH SCORES</div>
                 <div className="border border-[hsl(var(--game-foreground))] p-2">
-                  {leaderboard.map((entry, i) => (
+                  {localHighScores.map((entry, i) => (
                     <div
                       key={i}
                       className={`flex justify-between font-mono text-sm py-0.5 ${
