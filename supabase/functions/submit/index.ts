@@ -345,7 +345,7 @@ async function handleHeartbeat(req: Request, supabaseAdmin: any) {
     // Asteroids delta must be plausible
     const maxAsteroidsDelta = MAX_ASTEROIDS_PER_SEC * dtSec;
     if (asteroidsDelta > maxAsteroidsDelta) {
-      console.log(`Asteroids delta too high: +${asteroidsDelta} in ${dtSec.toFixed(1)}s (max ${maxAsteroidsDelta.toFixed(0)}), token=${payload.gameSessionToken}`);
+      console.log(`Asteroids delta too high: +${asteroidsDelta} in ${dtSec.toFixed(1)}s (max ${maxAsteroidsDelta.toFixed(0)}), token=${payload.token}`);
       return errorResponse('Metric progression anomaly', 403);
     }
 
