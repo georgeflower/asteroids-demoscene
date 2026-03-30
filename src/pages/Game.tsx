@@ -286,7 +286,11 @@ const FRAME_TIME_TOLERANCE = 1;
 const GAME_VERSION = "0.2.1";
 
 const LOCAL_SCORES_KEY = "asteroids_local_highscores";
-interface LocalScore { initials: string; score: number; date: string }
+interface LocalScore {
+  initials: string;
+  score: number;
+  date: string;
+}
 
 // Set to true to re-enable the server high scores system.
 const HIGH_SCORES_ENABLED = false;
@@ -436,7 +440,9 @@ const Game = () => {
     try {
       const stored = localStorage.getItem(LOCAL_SCORES_KEY);
       return stored ? JSON.parse(stored) : [];
-    } catch { return []; }
+    } catch {
+      return [];
+    }
   });
   const radioStartedRef = useRef(false);
   const onelinerRef = useRef<{ author: string; message: string; flag: string }[] | null>(null);
@@ -552,8 +558,12 @@ const Game = () => {
   useEffect(() => {
     if (DEBUG_ENABLED) localStorage.setItem("trainerMode", String(trainerMode));
   }, [trainerMode]);
-  useEffect(() => { coopPlayerCountRef.current = coopPlayerCount; }, [coopPlayerCount]);
-  useEffect(() => { hostRestartedRef.current = hostRestarted; }, [hostRestarted]);
+  useEffect(() => {
+    coopPlayerCountRef.current = coopPlayerCount;
+  }, [coopPlayerCount]);
+  useEffect(() => {
+    hostRestartedRef.current = hostRestarted;
+  }, [hostRestarted]);
 
   const addDebugLog = useCallback((category: DebugCategory, message: string) => {
     if (!DEBUG_ENABLED) return;
@@ -1468,16 +1478,29 @@ const Game = () => {
   const initCoop = useCallback((isOnlineHost = false, playerCount = 2) => {
     const pc = Math.max(1, Math.min(8, playerCount));
     keysRef.current = {};
-    const startPositions = pc <= 2
-      ? [{ x: CANVAS_WIDTH * 0.25, y: CANVAS_HEIGHT / 2 }, { x: CANVAS_WIDTH * 0.75, y: CANVAS_HEIGHT / 2 }]
-      : Array.from({ length: pc }, (_, i) => {
-          const angle = (i / pc) * Math.PI * 2 - Math.PI / 2;
-          return {
-            x: CANVAS_WIDTH / 2 + (CANVAS_WIDTH / 2 - 100) * Math.cos(angle),
-            y: CANVAS_HEIGHT / 2 + (CANVAS_HEIGHT / 2 - 80) * Math.sin(angle),
-          };
-        });
-    const rotations = [0, Math.PI, Math.PI / 2, -Math.PI / 2, Math.PI / 4, -Math.PI / 4, 3 * Math.PI / 4, -3 * Math.PI / 4];
+    const startPositions =
+      pc <= 2
+        ? [
+            { x: CANVAS_WIDTH * 0.25, y: CANVAS_HEIGHT / 2 },
+            { x: CANVAS_WIDTH * 0.75, y: CANVAS_HEIGHT / 2 },
+          ]
+        : Array.from({ length: pc }, (_, i) => {
+            const angle = (i / pc) * Math.PI * 2 - Math.PI / 2;
+            return {
+              x: CANVAS_WIDTH / 2 + (CANVAS_WIDTH / 2 - 100) * Math.cos(angle),
+              y: CANVAS_HEIGHT / 2 + (CANVAS_HEIGHT / 2 - 80) * Math.sin(angle),
+            };
+          });
+    const rotations = [
+      0,
+      Math.PI,
+      Math.PI / 2,
+      -Math.PI / 2,
+      Math.PI / 4,
+      -Math.PI / 4,
+      (3 * Math.PI) / 4,
+      (-3 * Math.PI) / 4,
+    ];
     const initShips = startPositions.map((pos, i) => {
       const s = createShip(pos.x, pos.y);
       s.rotation = rotations[i % rotations.length];
@@ -1566,10 +1589,7 @@ const Game = () => {
         guestShip.rotation = Math.PI;
         coopStateRef.current = {
           ships: Array.from({ length: pc }, (_, i) => {
-            const s = createShip(
-              i === 0 ? CANVAS_WIDTH * 0.25 : CANVAS_WIDTH * 0.75,
-              CANVAS_HEIGHT / 2,
-            );
+            const s = createShip(i === 0 ? CANVAS_WIDTH * 0.25 : CANVAS_WIDTH * 0.75, CANVAS_HEIGHT / 2);
             s.rotation = i === 0 ? 0 : Math.PI;
             return s;
           }),
@@ -1630,227 +1650,252 @@ const Game = () => {
     [initCoop, multiplayer.playerIdxRef],
   );
   // Keep stable refs in sync so setInterval callbacks can access latest versions
-  useEffect(() => { initCoopRef.current = initCoop; }, [initCoop]);
-  useEffect(() => { initOnlineCoopRef.current = initOnlineCoop; }, [initOnlineCoop]);
+  useEffect(() => {
+    initCoopRef.current = initCoop;
+  }, [initCoop]);
+  useEffect(() => {
+    initOnlineCoopRef.current = initOnlineCoop;
+  }, [initOnlineCoop]);
 
-  const applyCoopNetState = useCallback((net: CoopNetState) => {
-    const cs = coopStateRef.current;
-    if (!cs) return;
+  const applyCoopNetState = useCallback(
+    (net: CoopNetState) => {
+      const cs = coopStateRef.current;
+      if (!cs) return;
 
-    const pc = net.playerCount ?? net.ships?.length ?? 2;
-    const myIdx = multiplayer.playerIdxRef.current;
+      const pc = net.playerCount ?? net.ships?.length ?? 2;
+      const myIdx = multiplayer.playerIdxRef.current;
 
-    // Ensure arrays are the right length
-    while (cs.ships.length < pc) {
-      cs.ships.push(createShip(CANVAS_WIDTH * 0.75, CANVAS_HEIGHT / 2));
-      cs.bullets.push([]);
-    }
-
-    // Apply ship states from network
-    for (let i = 0; i < pc && i < net.ships.length; i++) {
-      const ns = net.ships[i];
-      // For guest's own ship: reconcile with client-side prediction
-      if (!isHostRef.current && i === myIdx && guestPredictedShipRef.current && net.respawnTimer[i] === 0) {
-        const pred = guestPredictedShipRef.current;
-        const dx = ns.x - pred.pos.x;
-        const dy = ns.y - pred.pos.y;
-        const d = Math.hypot(dx, dy);
-        if (d < 40) {
-          pred.pos.x += dx * 0.25;
-          pred.pos.y += dy * 0.25;
-        } else {
-          pred.pos.x = ns.x;
-          pred.pos.y = ns.y;
-        }
-        pred.vel.x = ns.vx; pred.vel.y = ns.vy;
-        pred.rotation = ns.rot;
-        pred.invulnerable = ns.invuln;
-        pred.invulnerableTime = ns.invulnTime;
-        cs.ships[i].pos = { ...pred.pos };
-        cs.ships[i].rotation = pred.rotation;
-      } else {
-        cs.ships[i].pos = { x: ns.x, y: ns.y };
-        cs.ships[i].rotation = ns.rot;
+      // Ensure arrays are the right length
+      while (cs.ships.length < pc) {
+        cs.ships.push(createShip(CANVAS_WIDTH * 0.75, CANVAS_HEIGHT / 2));
+        cs.bullets.push([]);
       }
-      cs.ships[i].vel = { x: ns.vx, y: ns.vy };
-      cs.ships[i].isThrusting = ns.thrust;
-      cs.ships[i].invulnerable = ns.invuln;
-      cs.ships[i].invulnerableTime = ns.invulnTime;
-      cs.ships[i].hyperspaceCooldown = net.hyperspaceCooldown?.[i] ?? 0;
-    }
 
-    // Apply bullet states
-    for (let i = 0; i < pc && i < net.bullets.length; i++) {
-      cs.bullets[i] = net.bullets[i].map((b) => ({
+      // Apply ship states from network
+      for (let i = 0; i < pc && i < net.ships.length; i++) {
+        const ns = net.ships[i];
+        // For guest's own ship: reconcile with client-side prediction
+        if (!isHostRef.current && i === myIdx && guestPredictedShipRef.current && net.respawnTimer[i] === 0) {
+          const pred = guestPredictedShipRef.current;
+          const dx = ns.x - pred.pos.x;
+          const dy = ns.y - pred.pos.y;
+          const d = Math.hypot(dx, dy);
+          if (d < 40) {
+            pred.pos.x += dx * 0.25;
+            pred.pos.y += dy * 0.25;
+          } else {
+            pred.pos.x = ns.x;
+            pred.pos.y = ns.y;
+          }
+          pred.vel.x = ns.vx;
+          pred.vel.y = ns.vy;
+          pred.rotation = ns.rot;
+          pred.invulnerable = ns.invuln;
+          pred.invulnerableTime = ns.invulnTime;
+          cs.ships[i].pos = { ...pred.pos };
+          cs.ships[i].rotation = pred.rotation;
+        } else {
+          cs.ships[i].pos = { x: ns.x, y: ns.y };
+          cs.ships[i].rotation = ns.rot;
+        }
+        cs.ships[i].vel = { x: ns.vx, y: ns.vy };
+        cs.ships[i].isThrusting = ns.thrust;
+        cs.ships[i].invulnerable = ns.invuln;
+        cs.ships[i].invulnerableTime = ns.invulnTime;
+        cs.ships[i].hyperspaceCooldown = net.hyperspaceCooldown?.[i] ?? 0;
+      }
+
+      // Apply bullet states
+      for (let i = 0; i < pc && i < net.bullets.length; i++) {
+        cs.bullets[i] = net.bullets[i].map((b) => ({
+          pos: { x: b.x, y: b.y },
+          vel: { x: b.vx, y: b.vy },
+          rotation: b.rot,
+          lifetime: b.lifetime,
+          owner: b.owner,
+        }));
+      }
+      // Apply boss bullet states
+      cs.bossBullets = (net.bossBullets ?? []).map((b) => ({
         pos: { x: b.x, y: b.y },
         vel: { x: b.vx, y: b.vy },
         rotation: b.rot,
         lifetime: b.lifetime,
         owner: b.owner,
       }));
-    }
-    // Apply boss bullet states
-    cs.bossBullets = (net.bossBullets ?? []).map((b) => ({
-      pos: { x: b.x, y: b.y },
-      vel: { x: b.vx, y: b.vy },
-      rotation: b.rot,
-      lifetime: b.lifetime,
-      owner: b.owner,
-    }));
 
-    // Apply alien bullet states
-    cs.alienBullets = (net.alienBullets ?? []).map((b) => ({
-      pos: { x: b.x, y: b.y },
-      vel: { x: b.vx, y: b.vy },
-      rotation: b.rot,
-      lifetime: b.lifetime,
-      owner: b.owner,
-      isAlien: true,
-    }));
+      // Apply alien bullet states
+      cs.alienBullets = (net.alienBullets ?? []).map((b) => ({
+        pos: { x: b.x, y: b.y },
+        vel: { x: b.vx, y: b.vy },
+        rotation: b.rot,
+        lifetime: b.lifetime,
+        owner: b.owner,
+        isAlien: true,
+      }));
 
-    cs.asteroids = net.asteroids.map((a) => {
-      const pts: Vector[] = [];
-      for (let j = 0; j < a.points.length; j += 2) {
-        pts.push({ x: a.points[j], y: a.points[j + 1] });
-      }
-      return {
+      cs.asteroids = net.asteroids.map((a) => {
+        const pts: Vector[] = [];
+        for (let j = 0; j < a.points.length; j += 2) {
+          pts.push({ x: a.points[j], y: a.points[j + 1] });
+        }
+        return {
+          pos: { x: a.x, y: a.y },
+          vel: { x: a.vx, y: a.vy },
+          rotation: a.rot,
+          size: a.size as "large" | "medium" | "small",
+          rotationSpeed: a.rotSpeed,
+          points: pts,
+        };
+      });
+
+      cs.aliens = net.aliens.map((a) => ({
         pos: { x: a.x, y: a.y },
         vel: { x: a.vx, y: a.vy },
-        rotation: a.rot,
-        size: a.size as "large" | "medium" | "small",
-        rotationSpeed: a.rotSpeed,
-        points: pts,
-      };
-    });
+        rotation: 0,
+        type: a.type as Alien["type"],
+        hp: 1,
+        moveTimer: 0,
+        shootTimer: 999,
+        zigzagPhase: a.zigzagPhase ?? 0,
+        isInvisible: a.isInvisible,
+        chargeTimer: a.chargeTimer,
+      }));
 
-    cs.aliens = net.aliens.map((a) => ({
-      pos: { x: a.x, y: a.y },
-      vel: { x: a.vx, y: a.vy },
-      rotation: 0,
-      type: a.type as Alien["type"],
-      hp: 1,
-      moveTimer: 0,
-      shootTimer: 999,
-      zigzagPhase: a.zigzagPhase ?? 0,
-      isInvisible: a.isInvisible,
-      chargeTimer: a.chargeTimer,
-    }));
-
-    // Power-ups on the field
-    cs.powerUps = (net.powerUps ?? []).map((pu) => ({
-      pos: { x: pu.x, y: pu.y },
-      vel: { x: 0, y: 0 },
-      rotation: pu.rotation,
-      type: pu.type,
-      lifetime: 300,
-    }));
-
-    // Boss state
-    if (net.boss) {
-      const nb = net.boss;
-      cs.boss = {
-        pos: { x: nb.x, y: nb.y },
+      // Power-ups on the field
+      cs.powerUps = (net.powerUps ?? []).map((pu) => ({
+        pos: { x: pu.x, y: pu.y },
         vel: { x: 0, y: 0 },
-        rotation: nb.rotation,
-        hp: nb.hp, maxHp: nb.maxHp,
-        tentacles: nb.tentacles,
-        shootTimer: nb.shootTimer,
-        hitFlash: nb.hitFlash,
-        phase: nb.phase,
-        entered: nb.entered,
-        targetY: nb.targetY,
-        bossType: nb.bossType,
-        bounceVelX: nb.bounceVelX, bounceVelY: nb.bounceVelY, rotAngle: nb.rotAngle,
-        tractorBeamActive: nb.tractorBeamActive, sweepAngle: nb.sweepAngle,
-        miniSaucers: nb.miniSaucers?.map((ms) => ({ pos: { x: ms.x, y: ms.y }, vel: { x: 0, y: 0 }, hp: 1, shootTimer: 999 })),
-        cubeRotX: nb.cubeRotX, cubeRotY: nb.cubeRotY, regenTimer: nb.regenTimer,
-        miniCubes: nb.miniCubes?.map((mc) => ({ pos: { x: mc.x, y: mc.y }, vel: { x: 0, y: 0 }, hp: 1, rotAngle: mc.rotAngle })),
-      } as Boss;
-    } else {
-      cs.boss = null;
-    }
+        rotation: pu.rotation,
+        type: pu.type,
+        lifetime: 300,
+      }));
 
-    // UFO state
-    cs.ufos = (net.ufos ?? []).map((u) => ({
-      pos: { x: u.x, y: u.y },
-      vel: { x: u.vx, y: u.vy },
-      rotation: 0,
-      size: u.size,
-      shootTimer: 999,
-      waveOffset: u.waveOffset,
-      direction: u.vx > 0 ? 1 : -1,
-    }));
+      // Boss state
+      if (net.boss) {
+        const nb = net.boss;
+        cs.boss = {
+          pos: { x: nb.x, y: nb.y },
+          vel: { x: 0, y: 0 },
+          rotation: nb.rotation,
+          hp: nb.hp,
+          maxHp: nb.maxHp,
+          tentacles: nb.tentacles,
+          shootTimer: nb.shootTimer,
+          hitFlash: nb.hitFlash,
+          phase: nb.phase,
+          entered: nb.entered,
+          targetY: nb.targetY,
+          bossType: nb.bossType,
+          bounceVelX: nb.bounceVelX,
+          bounceVelY: nb.bounceVelY,
+          rotAngle: nb.rotAngle,
+          tractorBeamActive: nb.tractorBeamActive,
+          sweepAngle: nb.sweepAngle,
+          miniSaucers: nb.miniSaucers?.map((ms) => ({
+            pos: { x: ms.x, y: ms.y },
+            vel: { x: 0, y: 0 },
+            hp: 1,
+            shootTimer: 999,
+          })),
+          cubeRotX: nb.cubeRotX,
+          cubeRotY: nb.cubeRotY,
+          regenTimer: nb.regenTimer,
+          miniCubes: nb.miniCubes?.map((mc) => ({
+            pos: { x: mc.x, y: mc.y },
+            vel: { x: 0, y: 0 },
+            hp: 1,
+            rotAngle: mc.rotAngle,
+          })),
+        } as Boss;
+      } else {
+        cs.boss = null;
+      }
 
-    // Per-player state
-    const prevScore = cs.score;
-    const prevWave = cs.wave;
-    const prevLives = [...(cs.lives ?? [])]; // capture BEFORE overwriting cs.lives
-    cs.lives = net.lives ?? [3, 3];
-    cs.eliminated = net.eliminated ?? Array.from({ length: pc }, () => false);
-    cs.respawnTimer = net.respawnTimer;
-    cs.powerUpActive = net.powerUpActive ?? Array.from({ length: pc }, () => ({ shield: 0, rapidFire: 0, multiplier: 0 }));
-    cs.hyperspaceCooldown = net.hyperspaceCooldown ?? Array.from({ length: pc }, () => 0);
-    cs.waveComplete = net.waveComplete;
-    cs.gameOver = net.gameOver;
-    cs.playerCount = pc;
+      // UFO state
+      cs.ufos = (net.ufos ?? []).map((u) => ({
+        pos: { x: u.x, y: u.y },
+        vel: { x: u.vx, y: u.vy },
+        rotation: 0,
+        size: u.size,
+        shootTimer: 999,
+        waveOffset: u.waveOffset,
+        direction: u.vx > 0 ? 1 : -1,
+      }));
 
-    cs.score = net.score;
-    cs.wave = net.wave;
+      // Per-player state
+      const prevScore = cs.score;
+      const prevWave = cs.wave;
+      const prevLives = [...(cs.lives ?? [])]; // capture BEFORE overwriting cs.lives
+      cs.lives = net.lives ?? [3, 3];
+      cs.eliminated = net.eliminated ?? Array.from({ length: pc }, () => false);
+      cs.respawnTimer = net.respawnTimer;
+      cs.powerUpActive =
+        net.powerUpActive ?? Array.from({ length: pc }, () => ({ shield: 0, rapidFire: 0, multiplier: 0 }));
+      cs.hyperspaceCooldown = net.hyperspaceCooldown ?? Array.from({ length: pc }, () => 0);
+      cs.waveComplete = net.waveComplete;
+      cs.gameOver = net.gameOver;
+      cs.playerCount = pc;
 
-    for (const event of net.events) {
-      if (event.type === "explosion" || event.type === "die_env") {
-        spawnExplosionTo(cs.particles, { x: event.x, y: event.y }, event.color, event.count);
-        soundEffects.explode();
-      }
-      if (event.type === "small_explode") {
-        spawnExplosionTo(cs.particles, { x: event.x, y: event.y }, event.color, event.count);
-        soundEffects.smallExplode?.();
-      }
-      if (event.type === "ufo_beep") {
-        soundEffects.ufoBeep?.();
-      }
-      if (event.type === "score_pop" && event.points) {
-        spawnFloatingTextTo(cs.floatingTexts, { x: event.x, y: event.y }, `+${event.points}`, "#FFFF00", 16);
-      }
-      if (event.type === "powerup" && event.label) {
-        spawnFloatingTextTo(cs.floatingTexts, { x: event.x, y: event.y }, event.label, "#CC66FF", 18);
-        soundEffects.powerUp?.();
-      }
-      if (event.type === "boss_spawn" && event.label) {
-        spawnFloatingTextTo(cs.floatingTexts, { x: event.x, y: event.y }, event.label, "#FF4444", 22);
-      }
-      if (event.type === "wave_start" && event.label) {
-        const waveTheme = getTheme(cs.wave);
-        spawnFloatingTextTo(cs.floatingTexts, { x: event.x, y: event.y }, event.label, waveTheme.ship, 28);
-      }
-    }
+      cs.score = net.score;
+      cs.wave = net.wave;
 
-    if (cs.score !== prevScore) setCoopScore(cs.score);
-    if (cs.wave !== prevWave) setCoopWave(cs.wave);
-    const livesChanged = cs.lives.some((l, i) => l !== prevLives[i]);
-    if (livesChanged) setCoopLives([...cs.lives]);
-    setCoopEliminated([...cs.eliminated]);
-    if (net.gameOver) {
-      setCoopGameOver(true);
-      if (net.playerScores) {
-        const pc = net.playerCount ?? net.ships?.length ?? 2;
-        const stats: CoopPlayerStat[] = Array.from({ length: pc }, (_, i) => ({
-          playerIndex: i,
-          label: `P${i + 1}`,
-          score: net.playerScores?.[i] ?? 0,
-          asteroidsDestroyed: net.playerAsteroidsDestroyed?.[i] ?? 0,
-          enemiesKilled: net.playerEnemiesKilled?.[i] ?? 0,
-          powerUpsCollected: net.playerPowerUpsCollected?.[i] ?? 0,
-        }));
-        stats.sort((a, b) => b.score - a.score);
-        setCoopPlayerStats(stats);
+      for (const event of net.events) {
+        if (event.type === "explosion" || event.type === "die_env") {
+          spawnExplosionTo(cs.particles, { x: event.x, y: event.y }, event.color, event.count);
+          soundEffects.explode();
+        }
+        if (event.type === "small_explode") {
+          spawnExplosionTo(cs.particles, { x: event.x, y: event.y }, event.color, event.count);
+          soundEffects.smallExplode?.();
+        }
+        if (event.type === "ufo_beep") {
+          soundEffects.ufoBeep?.();
+        }
+        if (event.type === "score_pop" && event.points) {
+          spawnFloatingTextTo(cs.floatingTexts, { x: event.x, y: event.y }, `+${event.points}`, "#FFFF00", 16);
+        }
+        if (event.type === "powerup" && event.label) {
+          spawnFloatingTextTo(cs.floatingTexts, { x: event.x, y: event.y }, event.label, "#CC66FF", 18);
+          soundEffects.powerUp?.();
+        }
+        if (event.type === "boss_spawn" && event.label) {
+          spawnFloatingTextTo(cs.floatingTexts, { x: event.x, y: event.y }, event.label, "#FF4444", 22);
+        }
+        if (event.type === "wave_start" && event.label) {
+          const waveTheme = getTheme(cs.wave);
+          spawnFloatingTextTo(cs.floatingTexts, { x: event.x, y: event.y }, event.label, waveTheme.ship, 28);
+        }
       }
-    } else {
-      setCoopGameOver(false);
-    }
-    if (net.waveComplete) setCoopWaveComplete(true);
-    else setCoopWaveComplete(false);
-  }, [multiplayer.playerIdxRef]);
+
+      if (cs.score !== prevScore) setCoopScore(cs.score);
+      if (cs.wave !== prevWave) setCoopWave(cs.wave);
+      const livesChanged = cs.lives.some((l, i) => l !== prevLives[i]);
+      if (livesChanged) setCoopLives([...cs.lives]);
+      setCoopEliminated([...cs.eliminated]);
+      if (net.gameOver) {
+        setCoopGameOver(true);
+        if (net.playerScores) {
+          const pc = net.playerCount ?? net.ships?.length ?? 2;
+          const stats: CoopPlayerStat[] = Array.from({ length: pc }, (_, i) => ({
+            playerIndex: i,
+            label: `P${i + 1}`,
+            score: net.playerScores?.[i] ?? 0,
+            asteroidsDestroyed: net.playerAsteroidsDestroyed?.[i] ?? 0,
+            enemiesKilled: net.playerEnemiesKilled?.[i] ?? 0,
+            powerUpsCollected: net.playerPowerUpsCollected?.[i] ?? 0,
+          }));
+          stats.sort((a, b) => b.score - a.score);
+          setCoopPlayerStats(stats);
+        }
+      } else {
+        setCoopGameOver(false);
+      }
+      if (net.waveComplete) setCoopWaveComplete(true);
+      else setCoopWaveComplete(false);
+    },
+    [multiplayer.playerIdxRef],
+  );
 
   const nextWave = useCallback(() => {
     if (!gameStateRef.current) return;
@@ -1989,8 +2034,7 @@ const Game = () => {
         stopHeartbeatInterval();
         setShowGameOver(true);
         // Offer local high score entry (skip in trainer mode)
-        if (!(DEBUG_ENABLED && trainerModeRef.current) && isHighScore(state.score))
-          setEnteringInitials(true);
+        if (!(DEBUG_ENABLED && trainerModeRef.current) && isHighScore(state.score)) setEnteringInitials(true);
         // Also refresh server leaderboard if enabled
         if (HIGH_SCORES_ENABLED) loadLeaderboard().then(setLeaderboard);
         // Game over
@@ -3735,7 +3779,16 @@ const Game = () => {
     if ((gameModeRef.current === "coop" || gameModeRef.current === "online_coop") && coopStateRef.current) {
       const cs = coopStateRef.current;
       const coopTheme = getTheme(cs.wave);
-      drawCommon(ctx, cs.stars, cs.particles, cs.floatingTexts, cs.asteroids, cs.aliens, coopTheme.bg, coopTheme.asteroids);
+      drawCommon(
+        ctx,
+        cs.stars,
+        cs.particles,
+        cs.floatingTexts,
+        cs.asteroids,
+        cs.aliens,
+        coopTheme.bg,
+        coopTheme.asteroids,
+      );
 
       // Draw all players' ships
       const pc = cs.playerCount ?? cs.ships.length;
@@ -3768,10 +3821,13 @@ const Game = () => {
         ctx.translate(powerUp.pos.x, powerUp.pos.y);
         ctx.rotate(powerUp.rotation);
         const color =
-          powerUp.type === "shield" ? "#7FFF7F"
-          : powerUp.type === "rapidFire" ? "#FF6666"
-          : powerUp.type === "multiplier" ? "#FFFF66"
-          : "#CC66FF";
+          powerUp.type === "shield"
+            ? "#7FFF7F"
+            : powerUp.type === "rapidFire"
+              ? "#FF6666"
+              : powerUp.type === "multiplier"
+                ? "#FFFF66"
+                : "#CC66FF";
         ctx.strokeStyle = color;
         ctx.lineWidth = 2;
         ctx.beginPath();
@@ -3779,7 +3835,8 @@ const Game = () => {
           const angle = (i / 6) * Math.PI * 2 - Math.PI / 2;
           const x = Math.cos(angle) * 14;
           const y = Math.sin(angle) * 14;
-          if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+          if (i === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
         }
         ctx.closePath();
         ctx.stroke();
@@ -3788,7 +3845,14 @@ const Game = () => {
         ctx.font = "bold 9px monospace";
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
-        const icon = powerUp.type === "shield" ? "SH" : powerUp.type === "rapidFire" ? "RF" : powerUp.type === "extraLife" ? "+1" : "2X";
+        const icon =
+          powerUp.type === "shield"
+            ? "SH"
+            : powerUp.type === "rapidFire"
+              ? "RF"
+              : powerUp.type === "extraLife"
+                ? "+1"
+                : "2X";
         ctx.fillText(icon, 0, 0);
         ctx.restore();
       });
@@ -3864,7 +3928,9 @@ const Game = () => {
           const rotAngle = boss.rotAngle ?? 0;
           const lightDir = { x: -0.5, y: -0.7, z: 0.5 };
           const lightLen = Math.hypot(lightDir.x, lightDir.y, lightDir.z);
-          lightDir.x /= lightLen; lightDir.y /= lightLen; lightDir.z /= lightLen;
+          lightDir.x /= lightLen;
+          lightDir.y /= lightLen;
+          lightDir.z /= lightLen;
           const step = 3;
           for (let py = -radius; py < radius; py += step) {
             const xRange = Math.sqrt(radius * radius - py * py);
@@ -3895,7 +3961,11 @@ const Game = () => {
                 g = Math.min(255, Math.floor(255 * diffuse + spec * 255));
                 b = Math.min(255, Math.floor(255 * diffuse + spec * 255));
               }
-              if (boss.hitFlash > 0) { r = 255; g = 255; b = 255; }
+              if (boss.hitFlash > 0) {
+                r = 255;
+                g = 255;
+                b = 255;
+              }
               ctx.fillStyle = `rgb(${r},${g},${b})`;
               ctx.fillRect(px - step / 2, py - step / 2, step, step);
             }
@@ -3907,12 +3977,14 @@ const Game = () => {
           ctx.lineWidth = 2;
           ctx.beginPath();
           ctx.ellipse(0, -12, 25, 18, 0, Math.PI, 0);
-          ctx.fill(); ctx.stroke();
+          ctx.fill();
+          ctx.stroke();
           ctx.fillStyle = flash ? "#FFFFFF" : "#334455";
           ctx.strokeStyle = flash ? "#FFFFFF" : "#667788";
           ctx.beginPath();
           ctx.ellipse(0, 0, 55, 14, 0, 0, Math.PI * 2);
-          ctx.fill(); ctx.stroke();
+          ctx.fill();
+          ctx.stroke();
           const lightCount = 8;
           for (let i = 0; i < lightCount; i++) {
             const lAngle = (i / lightCount) * Math.PI * 2 + boss.phase * 2;
@@ -3932,8 +4004,12 @@ const Game = () => {
             grad.addColorStop(1, "rgba(0,255,136,0)");
             ctx.fillStyle = grad;
             ctx.beginPath();
-            ctx.moveTo(-20, 14); ctx.lineTo(20, 14); ctx.lineTo(60, 200); ctx.lineTo(-60, 200);
-            ctx.closePath(); ctx.fill();
+            ctx.moveTo(-20, 14);
+            ctx.lineTo(20, 14);
+            ctx.lineTo(60, 200);
+            ctx.lineTo(-60, 200);
+            ctx.closePath();
+            ctx.fill();
             ctx.restore();
           }
         } else if (boss.bossType === "borgCube") {
@@ -3941,7 +4017,16 @@ const Game = () => {
           const cubeSize = 45;
           const rotX = boss.cubeRotX ?? 0;
           const rotY = boss.cubeRotY ?? 0;
-          const verts = [[-1,-1,-1],[1,-1,-1],[1,1,-1],[-1,1,-1],[-1,-1,1],[1,-1,1],[1,1,1],[-1,1,1]].map(([x, y, z]) => {
+          const verts = [
+            [-1, -1, -1],
+            [1, -1, -1],
+            [1, 1, -1],
+            [-1, 1, -1],
+            [-1, -1, 1],
+            [1, -1, 1],
+            [1, 1, 1],
+            [-1, 1, 1],
+          ].map(([x, y, z]) => {
             const x2 = x * Math.cos(rotY) - z * Math.sin(rotY);
             const z2 = x * Math.sin(rotY) + z * Math.cos(rotY);
             const y2 = y * Math.cos(rotX) - z2 * Math.sin(rotX);
@@ -3949,7 +4034,20 @@ const Game = () => {
             const scale = 150 / (150 + z3 * cubeSize * 0.3);
             return { x: x2 * cubeSize * scale, y: y2 * cubeSize * scale };
           });
-          const edges = [[0,1],[1,2],[2,3],[3,0],[4,5],[5,6],[6,7],[7,4],[0,4],[1,5],[2,6],[3,7]];
+          const edges = [
+            [0, 1],
+            [1, 2],
+            [2, 3],
+            [3, 0],
+            [4, 5],
+            [5, 6],
+            [6, 7],
+            [7, 4],
+            [0, 4],
+            [1, 5],
+            [2, 6],
+            [3, 7],
+          ];
           ctx.save();
           ctx.globalAlpha = 0.2;
           ctx.fillStyle = "#00FF44";
@@ -3976,15 +4074,22 @@ const Game = () => {
         ctx.restore();
 
         // Boss HP bar
-        const barW = 200, barH = 8;
+        const barW = 200,
+          barH = 8;
         const barX = (CANVAS_WIDTH - barW) / 2;
         const barY = CANVAS_HEIGHT - 48;
         const hpFrac = boss.hp / boss.maxHp;
         ctx.save();
         ctx.globalAlpha = 0.7;
-        const bossBarColors: Record<string, string> = { tentacle: "#FF44CC", amigaBall: "#CC0000", flyingSaucer: "#00FF88", borgCube: "#00FF44" };
+        const bossBarColors: Record<string, string> = {
+          tentacle: "#FF44CC",
+          amigaBall: "#CC0000",
+          flyingSaucer: "#00FF88",
+          borgCube: "#00FF44",
+        };
         const barColor = bossBarColors[boss.bossType] || "#FF44CC";
-        ctx.strokeStyle = barColor; ctx.lineWidth = 1;
+        ctx.strokeStyle = barColor;
+        ctx.lineWidth = 1;
         ctx.strokeRect(barX, barY, barW, barH);
         ctx.fillStyle = hpFrac > 0.3 ? barColor : "#FF0000";
         ctx.fillRect(barX, barY, barW * hpFrac, barH);
@@ -3992,7 +4097,12 @@ const Game = () => {
         ctx.font = "8px 'Press Start 2P', monospace";
         ctx.fillStyle = "#FFFFFF";
         ctx.textAlign = "center";
-        const bossNames: Record<string, string> = { tentacle: "BOSS", amigaBall: "AMIGA BALL", flyingSaucer: "FLYING SAUCER", borgCube: "BORG CUBE" };
+        const bossNames: Record<string, string> = {
+          tentacle: "BOSS",
+          amigaBall: "AMIGA BALL",
+          flyingSaucer: "FLYING SAUCER",
+          borgCube: "BORG CUBE",
+        };
         ctx.fillText(bossNames[boss.bossType] || "BOSS", CANVAS_WIDTH / 2, barY - 4);
         ctx.restore();
       }
@@ -4002,17 +4112,25 @@ const Game = () => {
       const myPa = cs.powerUpActive?.[myIdx];
       if (myPa) {
         const activePowerUps: { label: string; color: string; remaining: number; max: number }[] = [];
-        if (myPa.shield > 0) activePowerUps.push({ label: "SHIELD", color: "#7FFF7F", remaining: myPa.shield, max: 300 });
-        if (myPa.rapidFire > 0) activePowerUps.push({ label: "RAPID", color: "#FF6666", remaining: myPa.rapidFire, max: 600 });
-        if (myPa.multiplier > 0) activePowerUps.push({ label: "2x", color: "#FFFF66", remaining: myPa.multiplier, max: 900 });
+        if (myPa.shield > 0)
+          activePowerUps.push({ label: "SHIELD", color: "#7FFF7F", remaining: myPa.shield, max: 300 });
+        if (myPa.rapidFire > 0)
+          activePowerUps.push({ label: "RAPID", color: "#FF6666", remaining: myPa.rapidFire, max: 600 });
+        if (myPa.multiplier > 0)
+          activePowerUps.push({ label: "2x", color: "#FFFF66", remaining: myPa.multiplier, max: 900 });
         activePowerUps.forEach((pu, i) => {
-          const barX = 10, barY = 10 + i * 18, barW = 120, barH = 12;
+          const barX = 10,
+            barY = 10 + i * 18,
+            barW = 120,
+            barH = 12;
           const fill = pu.remaining / pu.max;
           ctx.save();
           ctx.globalAlpha = 0.6;
-          ctx.strokeStyle = pu.color; ctx.lineWidth = 1;
+          ctx.strokeStyle = pu.color;
+          ctx.lineWidth = 1;
           ctx.strokeRect(barX, barY, barW, barH);
-          ctx.fillStyle = pu.color; ctx.globalAlpha = 0.35;
+          ctx.fillStyle = pu.color;
+          ctx.globalAlpha = 0.35;
           ctx.fillRect(barX, barY, barW * fill, barH);
           ctx.globalAlpha = 0.9;
           ctx.font = "7px 'Press Start 2P', monospace";
@@ -4085,494 +4203,493 @@ const Game = () => {
       const state = gameStateRef.current;
       const theme = getTheme(state.wave);
 
-    drawCommon(
-      ctx,
-      state.stars,
-      state.particles,
-      state.floatingTexts,
-      state.asteroids,
-      state.aliens,
-      theme.bg,
-      theme.asteroids,
-    );
+      drawCommon(
+        ctx,
+        state.stars,
+        state.particles,
+        state.floatingTexts,
+        state.asteroids,
+        state.aliens,
+        theme.bg,
+        theme.asteroids,
+      );
 
-    // Ship
-    const shipColor = state.powerUpActive.shield > 0 ? "#7FFF7F" : theme.ship;
-    drawShip(ctx, state.ship, shipColor);
+      // Ship
+      const shipColor = state.powerUpActive.shield > 0 ? "#7FFF7F" : theme.ship;
+      drawShip(ctx, state.ship, shipColor);
 
-    // Bullets
-    drawBullets(ctx, state.bullets, theme.ship);
+      // Bullets
+      drawBullets(ctx, state.bullets, theme.ship);
 
-    // UFOs
-    state.ufos.forEach((ufo) => {
-      ctx.save();
-      ctx.translate(ufo.pos.x, ufo.pos.y);
-      const ufoColor = ufo.size === "large" ? theme.enemy : "#FF44FF";
-      ctx.strokeStyle = ufoColor;
-      ctx.lineWidth = 2;
-      const radius = ufo.size === "large" ? 20 : 10;
-      ctx.beginPath();
-      ctx.ellipse(0, 0, radius, radius / 2, 0, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.ellipse(0, -radius / 4, radius / 2, radius / 3, 0, 0, Math.PI, true);
-      ctx.stroke();
-      const pulse = 0.3 + Math.sin(Date.now() * 0.005) * 0.2;
-      ctx.globalAlpha = pulse;
-      ctx.fillStyle = ufoColor;
-      ctx.beginPath();
-      ctx.ellipse(0, 0, radius, radius / 2, 0, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.globalAlpha = 1;
-      ctx.restore();
-    });
+      // UFOs
+      state.ufos.forEach((ufo) => {
+        ctx.save();
+        ctx.translate(ufo.pos.x, ufo.pos.y);
+        const ufoColor = ufo.size === "large" ? theme.enemy : "#FF44FF";
+        ctx.strokeStyle = ufoColor;
+        ctx.lineWidth = 2;
+        const radius = ufo.size === "large" ? 20 : 10;
+        ctx.beginPath();
+        ctx.ellipse(0, 0, radius, radius / 2, 0, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.ellipse(0, -radius / 4, radius / 2, radius / 3, 0, 0, Math.PI, true);
+        ctx.stroke();
+        const pulse = 0.3 + Math.sin(Date.now() * 0.005) * 0.2;
+        ctx.globalAlpha = pulse;
+        ctx.fillStyle = ufoColor;
+        ctx.beginPath();
+        ctx.ellipse(0, 0, radius, radius / 2, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+        ctx.restore();
+      });
 
-    // Boss
-    if (state.boss) {
-      const boss = state.boss;
-      ctx.save();
-      ctx.translate(boss.pos.x, boss.pos.y);
+      // Boss
+      if (state.boss) {
+        const boss = state.boss;
+        ctx.save();
+        ctx.translate(boss.pos.x, boss.pos.y);
 
-      if (boss.bossType === "tentacle") {
-        // Original tentacle boss drawing
-        const bossColor = boss.hitFlash > 0 ? "#FFFFFF" : "#FF44CC";
-        const tentCount = boss.tentacles;
-        for (let i = 0; i < tentCount; i++) {
-          const baseAngle = (i / tentCount) * Math.PI * 2;
-          ctx.strokeStyle = boss.hitFlash > 0 ? "#FFFFFF" : "#CC44AA";
+        if (boss.bossType === "tentacle") {
+          // Original tentacle boss drawing
+          const bossColor = boss.hitFlash > 0 ? "#FFFFFF" : "#FF44CC";
+          const tentCount = boss.tentacles;
+          for (let i = 0; i < tentCount; i++) {
+            const baseAngle = (i / tentCount) * Math.PI * 2;
+            ctx.strokeStyle = boss.hitFlash > 0 ? "#FFFFFF" : "#CC44AA";
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(0, 0);
+            const segments = 5;
+            for (let s = 1; s <= segments; s++) {
+              const dist = s * 18;
+              const wave = Math.sin(boss.phase * 2 + i + s * 0.8) * 15;
+              const tx = Math.cos(baseAngle) * dist + Math.cos(baseAngle + Math.PI / 2) * wave;
+              const ty = Math.sin(baseAngle) * dist + Math.sin(baseAngle + Math.PI / 2) * wave;
+              ctx.lineTo(tx, ty);
+            }
+            ctx.stroke();
+          }
+          const pulse = 1 + Math.sin(boss.phase * 3) * 0.05;
+          const bodyR = 45 * pulse;
+          ctx.fillStyle = boss.hitFlash > 0 ? "#FFFFFF" : "#331133";
+          ctx.strokeStyle = bossColor;
           ctx.lineWidth = 3;
           ctx.beginPath();
-          ctx.moveTo(0, 0);
-          const segments = 5;
-          for (let s = 1; s <= segments; s++) {
-            const dist = s * 18;
-            const wave = Math.sin(boss.phase * 2 + i + s * 0.8) * 15;
-            const tx = Math.cos(baseAngle) * dist + Math.cos(baseAngle + Math.PI / 2) * wave;
-            const ty = Math.sin(baseAngle) * dist + Math.sin(baseAngle + Math.PI / 2) * wave;
-            ctx.lineTo(tx, ty);
-          }
-          ctx.stroke();
-        }
-        const pulse = 1 + Math.sin(boss.phase * 3) * 0.05;
-        const bodyR = 45 * pulse;
-        ctx.fillStyle = boss.hitFlash > 0 ? "#FFFFFF" : "#331133";
-        ctx.strokeStyle = bossColor;
-        ctx.lineWidth = 3;
-        ctx.beginPath();
-        ctx.arc(0, 0, bodyR, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.stroke();
-        ctx.fillStyle = bossColor;
-        ctx.beginPath();
-        ctx.arc(0, -5, 12, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = "#000000";
-        ctx.beginPath();
-        ctx.arc(0, -5, 6, 0, Math.PI * 2);
-        ctx.fill();
-      } else if (boss.bossType === "amigaBall") {
-        // Procedural Amiga checkered bouncing ball
-        const radius = 50;
-        const rotAngle = boss.rotAngle ?? 0;
-        const lightDir = { x: -0.5, y: -0.7, z: 0.5 }; // upper-left light
-        const lightLen = Math.hypot(lightDir.x, lightDir.y, lightDir.z);
-        lightDir.x /= lightLen;
-        lightDir.y /= lightLen;
-        lightDir.z /= lightLen;
-
-        // Draw sphere scanline by scanline using checkerboard + lighting
-        const step = 3; // pixel step for performance
-        for (let py = -radius; py < radius; py += step) {
-          const xRange = Math.sqrt(radius * radius - py * py);
-          for (let px = -xRange; px < xRange; px += step) {
-            // Compute sphere normal
-            const nz = Math.sqrt(Math.max(0, radius * radius - px * px - py * py)) / radius;
-            const nx = px / radius;
-            const ny = py / radius;
-
-            // UV mapping for checkerboard
-            const theta = Math.atan2(ny, nx); // longitude
-            const phi = Math.asin(Math.min(1, Math.max(-1, nz))); // latitude
-
-            // Apply rotation offset
-            const u = (((theta + rotAngle) / Math.PI) * 4 + 100) % 1;
-            const v = (((phi + Math.PI / 2) / Math.PI) * 4 + 100) % 1;
-
-            // Checkerboard
-            const checkerU = Math.floor(u * 2) % 2;
-            const checkerV = Math.floor(v * 2) % 2;
-            const isRed = (checkerU + checkerV) % 2 === 0;
-
-            // Lighting: dot product with light direction
-            const dot = nx * lightDir.x + ny * lightDir.y + nz * lightDir.z;
-            const diffuse = Math.max(0.15, dot);
-
-            // Specular highlight
-            const reflX = 2 * dot * nx - lightDir.x;
-            const reflY = 2 * dot * ny - lightDir.y;
-            const reflZ = 2 * dot * nz - lightDir.z;
-            const spec = Math.pow(Math.max(0, reflZ), 20) * 0.6;
-
-            let r: number, g: number, b: number;
-            if (isRed) {
-              r = Math.min(255, Math.floor(204 * diffuse + spec * 255));
-              g = Math.min(255, Math.floor(0 * diffuse + spec * 255));
-              b = Math.min(255, Math.floor(0 * diffuse + spec * 255));
-            } else {
-              r = Math.min(255, Math.floor(255 * diffuse + spec * 255));
-              g = Math.min(255, Math.floor(255 * diffuse + spec * 255));
-              b = Math.min(255, Math.floor(255 * diffuse + spec * 255));
-            }
-
-            if (boss.hitFlash > 0) {
-              r = 255;
-              g = 255;
-              b = 255;
-            }
-
-            ctx.fillStyle = `rgb(${r},${g},${b})`;
-            ctx.fillRect(px - step / 2, py - step / 2, step, step);
-          }
-        }
-
-        // Shadow beneath ball
-        ctx.save();
-        ctx.translate(0, radius + 10);
-        ctx.scale(1, 0.3);
-        ctx.fillStyle = "rgba(0,0,0,0.3)";
-        ctx.beginPath();
-        ctx.arc(0, 0, radius * 0.8, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.restore();
-      } else if (boss.bossType === "flyingSaucer") {
-        // Flying saucer
-        const flash = boss.hitFlash > 0;
-        // Dome
-        ctx.fillStyle = flash ? "#FFFFFF" : "#446688";
-        ctx.strokeStyle = flash ? "#FFFFFF" : "#88AACC";
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.ellipse(0, -12, 25, 18, 0, Math.PI, 0);
-        ctx.fill();
-        ctx.stroke();
-        // Body disc
-        ctx.fillStyle = flash ? "#FFFFFF" : "#334455";
-        ctx.strokeStyle = flash ? "#FFFFFF" : "#667788";
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.ellipse(0, 0, 55, 14, 0, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.stroke();
-        // Rotating lights
-        const lightCount = 8;
-        for (let i = 0; i < lightCount; i++) {
-          const lAngle = (i / lightCount) * Math.PI * 2 + boss.phase * 2;
-          const lx = Math.cos(lAngle) * 45;
-          const ly = Math.sin(lAngle) * 10;
-          const brightness = (Math.sin(boss.phase * 3 + i) + 1) / 2;
-          ctx.fillStyle = `rgba(${flash ? 255 : 255}, ${flash ? 255 : Math.floor(200 * brightness)}, ${flash ? 255 : 0}, ${0.5 + brightness * 0.5})`;
-          ctx.beginPath();
-          ctx.arc(lx, ly, 3, 0, Math.PI * 2);
+          ctx.arc(0, 0, bodyR, 0, Math.PI * 2);
           ctx.fill();
-        }
-        // Tractor beam
-        if (boss.tractorBeamActive) {
-          ctx.save();
-          ctx.globalAlpha = 0.15 + Math.sin(boss.phase * 5) * 0.1;
-          const grad = ctx.createLinearGradient(0, 14, 0, 200);
-          grad.addColorStop(0, "#00FF88");
-          grad.addColorStop(1, "rgba(0,255,136,0)");
-          ctx.fillStyle = grad;
+          ctx.stroke();
+          ctx.fillStyle = bossColor;
           ctx.beginPath();
-          ctx.moveTo(-20, 14);
-          ctx.lineTo(20, 14);
-          ctx.lineTo(60, 200);
-          ctx.lineTo(-60, 200);
-          ctx.closePath();
+          ctx.arc(0, -5, 12, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = "#000000";
+          ctx.beginPath();
+          ctx.arc(0, -5, 6, 0, Math.PI * 2);
+          ctx.fill();
+        } else if (boss.bossType === "amigaBall") {
+          // Procedural Amiga checkered bouncing ball
+          const radius = 50;
+          const rotAngle = boss.rotAngle ?? 0;
+          const lightDir = { x: -0.5, y: -0.7, z: 0.5 }; // upper-left light
+          const lightLen = Math.hypot(lightDir.x, lightDir.y, lightDir.z);
+          lightDir.x /= lightLen;
+          lightDir.y /= lightLen;
+          lightDir.z /= lightLen;
+
+          // Draw sphere scanline by scanline using checkerboard + lighting
+          const step = 3; // pixel step for performance
+          for (let py = -radius; py < radius; py += step) {
+            const xRange = Math.sqrt(radius * radius - py * py);
+            for (let px = -xRange; px < xRange; px += step) {
+              // Compute sphere normal
+              const nz = Math.sqrt(Math.max(0, radius * radius - px * px - py * py)) / radius;
+              const nx = px / radius;
+              const ny = py / radius;
+
+              // UV mapping for checkerboard
+              const theta = Math.atan2(ny, nx); // longitude
+              const phi = Math.asin(Math.min(1, Math.max(-1, nz))); // latitude
+
+              // Apply rotation offset
+              const u = (((theta + rotAngle) / Math.PI) * 4 + 100) % 1;
+              const v = (((phi + Math.PI / 2) / Math.PI) * 4 + 100) % 1;
+
+              // Checkerboard
+              const checkerU = Math.floor(u * 2) % 2;
+              const checkerV = Math.floor(v * 2) % 2;
+              const isRed = (checkerU + checkerV) % 2 === 0;
+
+              // Lighting: dot product with light direction
+              const dot = nx * lightDir.x + ny * lightDir.y + nz * lightDir.z;
+              const diffuse = Math.max(0.15, dot);
+
+              // Specular highlight
+              const reflX = 2 * dot * nx - lightDir.x;
+              const reflY = 2 * dot * ny - lightDir.y;
+              const reflZ = 2 * dot * nz - lightDir.z;
+              const spec = Math.pow(Math.max(0, reflZ), 20) * 0.6;
+
+              let r: number, g: number, b: number;
+              if (isRed) {
+                r = Math.min(255, Math.floor(204 * diffuse + spec * 255));
+                g = Math.min(255, Math.floor(0 * diffuse + spec * 255));
+                b = Math.min(255, Math.floor(0 * diffuse + spec * 255));
+              } else {
+                r = Math.min(255, Math.floor(255 * diffuse + spec * 255));
+                g = Math.min(255, Math.floor(255 * diffuse + spec * 255));
+                b = Math.min(255, Math.floor(255 * diffuse + spec * 255));
+              }
+
+              if (boss.hitFlash > 0) {
+                r = 255;
+                g = 255;
+                b = 255;
+              }
+
+              ctx.fillStyle = `rgb(${r},${g},${b})`;
+              ctx.fillRect(px - step / 2, py - step / 2, step, step);
+            }
+          }
+
+          // Shadow beneath ball
+          ctx.save();
+          ctx.translate(0, radius + 10);
+          ctx.scale(1, 0.3);
+          ctx.fillStyle = "rgba(0,0,0,0.3)";
+          ctx.beginPath();
+          ctx.arc(0, 0, radius * 0.8, 0, Math.PI * 2);
           ctx.fill();
           ctx.restore();
-        }
-
-        // Draw mini-saucers
-        if (boss.miniSaucers) {
-          boss.miniSaucers.forEach((ms) => {
-            ctx.save();
-            ctx.translate(ms.pos.x - boss.pos.x, ms.pos.y - boss.pos.y);
-            ctx.fillStyle = "#556677";
-            ctx.strokeStyle = "#88FFAA";
-            ctx.lineWidth = 1;
+        } else if (boss.bossType === "flyingSaucer") {
+          // Flying saucer
+          const flash = boss.hitFlash > 0;
+          // Dome
+          ctx.fillStyle = flash ? "#FFFFFF" : "#446688";
+          ctx.strokeStyle = flash ? "#FFFFFF" : "#88AACC";
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.ellipse(0, -12, 25, 18, 0, Math.PI, 0);
+          ctx.fill();
+          ctx.stroke();
+          // Body disc
+          ctx.fillStyle = flash ? "#FFFFFF" : "#334455";
+          ctx.strokeStyle = flash ? "#FFFFFF" : "#667788";
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.ellipse(0, 0, 55, 14, 0, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.stroke();
+          // Rotating lights
+          const lightCount = 8;
+          for (let i = 0; i < lightCount; i++) {
+            const lAngle = (i / lightCount) * Math.PI * 2 + boss.phase * 2;
+            const lx = Math.cos(lAngle) * 45;
+            const ly = Math.sin(lAngle) * 10;
+            const brightness = (Math.sin(boss.phase * 3 + i) + 1) / 2;
+            ctx.fillStyle = `rgba(${flash ? 255 : 255}, ${flash ? 255 : Math.floor(200 * brightness)}, ${flash ? 255 : 0}, ${0.5 + brightness * 0.5})`;
             ctx.beginPath();
-            ctx.ellipse(0, 0, 12, 4, 0, 0, Math.PI * 2);
+            ctx.arc(lx, ly, 3, 0, Math.PI * 2);
             ctx.fill();
-            ctx.stroke();
-            ctx.fillStyle = "#88FFAA";
+          }
+          // Tractor beam
+          if (boss.tractorBeamActive) {
+            ctx.save();
+            ctx.globalAlpha = 0.15 + Math.sin(boss.phase * 5) * 0.1;
+            const grad = ctx.createLinearGradient(0, 14, 0, 200);
+            grad.addColorStop(0, "#00FF88");
+            grad.addColorStop(1, "rgba(0,255,136,0)");
+            ctx.fillStyle = grad;
             ctx.beginPath();
-            ctx.ellipse(0, -3, 6, 4, 0, Math.PI, 0);
+            ctx.moveTo(-20, 14);
+            ctx.lineTo(20, 14);
+            ctx.lineTo(60, 200);
+            ctx.lineTo(-60, 200);
+            ctx.closePath();
             ctx.fill();
             ctx.restore();
+          }
+
+          // Draw mini-saucers
+          if (boss.miniSaucers) {
+            boss.miniSaucers.forEach((ms) => {
+              ctx.save();
+              ctx.translate(ms.pos.x - boss.pos.x, ms.pos.y - boss.pos.y);
+              ctx.fillStyle = "#556677";
+              ctx.strokeStyle = "#88FFAA";
+              ctx.lineWidth = 1;
+              ctx.beginPath();
+              ctx.ellipse(0, 0, 12, 4, 0, 0, Math.PI * 2);
+              ctx.fill();
+              ctx.stroke();
+              ctx.fillStyle = "#88FFAA";
+              ctx.beginPath();
+              ctx.ellipse(0, -3, 6, 4, 0, Math.PI, 0);
+              ctx.fill();
+              ctx.restore();
+            });
+          }
+        } else if (boss.bossType === "borgCube") {
+          // 3D wireframe rotating cube
+          const flash = boss.hitFlash > 0;
+          const cubeSize = 45;
+          const rotX = boss.cubeRotX ?? 0;
+          const rotY = boss.cubeRotY ?? 0;
+
+          // Define cube vertices
+          const verts = [
+            [-1, -1, -1],
+            [1, -1, -1],
+            [1, 1, -1],
+            [-1, 1, -1],
+            [-1, -1, 1],
+            [1, -1, 1],
+            [1, 1, 1],
+            [-1, 1, 1],
+          ].map(([x, y, z]) => {
+            // Rotate around Y
+            const x2 = x * Math.cos(rotY) - z * Math.sin(rotY);
+            const z2 = x * Math.sin(rotY) + z * Math.cos(rotY);
+            // Rotate around X
+            const y2 = y * Math.cos(rotX) - z2 * Math.sin(rotX);
+            const z3 = y * Math.sin(rotX) + z2 * Math.cos(rotX);
+            // Project
+            const scale = 150 / (150 + z3 * cubeSize * 0.3);
+            return { x: x2 * cubeSize * scale, y: y2 * cubeSize * scale };
           });
-        }
-      } else if (boss.bossType === "borgCube") {
-        // 3D wireframe rotating cube
-        const flash = boss.hitFlash > 0;
-        const cubeSize = 45;
-        const rotX = boss.cubeRotX ?? 0;
-        const rotY = boss.cubeRotY ?? 0;
 
-        // Define cube vertices
-        const verts = [
-          [-1, -1, -1],
-          [1, -1, -1],
-          [1, 1, -1],
-          [-1, 1, -1],
-          [-1, -1, 1],
-          [1, -1, 1],
-          [1, 1, 1],
-          [-1, 1, 1],
-        ].map(([x, y, z]) => {
-          // Rotate around Y
-          const x2 = x * Math.cos(rotY) - z * Math.sin(rotY);
-          const z2 = x * Math.sin(rotY) + z * Math.cos(rotY);
-          // Rotate around X
-          const y2 = y * Math.cos(rotX) - z2 * Math.sin(rotX);
-          const z3 = y * Math.sin(rotX) + z2 * Math.cos(rotX);
-          // Project
-          const scale = 150 / (150 + z3 * cubeSize * 0.3);
-          return { x: x2 * cubeSize * scale, y: y2 * cubeSize * scale };
-        });
+          const edges = [
+            [0, 1],
+            [1, 2],
+            [2, 3],
+            [3, 0],
+            [4, 5],
+            [5, 6],
+            [6, 7],
+            [7, 4],
+            [0, 4],
+            [1, 5],
+            [2, 6],
+            [3, 7],
+          ];
+          const cubeColor = flash ? "#FFFFFF" : "#00FF44";
 
-        const edges = [
-          [0, 1],
-          [1, 2],
-          [2, 3],
-          [3, 0],
-          [4, 5],
-          [5, 6],
-          [6, 7],
-          [7, 4],
-          [0, 4],
-          [1, 5],
-          [2, 6],
-          [3, 7],
-        ];
-        const cubeColor = flash ? "#FFFFFF" : "#00FF44";
-
-        // Glow effect
-        ctx.save();
-        ctx.globalAlpha = 0.2;
-        ctx.fillStyle = "#00FF44";
-        ctx.beginPath();
-        ctx.arc(0, 0, cubeSize * 1.5, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.restore();
-
-        // Draw edges
-        ctx.strokeStyle = cubeColor;
-        ctx.lineWidth = 2;
-        edges.forEach(([a, b]) => {
-          ctx.beginPath();
-          ctx.moveTo(verts[a].x, verts[a].y);
-          ctx.lineTo(verts[b].x, verts[b].y);
-          ctx.stroke();
-        });
-
-        // Draw vertices as bright dots
-        ctx.fillStyle = flash ? "#FFFFFF" : "#88FF88";
-        verts.forEach((v) => {
-          ctx.beginPath();
-          ctx.arc(v.x, v.y, 3, 0, Math.PI * 2);
-          ctx.fill();
-        });
-
-        // Inner grid lines for Borg look
-        ctx.strokeStyle = flash ? "#FFFFFF" : "rgba(0,255,68,0.3)";
-        ctx.lineWidth = 1;
-        // Draw grid on front face
-        for (let i = 1; i < 3; i++) {
-          const t = i / 3;
-          const x1 = verts[0].x + (verts[1].x - verts[0].x) * t;
-          const y1 = verts[0].y + (verts[1].y - verts[0].y) * t;
-          const x2 = verts[3].x + (verts[2].x - verts[3].x) * t;
-          const y2 = verts[3].y + (verts[2].y - verts[3].y) * t;
-          ctx.beginPath();
-          ctx.moveTo(x1, y1);
-          ctx.lineTo(x2, y2);
-          ctx.stroke();
-          const x3 = verts[0].x + (verts[3].x - verts[0].x) * t;
-          const y3 = verts[0].y + (verts[3].y - verts[0].y) * t;
-          const x4 = verts[1].x + (verts[2].x - verts[1].x) * t;
-          const y4 = verts[1].y + (verts[2].y - verts[1].y) * t;
-          ctx.beginPath();
-          ctx.moveTo(x3, y3);
-          ctx.lineTo(x4, y4);
-          ctx.stroke();
-        }
-
-        // "REGEN" indicator glow
-        if ((boss.regenTimer ?? 0) > 150) {
+          // Glow effect
           ctx.save();
-          ctx.globalAlpha = 0.3 + Math.sin(boss.phase * 10) * 0.2;
+          ctx.globalAlpha = 0.2;
           ctx.fillStyle = "#00FF44";
           ctx.beginPath();
-          ctx.arc(0, 0, cubeSize * 0.6, 0, Math.PI * 2);
+          ctx.arc(0, 0, cubeSize * 1.5, 0, Math.PI * 2);
           ctx.fill();
           ctx.restore();
-        }
 
-        // Draw mini cubes
-        if (boss.miniCubes) {
-          boss.miniCubes.forEach((mc) => {
-            ctx.save();
-            ctx.translate(mc.pos.x - boss.pos.x, mc.pos.y - boss.pos.y);
-            ctx.rotate(mc.rotAngle);
-            ctx.strokeStyle = "#00FF44";
-            ctx.lineWidth = 1;
-            const s = 8;
-            ctx.strokeRect(-s / 2, -s / 2, s, s);
-            // Inner cross
-            ctx.strokeStyle = "rgba(0,255,68,0.4)";
+          // Draw edges
+          ctx.strokeStyle = cubeColor;
+          ctx.lineWidth = 2;
+          edges.forEach(([a, b]) => {
             ctx.beginPath();
-            ctx.moveTo(-s / 2, 0);
-            ctx.lineTo(s / 2, 0);
-            ctx.moveTo(0, -s / 2);
-            ctx.lineTo(0, s / 2);
+            ctx.moveTo(verts[a].x, verts[a].y);
+            ctx.lineTo(verts[b].x, verts[b].y);
             ctx.stroke();
-            ctx.restore();
           });
+
+          // Draw vertices as bright dots
+          ctx.fillStyle = flash ? "#FFFFFF" : "#88FF88";
+          verts.forEach((v) => {
+            ctx.beginPath();
+            ctx.arc(v.x, v.y, 3, 0, Math.PI * 2);
+            ctx.fill();
+          });
+
+          // Inner grid lines for Borg look
+          ctx.strokeStyle = flash ? "#FFFFFF" : "rgba(0,255,68,0.3)";
+          ctx.lineWidth = 1;
+          // Draw grid on front face
+          for (let i = 1; i < 3; i++) {
+            const t = i / 3;
+            const x1 = verts[0].x + (verts[1].x - verts[0].x) * t;
+            const y1 = verts[0].y + (verts[1].y - verts[0].y) * t;
+            const x2 = verts[3].x + (verts[2].x - verts[3].x) * t;
+            const y2 = verts[3].y + (verts[2].y - verts[3].y) * t;
+            ctx.beginPath();
+            ctx.moveTo(x1, y1);
+            ctx.lineTo(x2, y2);
+            ctx.stroke();
+            const x3 = verts[0].x + (verts[3].x - verts[0].x) * t;
+            const y3 = verts[0].y + (verts[3].y - verts[0].y) * t;
+            const x4 = verts[1].x + (verts[2].x - verts[1].x) * t;
+            const y4 = verts[1].y + (verts[2].y - verts[1].y) * t;
+            ctx.beginPath();
+            ctx.moveTo(x3, y3);
+            ctx.lineTo(x4, y4);
+            ctx.stroke();
+          }
+
+          // "REGEN" indicator glow
+          if ((boss.regenTimer ?? 0) > 150) {
+            ctx.save();
+            ctx.globalAlpha = 0.3 + Math.sin(boss.phase * 10) * 0.2;
+            ctx.fillStyle = "#00FF44";
+            ctx.beginPath();
+            ctx.arc(0, 0, cubeSize * 0.6, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+          }
+
+          // Draw mini cubes
+          if (boss.miniCubes) {
+            boss.miniCubes.forEach((mc) => {
+              ctx.save();
+              ctx.translate(mc.pos.x - boss.pos.x, mc.pos.y - boss.pos.y);
+              ctx.rotate(mc.rotAngle);
+              ctx.strokeStyle = "#00FF44";
+              ctx.lineWidth = 1;
+              const s = 8;
+              ctx.strokeRect(-s / 2, -s / 2, s, s);
+              // Inner cross
+              ctx.strokeStyle = "rgba(0,255,68,0.4)";
+              ctx.beginPath();
+              ctx.moveTo(-s / 2, 0);
+              ctx.lineTo(s / 2, 0);
+              ctx.moveTo(0, -s / 2);
+              ctx.lineTo(0, s / 2);
+              ctx.stroke();
+              ctx.restore();
+            });
+          }
         }
+
+        ctx.restore();
+
+        // HP Bar (shared by all bosses)
+        ctx.save();
+        const barW = 200;
+        const barH = 8;
+        const barX = (CANVAS_WIDTH - barW) / 2;
+        const barY = CANVAS_HEIGHT - 30;
+        const hpFrac = boss.hp / boss.maxHp;
+        ctx.globalAlpha = 0.7;
+        const bossBarColors: Record<string, string> = {
+          tentacle: "#FF44CC",
+          amigaBall: "#CC0000",
+          flyingSaucer: "#00FF88",
+          borgCube: "#00FF44",
+        };
+        const barColor = bossBarColors[boss.bossType] || "#FF44CC";
+        ctx.strokeStyle = barColor;
+        ctx.lineWidth = 1;
+        ctx.strokeRect(barX, barY, barW, barH);
+        ctx.fillStyle = hpFrac > 0.3 ? barColor : "#FF0000";
+        ctx.fillRect(barX, barY, barW * hpFrac, barH);
+        ctx.globalAlpha = 0.9;
+        ctx.font = "8px 'Press Start 2P', monospace";
+        ctx.fillStyle = "#FFFFFF";
+        ctx.textAlign = "center";
+        const bossNames: Record<string, string> = {
+          tentacle: "BOSS",
+          amigaBall: "AMIGA BALL",
+          flyingSaucer: "FLYING SAUCER",
+          borgCube: "BORG CUBE",
+        };
+        ctx.fillText(bossNames[boss.bossType] || "BOSS", CANVAS_WIDTH / 2, barY - 4);
+        ctx.restore();
       }
 
-      ctx.restore();
+      // Power-ups
+      state.powerUps.forEach((powerUp) => {
+        ctx.save();
+        ctx.translate(powerUp.pos.x, powerUp.pos.y);
+        ctx.rotate(powerUp.rotation);
+        const color =
+          powerUp.type === "shield"
+            ? "#7FFF7F"
+            : powerUp.type === "rapidFire"
+              ? "#FF6666"
+              : powerUp.type === "multiplier"
+                ? "#FFFF66"
+                : "#CC66FF";
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 2;
+        // Draw hexagon (6 sides, bigger = 14px radius)
+        ctx.beginPath();
+        for (let i = 0; i < 6; i++) {
+          const angle = (i / 6) * Math.PI * 2 - Math.PI / 2;
+          const x = Math.cos(angle) * 14;
+          const y = Math.sin(angle) * 14;
+          if (i === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        }
+        ctx.closePath();
+        ctx.stroke();
+        // Draw icon label always upright
+        ctx.rotate(-powerUp.rotation);
+        ctx.fillStyle = color;
+        ctx.font = "bold 9px monospace";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        const icon =
+          powerUp.type === "shield"
+            ? "SH"
+            : powerUp.type === "rapidFire"
+              ? "RF"
+              : powerUp.type === "extraLife"
+                ? "+1"
+                : "2X";
+        ctx.fillText(icon, 0, 0);
+        ctx.restore();
+      });
 
-      // HP Bar (shared by all bosses)
+      // Power-up HUD bars
+      const activePowerUps: { label: string; color: string; remaining: number; max: number }[] = [];
+      if (state.powerUpActive.shield > 0)
+        activePowerUps.push({ label: "SHIELD", color: "#7FFF7F", remaining: state.powerUpActive.shield, max: 300 });
+      if (state.powerUpActive.rapidFire > 0)
+        activePowerUps.push({ label: "RAPID", color: "#FF6666", remaining: state.powerUpActive.rapidFire, max: 600 });
+      if (state.powerUpActive.multiplier > 0)
+        activePowerUps.push({ label: "2x", color: "#FFFF66", remaining: state.powerUpActive.multiplier, max: 900 });
+
+      activePowerUps.forEach((pu, i) => {
+        const barX = 10;
+        const barY = 10 + i * 18;
+        const barW = 120;
+        const barH = 12;
+        const fill = pu.remaining / pu.max;
+        ctx.save();
+        ctx.globalAlpha = 0.6;
+        ctx.strokeStyle = pu.color;
+        ctx.lineWidth = 1;
+        ctx.strokeRect(barX, barY, barW, barH);
+        ctx.fillStyle = pu.color;
+        ctx.globalAlpha = 0.35;
+        ctx.fillRect(barX, barY, barW * fill, barH);
+        ctx.globalAlpha = 0.9;
+        ctx.font = "7px 'Press Start 2P', monospace";
+        ctx.fillStyle = pu.color;
+        ctx.fillText(pu.label, barX + 3, barY + 10);
+        ctx.restore();
+      });
+
+      // Wave/theme indicator
       ctx.save();
-      const barW = 200;
-      const barH = 8;
-      const barX = (CANVAS_WIDTH - barW) / 2;
-      const barY = CANVAS_HEIGHT - 30;
-      const hpFrac = boss.hp / boss.maxHp;
-      ctx.globalAlpha = 0.7;
-      const bossBarColors: Record<string, string> = {
-        tentacle: "#FF44CC",
-        amigaBall: "#CC0000",
-        flyingSaucer: "#00FF88",
-        borgCube: "#00FF44",
-      };
-      const barColor = bossBarColors[boss.bossType] || "#FF44CC";
-      ctx.strokeStyle = barColor;
-      ctx.lineWidth = 1;
-      ctx.strokeRect(barX, barY, barW, barH);
-      ctx.fillStyle = hpFrac > 0.3 ? barColor : "#FF0000";
-      ctx.fillRect(barX, barY, barW * hpFrac, barH);
-      ctx.globalAlpha = 0.9;
+      ctx.globalAlpha = 0.4;
       ctx.font = "8px 'Press Start 2P', monospace";
-      ctx.fillStyle = "#FFFFFF";
-      ctx.textAlign = "center";
-      const bossNames: Record<string, string> = {
-        tentacle: "BOSS",
-        amigaBall: "AMIGA BALL",
-        flyingSaucer: "FLYING SAUCER",
-        borgCube: "BORG CUBE",
-      };
-      ctx.fillText(bossNames[boss.bossType] || "BOSS", CANVAS_WIDTH / 2, barY - 4);
-      ctx.restore();
-    }
-
-    // Power-ups
-    state.powerUps.forEach((powerUp) => {
-      ctx.save();
-      ctx.translate(powerUp.pos.x, powerUp.pos.y);
-      ctx.rotate(powerUp.rotation);
-      const color =
-        powerUp.type === "shield"
-          ? "#7FFF7F"
-          : powerUp.type === "rapidFire"
-            ? "#FF6666"
-            : powerUp.type === "multiplier"
-              ? "#FFFF66"
-              : "#CC66FF";
-      ctx.strokeStyle = color;
-      ctx.lineWidth = 2;
-      // Draw hexagon (6 sides, bigger = 14px radius)
-      ctx.beginPath();
-      for (let i = 0; i < 6; i++) {
-        const angle = (i / 6) * Math.PI * 2 - Math.PI / 2;
-        const x = Math.cos(angle) * 14;
-        const y = Math.sin(angle) * 14;
-        if (i === 0) ctx.moveTo(x, y);
-        else ctx.lineTo(x, y);
-      }
-      ctx.closePath();
-      ctx.stroke();
-      // Draw icon label always upright
-      ctx.rotate(-powerUp.rotation);
-      ctx.fillStyle = color;
-      ctx.font = "bold 9px monospace";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      const icon =
-        powerUp.type === "shield"
-          ? "SH"
-          : powerUp.type === "rapidFire"
-            ? "RF"
-            : powerUp.type === "extraLife"
-              ? "+1"
-              : "2X";
-      ctx.fillText(icon, 0, 0);
-      ctx.restore();
-    });
-
-    // Power-up HUD bars
-    const activePowerUps: { label: string; color: string; remaining: number; max: number }[] = [];
-    if (state.powerUpActive.shield > 0)
-      activePowerUps.push({ label: "SHIELD", color: "#7FFF7F", remaining: state.powerUpActive.shield, max: 300 });
-    if (state.powerUpActive.rapidFire > 0)
-      activePowerUps.push({ label: "RAPID", color: "#FF6666", remaining: state.powerUpActive.rapidFire, max: 600 });
-    if (state.powerUpActive.multiplier > 0)
-      activePowerUps.push({ label: "2x", color: "#FFFF66", remaining: state.powerUpActive.multiplier, max: 900 });
-
-    activePowerUps.forEach((pu, i) => {
-      const barX = 10;
-      const barY = 10 + i * 18;
-      const barW = 120;
-      const barH = 12;
-      const fill = pu.remaining / pu.max;
-      ctx.save();
-      ctx.globalAlpha = 0.6;
-      ctx.strokeStyle = pu.color;
-      ctx.lineWidth = 1;
-      ctx.strokeRect(barX, barY, barW, barH);
-      ctx.fillStyle = pu.color;
-      ctx.globalAlpha = 0.35;
-      ctx.fillRect(barX, barY, barW * fill, barH);
-      ctx.globalAlpha = 0.9;
-      ctx.font = "7px 'Press Start 2P', monospace";
-      ctx.fillStyle = pu.color;
-      ctx.fillText(pu.label, barX + 3, barY + 10);
-      ctx.restore();
-    });
-
-    // Wave/theme indicator
-    ctx.save();
-    ctx.globalAlpha = 0.4;
-    ctx.font = "8px 'Press Start 2P', monospace";
-    ctx.fillStyle = theme.accent;
-    ctx.textAlign = "right";
-    ctx.fillText(`${theme.name.toUpperCase()} ZONE`, CANVAS_WIDTH - 10, 18);
-    ctx.restore();
-
-    // Top score in top-right corner (from local high scores)
-    const topScoreSource = localHighScores.length > 0 ? localHighScores : leaderboard;
-    if (topScoreSource.length > 0) {
-      ctx.save();
-      ctx.globalAlpha = 0.5;
-      ctx.font = "8px 'Press Start 2P', monospace";
-      ctx.fillStyle = "#FFD700";
+      ctx.fillStyle = theme.accent;
       ctx.textAlign = "right";
-      ctx.fillText(`TOP: ${topScoreSource[0].score.toString().padStart(8, "0")}`, CANVAS_WIDTH - 10, 38);
+      ctx.fillText(`${theme.name.toUpperCase()} ZONE`, CANVAS_WIDTH - 10, 18);
       ctx.restore();
-    }
 
+      // Top score in top-right corner (from local high scores)
+      const topScoreSource = localHighScores.length > 0 ? localHighScores : leaderboard;
+      if (topScoreSource.length > 0) {
+        ctx.save();
+        ctx.globalAlpha = 0.5;
+        ctx.font = "8px 'Press Start 2P', monospace";
+        ctx.fillStyle = "#FFD700";
+        ctx.textAlign = "right";
+        ctx.fillText(`TOP: ${topScoreSource[0].score.toString().padStart(8, "0")}`, CANVAS_WIDTH - 10, 38);
+        ctx.restore();
+      }
     } // end of else (solo mode drawing)
 
     // Version number removed from canvas (moved to HUD)
@@ -4755,10 +4872,16 @@ const Game = () => {
           // Coop host: collect all remote inputs and send full array to worker
           const cs = coopStateRef.current;
           const pc = cs?.playerCount ?? 2;
-          const inputsArr: { left: boolean; right: boolean; up: boolean; fire: boolean; hyperspace: boolean }[] = [localInput];
+          const inputsArr: { left: boolean; right: boolean; up: boolean; fire: boolean; hyperspace: boolean }[] = [
+            localInput,
+          ];
           for (let i = 1; i < pc; i++) {
             const remote = multiplayer.remoteInputsRef.current.get(i);
-            inputsArr.push(remote ? { ...remote, hyperspace: remote.hyperspace ?? false } : { left: false, right: false, up: false, fire: false, hyperspace: false });
+            inputsArr.push(
+              remote
+                ? { ...remote, hyperspace: remote.hyperspace ?? false }
+                : { left: false, right: false, up: false, fire: false, hyperspace: false },
+            );
           }
           workerRef.current.postMessage({ type: "inputs", inputs: inputsArr });
         } else if (isHostRef.current && workerRef.current) {
@@ -5160,9 +5283,9 @@ const Game = () => {
     }, 500);
 
     return () => clearInterval(interval);
-  // countdownKey changes each time a new countdown session starts; that is the
-  // only dependency needed — the interval reads all other values via refs.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // countdownKey changes each time a new countdown session starts; that is the
+    // only dependency needed — the interval reads all other values via refs.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [countdownKey]);
 
   // Host: listen for player_ready signals from guests during a countdown restart.
@@ -5692,7 +5815,7 @@ const Game = () => {
           }}
           onInitialsSet={(inits) => multiplayer.setLocalInitials(inits)}
           onStartGame={(mode, playerCount) => {
-            const pc = playerCount ?? (multiplayer.guestCount + 1);
+            const pc = playerCount ?? multiplayer.guestCount + 1;
             multiplayer.startGame(mode, pc);
             if (mode === "coop") {
               multiplayer.setGameInProgress(true);
@@ -5759,7 +5882,8 @@ const Game = () => {
                 : "opacity-60 border-[#44FF44]/60 text-[#44FF44]/60"
             }`}
           >
-            {menuSelection === 3 ? "▸ " : "  "}ONLINE<span className="text-xs text-red-500 ml-1 align-middle">BETA</span>
+            {menuSelection === 3 ? "▸ " : "  "}ONLINE
+            <span className="text-xs text-red-500 ml-1 align-middle">ALPHA</span>
           </Button>
           <Button
             onClick={() => setShowSettings(true)}
@@ -6336,14 +6460,15 @@ const Game = () => {
           <div className="text-[hsl(var(--game-foreground))] opacity-30">|</div>
           {Array.from({ length: coopPlayerCount }, (_, i) => {
             const color = PLAYER_COLORS[i % PLAYER_COLORS.length];
-            const isMe = gameMode === "online_coop" && (multiplayer.isHost ? i === 0 : i === multiplayer.playerIdxRef.current);
+            const isMe =
+              gameMode === "online_coop" && (multiplayer.isHost ? i === 0 : i === multiplayer.playerIdxRef.current);
             const eliminated = coopEliminated[i];
-            const label = gameMode === "online_coop"
-              ? (multiplayer.playerInitialsMap.get(i) ?? `P${i + 1}`)
-              : `P${i + 1}`;
+            const label =
+              gameMode === "online_coop" ? (multiplayer.playerInitialsMap.get(i) ?? `P${i + 1}`) : `P${i + 1}`;
             return (
               <div key={i} style={{ color, textShadow: `0 0 10px ${color}`, opacity: eliminated ? 0.4 : 1 }}>
-                {label}{isMe ? " (YOU)" : ""} {eliminated ? "💀" : `❤${coopLives[i] ?? 0}`}
+                {label}
+                {isMe ? " (YOU)" : ""} {eliminated ? "💀" : `❤${coopLives[i] ?? 0}`}
               </div>
             );
           })}
@@ -6416,7 +6541,10 @@ const Game = () => {
                     }}
                     onKeyDown={(e) => {
                       if (e.key === "Enter" && initials.length > 0) {
-                        const updated = [...localHighScores, { initials: initials.toUpperCase(), score: displayScore, date: new Date().toISOString() }]
+                        const updated = [
+                          ...localHighScores,
+                          { initials: initials.toUpperCase(), score: displayScore, date: new Date().toISOString() },
+                        ]
                           .sort((a, b) => b.score - a.score)
                           .slice(0, 10);
                         localStorage.setItem(LOCAL_SCORES_KEY, JSON.stringify(updated));
@@ -6432,7 +6560,10 @@ const Game = () => {
                   <Button
                     onClick={() => {
                       if (initials.length > 0) {
-                        const updated = [...localHighScores, { initials: initials.toUpperCase(), score: displayScore, date: new Date().toISOString() }]
+                        const updated = [
+                          ...localHighScores,
+                          { initials: initials.toUpperCase(), score: displayScore, date: new Date().toISOString() },
+                        ]
                           .sort((a, b) => b.score - a.score)
                           .slice(0, 10);
                         localStorage.setItem(LOCAL_SCORES_KEY, JSON.stringify(updated));
@@ -6541,9 +6672,8 @@ const Game = () => {
                 ? coopPlayerStats
                 : Array.from({ length: coopPlayerCount }, (_, i) => ({
                     playerIndex: i,
-                    label: gameMode === "online_coop"
-                      ? (multiplayer.playerInitialsMap.get(i) ?? `P${i + 1}`)
-                      : `P${i + 1}`,
+                    label:
+                      gameMode === "online_coop" ? (multiplayer.playerInitialsMap.get(i) ?? `P${i + 1}`) : `P${i + 1}`,
                     score: 0,
                     asteroidsDestroyed: 0,
                     enemiesKilled: 0,
@@ -6551,9 +6681,10 @@ const Game = () => {
                   }))
               ).map((stat, rank) => {
                 const color = PLAYER_COLORS[stat.playerIndex % PLAYER_COLORS.length];
-                const label = gameMode === "online_coop"
-                  ? (multiplayer.playerInitialsMap.get(stat.playerIndex) ?? stat.label)
-                  : stat.label;
+                const label =
+                  gameMode === "online_coop"
+                    ? (multiplayer.playerInitialsMap.get(stat.playerIndex) ?? stat.label)
+                    : stat.label;
                 return (
                   <div
                     key={stat.playerIndex}
@@ -6605,8 +6736,9 @@ const Game = () => {
                   PLAY AGAIN
                 </Button>
               )}
-              {gameMode === "online_coop" && multiplayer.isHost && (
-                multiplayer.guestCount === 0 ? (
+              {gameMode === "online_coop" &&
+                multiplayer.isHost &&
+                (multiplayer.guestCount === 0 ? (
                   // No guests connected — show waiting message instead of RESTART
                   <div
                     className="text-sm font-mono animate-pulse"
@@ -6647,8 +6779,7 @@ const Game = () => {
                   >
                     {restartCountdown != null && restartCountdown > 0 ? `WAITING ${restartCountdown}s` : "RESTART"}
                   </Button>
-                )
-              )}
+                ))}
               {gameMode === "online_coop" && !multiplayer.isHost && hostRestarted && (
                 <div className="flex flex-col items-center gap-2">
                   {restartCountdown != null && restartCountdown > 0 && (
@@ -6826,10 +6957,7 @@ const Game = () => {
                   }
                 }}
               >
-                <LobbyChat
-                  messages={multiplayer.chatMessages}
-                  onSend={(text) => multiplayer.sendChatMessage(text)}
-                />
+                <LobbyChat messages={multiplayer.chatMessages} onSend={(text) => multiplayer.sendChatMessage(text)} />
               </div>
             ) : (
               <button
