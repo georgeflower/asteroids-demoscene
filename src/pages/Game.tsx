@@ -5398,9 +5398,10 @@ const Game = () => {
   // joiners stuck in the "Joining" phase), immediately disconnect and return to menu.
   useEffect(() => {
     if (multiplayer.hostDisconnected && !multiplayer.isHost && gameModeRef.current === "online_lobby") {
-      quitToMenu();
+      multiplayer.disconnect();
+      setGameMode("menu");
     }
-  }, [multiplayer.hostDisconnected, multiplayer.isHost, quitToMenu]);
+  }, [multiplayer.hostDisconnected, multiplayer.isHost]);
 
   // Host (duel): worker message handler – broadcast every tick for minimum lag
   useEffect(() => {
