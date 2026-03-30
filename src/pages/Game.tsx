@@ -5119,7 +5119,7 @@ const Game = () => {
       }
     }, 250);
     return () => clearTimeout(timer);
-  }, [restartCountdown, gameMode, multiplayer.isHost, hostRestarted, coopPlayerCount, initOnlineCoop]);
+  }, [restartCountdown, gameMode, multiplayer.isHost, hostRestarted, coopPlayerCount, initOnlineCoop, initCoop]);
 
   // Guest/late-joiner: listen for players_added to enter an in-progress game
   useEffect(() => {
