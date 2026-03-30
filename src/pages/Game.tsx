@@ -5279,6 +5279,8 @@ const Game = () => {
     setCoopWaveComplete(false);
     setCoopPlayerStats([]);
     setHostRestarted(false);
+    restartDeadlineRef.current = null;
+    setRestartCountdown(null);
     setIsSpectating(false);
     isPausedRef.current = false;
     setIsPaused(false);
