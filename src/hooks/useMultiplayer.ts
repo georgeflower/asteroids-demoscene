@@ -61,6 +61,8 @@ export function useMultiplayer() {
   const onPlayerReadyRef = useRef<((playerIdx: number) => void) | null>(null);
   // Callback invoked on the host when a guest leaves the room
   const onPlayerLeaveRef = useRef<((playerIdx: number) => void) | null>(null);
+  // Callback invoked on the host when a new guest joins the channel
+  const onGuestJoinedRef = useRef<(() => void) | null>(null);
 
   /** Rebuild the playerIdx→initials map from the current presence state */
   const rebuildInitialsMap = useCallback((channel: ReturnType<typeof supabase.channel>) => {
@@ -100,6 +102,8 @@ export function useMultiplayer() {
               payload: { messages: chatHistoryRef.current },
             }).catch(() => {});
           }
+          // Notify game that a new guest joined (so it can re-broadcast pending restart state)
+          onGuestJoinedRef.current?.();
         }
         // Recount guests in presence state
         const state = channel.presenceState() as PresenceState;
@@ -464,6 +468,7 @@ export function useMultiplayer() {
     onPlayersAddedRef,
     onPlayerReadyRef,
     onPlayerLeaveRef,
+    onGuestJoinedRef,
     hostDisconnected,
     createRoom,
     joinRoom,

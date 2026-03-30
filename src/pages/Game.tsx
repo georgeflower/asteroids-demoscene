@@ -5228,8 +5228,13 @@ const Game = () => {
   // Guest: listen for game_restart from host and show the READY button + countdown
   useEffect(() => {
     multiplayer.onGameRestartRef.current = (playerCount?: number, deadline?: number) => {
-      // Use gameModeRef (not gameMode state) to get the current value inside the callback closure
-      if (gameModeRef.current === "online_coop") {
+      // Use gameModeRef (not gameMode state) to get the current value inside the callback closure.
+      // Also accept restarts when still in "online_lobby" for late-joining spectators who are
+      // transitioning — they haven't switched to "online_coop" yet but must capture the event.
+      const isEligible =
+        gameModeRef.current === "online_coop" ||
+        (gameModeRef.current === "online_lobby" && !isHostRef.current);
+      if (isEligible) {
         if (playerCount != null) {
           setCoopPlayerCount(playerCount);
         }
@@ -5338,6 +5343,15 @@ const Game = () => {
     };
   }, [multiplayer.onPlayerLeaveRef]);
 
+  // Host: when a new guest joins during an active restart countdown, re-broadcast game_restart
+  // so the new joiner receives the restart state they would otherwise have missed.
+  useEffect(() => {
+    multiplayer.onGuestJoinedRef.current = () => {
+      if (!isHostRef.current || restartDeadlineRef.current == null) return;
+      multiplayer.sendGameRestart(restartDeadlineRef.current);
+    };
+  }, [multiplayer.onGuestJoinedRef, multiplayer.sendGameRestart]);
+
   // Guest/late-joiner: listen for players_added to enter an in-progress game
   useEffect(() => {
     multiplayer.onPlayersAddedRef.current = (newPlayerCount: number) => {
@@ -5368,6 +5382,11 @@ const Game = () => {
       // coop_state broadcasts will supply the authoritative state.
       const estimatedPlayerCount = multiplayer.guestCount + 1;
       initOnlineCoop(false, estimatedPlayerCount);
+      // Immediately register the coop state callback to eliminate the race condition
+      // where coop_state broadcasts arrive before the gameMode-dependent effect re-runs.
+      multiplayer.onRemoteCoopStateRef.current = (state: CoopNetState) => {
+        applyCoopNetStateRef.current(state);
+      };
     }
     // Reset the guard when leaving the lobby
     if (gameMode !== "online_lobby") {
