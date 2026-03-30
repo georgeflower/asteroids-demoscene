@@ -229,8 +229,8 @@ export function useMultiplayer() {
         onPlayersAddedRef.current?.(newPlayerCount);
       })
       .on("broadcast", { event: "game_restart" }, ({ payload }) => {
-        const { playerCount } = (payload ?? {}) as { playerCount?: number };
-        onGameRestartRef.current?.(playerCount);
+        const { playerCount, deadline } = (payload ?? {}) as { playerCount?: number; deadline?: number };
+        onGameRestartRef.current?.(playerCount, deadline);
       })
       .subscribe(async (status) => {
         if (status === "SUBSCRIBED") {
