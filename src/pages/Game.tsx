@@ -406,6 +406,8 @@ const Game = () => {
   const [hostRestarted, setHostRestarted] = useState(false);
   const [isSpectating, setIsSpectating] = useState(false);
   const [coopGeneration, setCoopGeneration] = useState(0);
+  const [restartCountdown, setRestartCountdown] = useState<number | null>(null);
+  const restartDeadlineRef = useRef<number | null>(null);
   const coopGenerationRef = useRef(0);
   const [menuSelection, setMenuSelection] = useState(0); // 0=solo, 1=duel, 2=coop, 3=online, 4=settings
   const [gameOverSelection, setGameOverSelection] = useState(0); // 0=play again, 1=menu
@@ -1586,6 +1588,8 @@ const Game = () => {
         setCoopWaveComplete(false);
         setCoopPlayerStats([]);
         setHostRestarted(false);
+        restartDeadlineRef.current = null;
+        setRestartCountdown(null);
         setGameMode("online_coop");
         broadcastTickRef.current = 0;
         prevCoopThrustRef.current = false;
@@ -5073,18 +5077,51 @@ const Game = () => {
     };
   }, [initOnline, initOnlineCoop]);
 
-  // Guest: listen for game_restart from host and show the READY button
+  // Guest: listen for game_restart from host and show the READY button + countdown
   useEffect(() => {
-    multiplayer.onGameRestartRef.current = (playerCount?: number) => {
+    multiplayer.onGameRestartRef.current = (playerCount?: number, deadline?: number) => {
       // Use gameModeRef (not gameMode state) to get the current value inside the callback closure
       if (gameModeRef.current === "online_coop") {
         if (playerCount != null) {
           setCoopPlayerCount(playerCount);
         }
         setHostRestarted(true);
+        // Start countdown from the shared deadline
+        if (deadline != null) {
+          restartDeadlineRef.current = deadline;
+          const remaining = Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
+          setRestartCountdown(remaining);
+        }
       }
     };
   }, [multiplayer.onGameRestartRef]);
+
+  // Countdown timer effect — ticks every second and auto-starts when it hits 0
+  useEffect(() => {
+    if (restartCountdown == null || restartCountdown <= 0) return;
+    const timer = setTimeout(() => {
+      const deadline = restartDeadlineRef.current;
+      if (deadline == null) { setRestartCountdown(null); return; }
+      const remaining = Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
+      setRestartCountdown(remaining);
+      if (remaining <= 0) {
+        if (gameMode === "online_coop") {
+          if (multiplayer.isHost) {
+            // Host auto-starts the game when countdown expires
+            initCoop(true, coopPlayerCount);
+          } else if (hostRestarted) {
+            // Guest who hasn't pressed READY — auto-start them
+            setHostRestarted(false);
+            setIsSpectating(false);
+            initOnlineCoop(false, coopPlayerCount);
+          }
+        }
+        restartDeadlineRef.current = null;
+        setRestartCountdown(null);
+      }
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [restartCountdown, gameMode, multiplayer.isHost, hostRestarted, coopPlayerCount, initOnlineCoop, initCoop]);
 
   // Guest/late-joiner: listen for players_added to enter an in-progress game
   useEffect(() => {
@@ -5242,6 +5279,8 @@ const Game = () => {
     setCoopWaveComplete(false);
     setCoopPlayerStats([]);
     setHostRestarted(false);
+    restartDeadlineRef.current = null;
+    setRestartCountdown(null);
     setIsSpectating(false);
     isPausedRef.current = false;
     setIsPaused(false);
@@ -6475,33 +6514,53 @@ const Game = () => {
               {gameMode === "online_coop" && multiplayer.isHost && (
                 <Button
                   onClick={() => {
-                    multiplayer.sendGameRestart();
+                    const deadline = Date.now() + 20_000;
+                    restartDeadlineRef.current = deadline;
+                    setRestartCountdown(20);
+                    multiplayer.sendGameRestart(deadline);
                     multiplayer.setGameInProgress(true);
-                    initCoop(true, coopPlayerCount);
+                    // Don't initCoop yet — wait for countdown to finish
                   }}
                   className="text-base sm:text-lg px-6 py-3 font-mono"
                   style={{ fontFamily: "'Press Start 2P', monospace" }}
+                  disabled={restartCountdown != null && restartCountdown > 0}
                 >
-                  RESTART
+                  {restartCountdown != null && restartCountdown > 0 ? `WAITING ${restartCountdown}s` : "RESTART"}
                 </Button>
               )}
               {gameMode === "online_coop" && !multiplayer.isHost && hostRestarted && (
-                <Button
-                  onClick={() => {
-                    setHostRestarted(false);
-                    setIsSpectating(false);
-                    initOnlineCoop(false, coopPlayerCount);
-                  }}
-                  className="text-base sm:text-lg px-6 py-3 font-mono animate-pulse"
-                  style={{
-                    fontFamily: "'Press Start 2P', monospace",
-                    background: "#44FF88",
-                    color: "#000000",
-                    boxShadow: "0 0 20px #44FF88",
-                  }}
-                >
-                  READY
-                </Button>
+                <div className="flex flex-col items-center gap-2">
+                  {restartCountdown != null && restartCountdown > 0 && (
+                    <span
+                      style={{
+                        fontFamily: "'Press Start 2P', monospace",
+                        fontSize: 14,
+                        color: restartCountdown <= 5 ? "#FF4444" : "#FFD700",
+                        textShadow: `0 0 10px ${restartCountdown <= 5 ? "#FF4444" : "#FFD700"}`,
+                      }}
+                    >
+                      STARTING IN {restartCountdown}s
+                    </span>
+                  )}
+                  <Button
+                    onClick={() => {
+                      setHostRestarted(false);
+                      setIsSpectating(false);
+                      restartDeadlineRef.current = null;
+                      setRestartCountdown(null);
+                      initOnlineCoop(false, coopPlayerCount);
+                    }}
+                    className="text-base sm:text-lg px-6 py-3 font-mono animate-pulse"
+                    style={{
+                      fontFamily: "'Press Start 2P', monospace",
+                      background: "#44FF88",
+                      color: "#000000",
+                      boxShadow: "0 0 20px #44FF88",
+                    }}
+                  >
+                    READY
+                  </Button>
+                </div>
               )}
               <Button
                 onClick={quitToMenu}

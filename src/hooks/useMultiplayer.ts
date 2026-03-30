@@ -39,7 +39,7 @@ export function useMultiplayer() {
   const remoteInputsRef = useRef<Map<number, InputState>>(new Map());
   const onGameStartRef = useRef<((mode: SessionMode, playerCount?: number) => void) | null>(null);
   // Callback invoked when host broadcasts a game restart
-  const onGameRestartRef = useRef<((playerCount?: number) => void) | null>(null);
+  const onGameRestartRef = useRef<((playerCount?: number, deadline?: number) => void) | null>(null);
   // Own player index assigned when joining (0 = host, 1+ = guests)
   const playerIdxRef = useRef<number>(0);
   // Local player's initials
@@ -229,8 +229,8 @@ export function useMultiplayer() {
         onPlayersAddedRef.current?.(newPlayerCount);
       })
       .on("broadcast", { event: "game_restart" }, ({ payload }) => {
-        const { playerCount } = (payload ?? {}) as { playerCount?: number };
-        onGameRestartRef.current?.(playerCount);
+        const { playerCount, deadline } = (payload ?? {}) as { playerCount?: number; deadline?: number };
+        onGameRestartRef.current?.(playerCount, deadline);
       })
       .subscribe(async (status) => {
         if (status === "SUBSCRIBED") {
@@ -338,14 +338,14 @@ export function useMultiplayer() {
   }, []);
 
   /** Host: broadcast a game restart event to all guests */
-  const sendGameRestart = useCallback(() => {
+  const sendGameRestart = useCallback((deadline?: number) => {
     const channel = channelRef.current;
     if (!channel) return;
     const playerCount = 1 + guestCountRef.current;
     channel.send({
       type: "broadcast",
       event: "game_restart",
-      payload: { playerCount },
+      payload: { playerCount, deadline },
     }).catch(() => {});
   }, []);
 
