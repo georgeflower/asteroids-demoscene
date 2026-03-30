@@ -1521,6 +1521,10 @@ const Game = () => {
     workerRef.current = worker;
     worker.postMessage({ type: "init", turnSpeed: controlBindingsRef.current.turnSpeed || 0.05, playerCount: pc });
 
+    // Bump generation so worker onmessage effects re-attach to the new worker
+    coopGenerationRef.current += 1;
+    setCoopGeneration(coopGenerationRef.current);
+
     setTimeout(() => {
       canvasRef.current?.focus();
     }, 50);
