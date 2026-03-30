@@ -6476,6 +6476,7 @@ const Game = () => {
                 <Button
                   onClick={() => {
                     multiplayer.sendGameRestart();
+                    multiplayer.setGameInProgress(true);
                     initCoop(true, coopPlayerCount);
                   }}
                   className="text-base sm:text-lg px-6 py-3 font-mono"
