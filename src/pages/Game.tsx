@@ -5166,7 +5166,7 @@ const Game = () => {
         sendCoopStateRef.current(net);
       }
     };
-  }, [gameMode, multiplayer.isHost, multiplayer.getWaitingPlayerCount, multiplayer.sendPlayersAdded]);
+  }, [gameMode, multiplayer.isHost, multiplayer.getWaitingPlayerCount, multiplayer.sendPlayersAdded, coopGeneration]);
 
   // Local coop: worker → coopStateRef
   useEffect(() => {
@@ -5178,7 +5178,7 @@ const Game = () => {
         applyCoopNetStateRef.current(e.data.data as CoopNetState);
       }
     };
-  }, [gameMode]);
+  }, [gameMode, coopGeneration]);
 
   // Cleanup worker on unmount
   useEffect(() => {
