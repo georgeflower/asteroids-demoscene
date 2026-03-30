@@ -6525,22 +6525,38 @@ const Game = () => {
                 </Button>
               )}
               {gameMode === "online_coop" && !multiplayer.isHost && hostRestarted && (
-                <Button
-                  onClick={() => {
-                    setHostRestarted(false);
-                    setIsSpectating(false);
-                    initOnlineCoop(false, coopPlayerCount);
-                  }}
-                  className="text-base sm:text-lg px-6 py-3 font-mono animate-pulse"
-                  style={{
-                    fontFamily: "'Press Start 2P', monospace",
-                    background: "#44FF88",
-                    color: "#000000",
-                    boxShadow: "0 0 20px #44FF88",
-                  }}
-                >
-                  READY
-                </Button>
+                <div className="flex flex-col items-center gap-2">
+                  {restartCountdown != null && restartCountdown > 0 && (
+                    <span
+                      style={{
+                        fontFamily: "'Press Start 2P', monospace",
+                        fontSize: 14,
+                        color: restartCountdown <= 5 ? "#FF4444" : "#FFD700",
+                        textShadow: `0 0 10px ${restartCountdown <= 5 ? "#FF4444" : "#FFD700"}`,
+                      }}
+                    >
+                      STARTING IN {restartCountdown}s
+                    </span>
+                  )}
+                  <Button
+                    onClick={() => {
+                      setHostRestarted(false);
+                      setIsSpectating(false);
+                      restartDeadlineRef.current = null;
+                      setRestartCountdown(null);
+                      initOnlineCoop(false, coopPlayerCount);
+                    }}
+                    className="text-base sm:text-lg px-6 py-3 font-mono animate-pulse"
+                    style={{
+                      fontFamily: "'Press Start 2P', monospace",
+                      background: "#44FF88",
+                      color: "#000000",
+                      boxShadow: "0 0 20px #44FF88",
+                    }}
+                  >
+                    READY
+                  </Button>
+                </div>
               )}
               <Button
                 onClick={quitToMenu}
