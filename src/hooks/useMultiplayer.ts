@@ -39,7 +39,7 @@ export function useMultiplayer() {
   const remoteInputsRef = useRef<Map<number, InputState>>(new Map());
   const onGameStartRef = useRef<((mode: SessionMode, playerCount?: number) => void) | null>(null);
   // Callback invoked when host broadcasts a game restart
-  const onGameRestartRef = useRef<((playerCount?: number) => void) | null>(null);
+  const onGameRestartRef = useRef<((playerCount?: number, deadline?: number) => void) | null>(null);
   // Own player index assigned when joining (0 = host, 1+ = guests)
   const playerIdxRef = useRef<number>(0);
   // Local player's initials
