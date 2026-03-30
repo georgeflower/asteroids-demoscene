@@ -408,6 +408,13 @@ const Game = () => {
   const [coopGeneration, setCoopGeneration] = useState(0);
   const [restartCountdown, setRestartCountdown] = useState<number | null>(null);
   const restartDeadlineRef = useRef<number | null>(null);
+  // Incremented each time a new countdown session starts; used as the dependency
+  // for the setInterval-based countdown effect to avoid stale-closure issues.
+  const [countdownKey, setCountdownKey] = useState(0);
+  // Tracks which guest playerIdx values have pressed READY for the current restart
+  const readyPlayerIdxsRef = useRef<Set<number>>(new Set());
+  // Number of guests expected to press ready (set when host triggers restart)
+  const expectedGuestsForRestartRef = useRef(0);
   const coopGenerationRef = useRef(0);
   const [menuSelection, setMenuSelection] = useState(0); // 0=solo, 1=duel, 2=coop, 3=online, 4=settings
   const [gameOverSelection, setGameOverSelection] = useState(0); // 0=play again, 1=menu
@@ -515,6 +522,12 @@ const Game = () => {
   const broadcastTickRef = useRef(0);
   const isHostRef = useRef(false);
   const isConnectedRef = useRef(false);
+  // Stable refs for use in setInterval / event callbacks (avoids stale closures)
+  const coopPlayerCountRef = useRef(2);
+  const hostRestartedRef = useRef(false);
+  // initCoop and initOnlineCoop are defined later; their refs are populated by effects below.
+  const initCoopRef = useRef<(isOnlineHost?: boolean, playerCount?: number) => void>(() => {});
+  const initOnlineCoopRef = useRef<(isHost: boolean, playerCount?: number) => void>(() => {});
   // Client-side prediction: guest runs local physics for its own ship (P2)
   // to eliminate the feel of input lag between sends and authoritative state updates.
   const guestPredictedShipRef = useRef<Ship | null>(null);
@@ -539,6 +552,8 @@ const Game = () => {
   useEffect(() => {
     if (DEBUG_ENABLED) localStorage.setItem("trainerMode", String(trainerMode));
   }, [trainerMode]);
+  useEffect(() => { coopPlayerCountRef.current = coopPlayerCount; }, [coopPlayerCount]);
+  useEffect(() => { hostRestartedRef.current = hostRestarted; }, [hostRestarted]);
 
   const addDebugLog = useCallback((category: DebugCategory, message: string) => {
     if (!DEBUG_ENABLED) return;
@@ -1514,6 +1529,13 @@ const Game = () => {
     prevCoopHyperspaceRef.current = false;
     checkVersion();
 
+    // Reset countdown / ready-tracking state whenever a new game starts
+    restartDeadlineRef.current = null;
+    setRestartCountdown(null);
+    readyPlayerIdxsRef.current = new Set();
+    expectedGuestsForRestartRef.current = 0;
+    setHostRestarted(false);
+
     // Start the co-op worker
     if (workerRef.current) {
       workerRef.current.postMessage({ type: "stop" });
@@ -1607,6 +1629,9 @@ const Game = () => {
     },
     [initCoop, multiplayer.playerIdxRef],
   );
+  // Keep stable refs in sync so setInterval callbacks can access latest versions
+  useEffect(() => { initCoopRef.current = initCoop; }, [initCoop]);
+  useEffect(() => { initOnlineCoopRef.current = initOnlineCoop; }, [initOnlineCoop]);
 
   const applyCoopNetState = useCallback((net: CoopNetState) => {
     const cs = coopStateRef.current;
@@ -5091,37 +5116,95 @@ const Game = () => {
           restartDeadlineRef.current = deadline;
           const remaining = Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
           setRestartCountdown(remaining);
+          setCountdownKey((k) => k + 1);
         }
       }
     };
   }, [multiplayer.onGameRestartRef]);
 
-  // Countdown timer effect — ticks every second and auto-starts when it hits 0
+  // Countdown timer effect — uses setInterval (keyed by countdownKey) to tick every 500 ms.
+  // The previous setTimeout-chain approach broke because when the displayed value didn't
+  // change on the first tick (e.g. still 20), React bailed out and no new timeout was set.
   useEffect(() => {
-    if (restartCountdown == null || restartCountdown <= 0) return;
-    const timer = setTimeout(() => {
+    if (restartDeadlineRef.current == null) return;
+
+    const interval = setInterval(() => {
       const deadline = restartDeadlineRef.current;
-      if (deadline == null) { setRestartCountdown(null); return; }
+      if (deadline == null) {
+        clearInterval(interval);
+        setRestartCountdown(null);
+        return;
+      }
       const remaining = Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
       setRestartCountdown(remaining);
       if (remaining <= 0) {
-        if (gameMode === "online_coop") {
-          if (multiplayer.isHost) {
+        clearInterval(interval);
+        restartDeadlineRef.current = null;
+        if (gameModeRef.current === "online_coop") {
+          if (isHostRef.current) {
             // Host auto-starts the game when countdown expires
-            initCoop(true, coopPlayerCount);
-          } else if (hostRestarted) {
+            initCoopRef.current(true, coopPlayerCountRef.current);
+          } else if (hostRestartedRef.current) {
             // Guest who hasn't pressed READY — auto-start them
             setHostRestarted(false);
             setIsSpectating(false);
-            initOnlineCoop(false, coopPlayerCount);
+            initOnlineCoopRef.current(false, coopPlayerCountRef.current);
           }
         }
-        restartDeadlineRef.current = null;
         setRestartCountdown(null);
       }
-    }, 250);
-    return () => clearTimeout(timer);
-  }, [restartCountdown, gameMode, multiplayer.isHost, hostRestarted, coopPlayerCount, initOnlineCoop, initCoop]);
+    }, 500);
+
+    return () => clearInterval(interval);
+  // countdownKey changes each time a new countdown session starts; that is the
+  // only dependency needed — the interval reads all other values via refs.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [countdownKey]);
+
+  // Host: listen for player_ready signals from guests during a countdown restart.
+  // When all expected guests have pressed READY, cancel the countdown and start immediately.
+  useEffect(() => {
+    multiplayer.onPlayerReadyRef.current = (playerIdx: number) => {
+      if (!isHostRef.current || gameModeRef.current !== "online_coop") return;
+      readyPlayerIdxsRef.current.add(playerIdx);
+      if (readyPlayerIdxsRef.current.size >= expectedGuestsForRestartRef.current) {
+        // All guests are ready — cancel the countdown and start immediately.
+        // Use expectedGuestsForRestartRef + 1 (host) for the authoritative player count.
+        const pc = expectedGuestsForRestartRef.current + 1;
+        restartDeadlineRef.current = null;
+        setRestartCountdown(null);
+        initCoopRef.current(true, pc);
+      }
+    };
+  }, [multiplayer.onPlayerReadyRef]);
+
+  // Host: when a guest leaves, adjust expected ready count and check if we can start early.
+  useEffect(() => {
+    multiplayer.onPlayerLeaveRef.current = (playerIdx: number) => {
+      if (!isHostRef.current || gameModeRef.current !== "online_coop") return;
+      // Remove from ready set (if they had already pressed ready)
+      readyPlayerIdxsRef.current.delete(playerIdx);
+      // Decrease expected player count
+      if (expectedGuestsForRestartRef.current > 0) {
+        expectedGuestsForRestartRef.current -= 1;
+      }
+      // If no guests remain and a countdown was running, cancel it (host waits for players)
+      if (expectedGuestsForRestartRef.current === 0 && restartDeadlineRef.current != null) {
+        restartDeadlineRef.current = null;
+        setRestartCountdown(null);
+      } else if (
+        expectedGuestsForRestartRef.current > 0 &&
+        readyPlayerIdxsRef.current.size >= expectedGuestsForRestartRef.current &&
+        restartDeadlineRef.current != null
+      ) {
+        // All remaining guests are ready — start immediately with updated count.
+        const pc = expectedGuestsForRestartRef.current + 1;
+        restartDeadlineRef.current = null;
+        setRestartCountdown(null);
+        initCoopRef.current(true, pc);
+      }
+    };
+  }, [multiplayer.onPlayerLeaveRef]);
 
   // Guest/late-joiner: listen for players_added to enter an in-progress game
   useEffect(() => {
@@ -5281,6 +5364,8 @@ const Game = () => {
     setHostRestarted(false);
     restartDeadlineRef.current = null;
     setRestartCountdown(null);
+    readyPlayerIdxsRef.current = new Set();
+    expectedGuestsForRestartRef.current = 0;
     setIsSpectating(false);
     isPausedRef.current = false;
     setIsPaused(false);
@@ -6512,21 +6597,45 @@ const Game = () => {
                 </Button>
               )}
               {gameMode === "online_coop" && multiplayer.isHost && (
-                <Button
-                  onClick={() => {
-                    const deadline = Date.now() + 20_000;
-                    restartDeadlineRef.current = deadline;
-                    setRestartCountdown(20);
-                    multiplayer.sendGameRestart(deadline);
-                    multiplayer.setGameInProgress(true);
-                    // Don't initCoop yet — wait for countdown to finish
-                  }}
-                  className="text-base sm:text-lg px-6 py-3 font-mono"
-                  style={{ fontFamily: "'Press Start 2P', monospace" }}
-                  disabled={restartCountdown != null && restartCountdown > 0}
-                >
-                  {restartCountdown != null && restartCountdown > 0 ? `WAITING ${restartCountdown}s` : "RESTART"}
-                </Button>
+                multiplayer.guestCount === 0 ? (
+                  // No guests connected — show waiting message instead of RESTART
+                  <div
+                    className="text-sm font-mono animate-pulse"
+                    style={{ fontFamily: "'Press Start 2P', monospace", color: "#AAAAAA" }}
+                  >
+                    Waiting for players…
+                  </div>
+                ) : (
+                  <Button
+                    onClick={() => {
+                      const totalPlayers = multiplayer.guestCount + 1;
+                      readyPlayerIdxsRef.current = new Set();
+                      expectedGuestsForRestartRef.current = multiplayer.guestCount;
+                      multiplayer.setGameInProgress(true);
+                      if (totalPlayers <= 2) {
+                        // Only 2 players — no countdown, broadcast without deadline so guest
+                        // sees READY button immediately; game starts when they press it.
+                        // Ensure any previous countdown state is cleared.
+                        restartDeadlineRef.current = null;
+                        setRestartCountdown(null);
+                        multiplayer.sendGameRestart(undefined);
+                        // Host waits for the single guest's player_ready signal
+                      } else {
+                        // 3+ players — trigger a 20-second countdown
+                        const deadline = Date.now() + 20_000;
+                        restartDeadlineRef.current = deadline;
+                        setRestartCountdown(20);
+                        setCountdownKey((k) => k + 1);
+                        multiplayer.sendGameRestart(deadline);
+                      }
+                    }}
+                    className="text-base sm:text-lg px-6 py-3 font-mono"
+                    style={{ fontFamily: "'Press Start 2P', monospace" }}
+                    disabled={restartCountdown != null && restartCountdown > 0}
+                  >
+                    {restartCountdown != null && restartCountdown > 0 ? `WAITING ${restartCountdown}s` : "RESTART"}
+                  </Button>
+                )
               )}
               {gameMode === "online_coop" && !multiplayer.isHost && hostRestarted && (
                 <div className="flex flex-col items-center gap-2">
@@ -6544,6 +6653,8 @@ const Game = () => {
                   )}
                   <Button
                     onClick={() => {
+                      // Notify host that this player is ready
+                      multiplayer.sendPlayerReady();
                       setHostRestarted(false);
                       setIsSpectating(false);
                       restartDeadlineRef.current = null;
@@ -6653,6 +6764,24 @@ const Game = () => {
 
         {/* FPS overlay – always visible, subtle */}
         <FpsOverlay />
+
+        {/* Countdown overlay during active online_coop game (after pressing READY) */}
+        {gameMode === "online_coop" && !coopGameOver && restartCountdown != null && restartCountdown > 0 && (
+          <div className="absolute top-16 left-0 right-0 flex justify-center pointer-events-none z-10">
+            <div
+              className="px-4 py-2 font-mono text-sm animate-pulse"
+              style={{
+                background: "rgba(0,0,0,0.7)",
+                color: restartCountdown <= 5 ? "#FF4444" : "#FFD700",
+                fontFamily: "'Press Start 2P', monospace",
+                textShadow: `0 0 10px ${restartCountdown <= 5 ? "#FF4444" : "#FFD700"}`,
+                border: `1px solid ${restartCountdown <= 5 ? "#FF4444" : "#FFD700"}`,
+              }}
+            >
+              GAME STARTING IN {restartCountdown}s
+            </div>
+          </div>
+        )}
 
         {/* Spectating indicator for late-joining spectators */}
         {gameMode === "online_coop" && !multiplayer.isHost && isSpectating && !coopGameOver && (
