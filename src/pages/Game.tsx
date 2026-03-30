@@ -406,6 +406,8 @@ const Game = () => {
   const [hostRestarted, setHostRestarted] = useState(false);
   const [isSpectating, setIsSpectating] = useState(false);
   const [coopGeneration, setCoopGeneration] = useState(0);
+  const [restartCountdown, setRestartCountdown] = useState<number | null>(null);
+  const restartDeadlineRef = useRef<number | null>(null);
   const coopGenerationRef = useRef(0);
   const [menuSelection, setMenuSelection] = useState(0); // 0=solo, 1=duel, 2=coop, 3=online, 4=settings
   const [gameOverSelection, setGameOverSelection] = useState(0); // 0=play again, 1=menu
