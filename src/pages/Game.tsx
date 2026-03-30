@@ -405,6 +405,8 @@ const Game = () => {
   const [coopPlayerStats, setCoopPlayerStats] = useState<CoopPlayerStat[]>([]);
   const [hostRestarted, setHostRestarted] = useState(false);
   const [isSpectating, setIsSpectating] = useState(false);
+  const [coopGeneration, setCoopGeneration] = useState(0);
+  const coopGenerationRef = useRef(0);
   const [menuSelection, setMenuSelection] = useState(0); // 0=solo, 1=duel, 2=coop, 3=online, 4=settings
   const [gameOverSelection, setGameOverSelection] = useState(0); // 0=play again, 1=menu
   const [isPaused, setIsPaused] = useState(false);
@@ -1518,6 +1520,10 @@ const Game = () => {
     const worker = new Worker(new URL("../workers/coopWorker.ts", import.meta.url), { type: "module" });
     workerRef.current = worker;
     worker.postMessage({ type: "init", turnSpeed: controlBindingsRef.current.turnSpeed || 0.05, playerCount: pc });
+
+    // Bump generation so worker onmessage effects re-attach to the new worker
+    coopGenerationRef.current += 1;
+    setCoopGeneration(coopGenerationRef.current);
 
     setTimeout(() => {
       canvasRef.current?.focus();
@@ -5093,8 +5099,8 @@ const Game = () => {
     };
   }, [initOnlineCoop]);
 
-  // Guest late-joiner: when gameInProgress is detected in the lobby, mark as spectating.
-  // Actual initOnlineCoop is handled by the players_added event (authoritative player count).
+  // Guest late-joiner: when gameInProgress is detected in the lobby, transition to
+  // spectator mode so they can see the ongoing game and receive restart events.
   const spectatorInitedRef = useRef(false);
   useEffect(() => {
     if (
@@ -5105,12 +5111,17 @@ const Game = () => {
     ) {
       spectatorInitedRef.current = true;
       setIsSpectating(true);
+      // Transition from lobby into the game view as a spectator.
+      // Use guestCount+1 as a reasonable playerCount estimate; the host's
+      // coop_state broadcasts will supply the authoritative state.
+      const estimatedPlayerCount = multiplayer.guestCount + 1;
+      initOnlineCoop(false, estimatedPlayerCount);
     }
     // Reset the guard when leaving the lobby
     if (gameMode !== "online_lobby") {
       spectatorInitedRef.current = false;
     }
-  }, [gameMode, multiplayer.isHost, multiplayer.gameInProgress]);
+  }, [gameMode, multiplayer.isHost, multiplayer.gameInProgress, multiplayer.guestCount, initOnlineCoop]);
 
   // Host (duel): worker message handler – broadcast every tick for minimum lag
   useEffect(() => {
@@ -5160,7 +5171,7 @@ const Game = () => {
         sendCoopStateRef.current(net);
       }
     };
-  }, [gameMode, multiplayer.isHost, multiplayer.getWaitingPlayerCount, multiplayer.sendPlayersAdded]);
+  }, [gameMode, multiplayer.isHost, multiplayer.getWaitingPlayerCount, multiplayer.sendPlayersAdded, coopGeneration]);
 
   // Local coop: worker → coopStateRef
   useEffect(() => {
@@ -5172,7 +5183,7 @@ const Game = () => {
         applyCoopNetStateRef.current(e.data.data as CoopNetState);
       }
     };
-  }, [gameMode]);
+  }, [gameMode, coopGeneration]);
 
   // Cleanup worker on unmount
   useEffect(() => {
@@ -6465,6 +6476,7 @@ const Game = () => {
                 <Button
                   onClick={() => {
                     multiplayer.sendGameRestart();
+                    multiplayer.setGameInProgress(true);
                     initCoop(true, coopPlayerCount);
                   }}
                   className="text-base sm:text-lg px-6 py-3 font-mono"
