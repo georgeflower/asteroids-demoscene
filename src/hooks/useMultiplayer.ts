@@ -7,6 +7,7 @@ interface PresenceInfo {
   playerIdx?: number;
   initials?: string;
   gameInProgress?: boolean;
+  clientId?: string;
 }
 
 interface PresenceState {
@@ -19,6 +20,9 @@ function generateRoomCode(): string {
   for (let i = 0; i < 4; i++) code += chars[Math.floor(Math.random() * chars.length)];
   return code;
 }
+
+/** How often (ms) the host broadcasts a ping to measure guest latency. */
+const PING_INTERVAL_MS = 3000;
 
 export function useMultiplayer() {
   const [roomCode, setRoomCode] = useState("");
@@ -47,6 +51,13 @@ export function useMultiplayer() {
   // Ref-copy of chatMessages so presence handlers always see latest history
   const chatHistoryRef = useRef<ChatMessage[]>([]);
   // Ref-copy of gameInProgress for async/event-handler access
+  const [pingMap, setPingMap] = useState<Map<number, number>>(new Map());
+  const pingMapRef = useRef<Map<number, number>>(new Map());
+  const pingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Host: tracks clientId → assigned playerIdx for host-authoritative index assignment
+  const assignedIndicesRef = useRef<Map<string, number>>(new Map());
+  // Guest: unique session clientId used to receive the host-assigned playerIdx
+  const clientIdRef = useRef<string>("");
   const gameInProgressRef = useRef(false);
   // Ref-copy of guestCount for event-handler access without stale closures
   const guestCountRef = useRef(0);
@@ -122,9 +133,15 @@ export function useMultiplayer() {
         }
         rebuildInitialsMap(channel);
         // Notify the game about which guest indices left (so it can adjust ready tracking)
+        // and clean up host-side assignment tracking
         for (const p of leftPresences as PresenceInfo[]) {
-          if (p.role === "guest" && typeof p.playerIdx === "number") {
-            onPlayerLeaveRef.current?.(p.playerIdx);
+          if (p.role === "guest") {
+            if (p.clientId) {
+              assignedIndicesRef.current.delete(p.clientId);
+            }
+            if (typeof p.playerIdx === "number") {
+              onPlayerLeaveRef.current?.(p.playerIdx);
+            }
           }
         }
       })
@@ -152,11 +169,59 @@ export function useMultiplayer() {
           onPlayerReadyRef.current?.(playerIdx);
         }
       })
+      // Host-authoritative player index assignment: guest sends request, host assigns
+      .on("broadcast", { event: "request_index" }, ({ payload }) => {
+        const { clientId } = payload as { clientId?: string };
+        if (!clientId) return;
+        // Idempotent: ignore if already assigned
+        if (assignedIndicesRef.current.has(clientId)) return;
+        // Find the next free playerIdx (host is always 0)
+        const takenIndices = new Set([0, ...assignedIndicesRef.current.values()]);
+        let nextIdx = 1;
+        while (takenIndices.has(nextIdx)) nextIdx++;
+        if (nextIdx > 7) {
+          console.warn("[coop] Room is full (max 8 players); ignoring join request.");
+          return;
+        }
+        assignedIndicesRef.current.set(clientId, nextIdx);
+        channel.send({
+          type: "broadcast",
+          event: "assign_index",
+          payload: { clientId, playerIdx: nextIdx },
+        }).catch(() => {});
+      })
+      // Host: receive pong from guest, measure RTT and broadcast ping_update to all
+      .on("broadcast", { event: "pong" }, ({ payload }) => {
+        const { ts, playerIdx } = payload as { ts?: number; playerIdx?: number };
+        if (typeof ts !== "number" || typeof playerIdx !== "number") return;
+        const rtt = Date.now() - ts;
+        const next = new Map(pingMapRef.current);
+        next.set(playerIdx, rtt);
+        pingMapRef.current = next;
+        setPingMap(new Map(next));
+        channel.send({
+          type: "broadcast",
+          event: "ping_update",
+          payload: { pings: Object.fromEntries(next) },
+        }).catch(() => {});
+      })
       .subscribe(async (status) => {
         if (status === "SUBSCRIBED") {
           await channel.track({ role: "host", playerIdx: 0, initials: localInitialsRef.current });
           setIsConnected(true);
           rebuildInitialsMap(channel);
+          // Host latency is always 0 (local)
+          const initialPings = new Map<number, number>([[0, 0]]);
+          pingMapRef.current = initialPings;
+          setPingMap(new Map(initialPings));
+          // Periodically broadcast ping so guests can measure RTT
+          pingIntervalRef.current = setInterval(() => {
+            channel.send({
+              type: "broadcast",
+              event: "ping",
+              payload: { ts: Date.now() },
+            }).catch(() => {});
+          }, PING_INTERVAL_MS);
         }
       });
 
@@ -259,28 +324,56 @@ export function useMultiplayer() {
         const { playerCount, deadline } = (payload ?? {}) as { playerCount?: number; deadline?: number };
         onGameRestartRef.current?.(playerCount, deadline);
       })
+      // Host-authoritative index: receive assigned playerIdx and start tracking with it
+      .on("broadcast", { event: "assign_index" }, async ({ payload }) => {
+        const { clientId, playerIdx } = payload as { clientId?: string; playerIdx?: number };
+        if (typeof playerIdx !== "number" || clientId !== clientIdRef.current) return;
+        playerIdxRef.current = playerIdx;
+        await channel.track({
+          role: "guest",
+          playerIdx,
+          initials: localInitialsRef.current,
+          clientId,
+        });
+        rebuildInitialsMap(channel);
+      })
+      // Guest: reply to host ping with a pong (enables RTT measurement)
+      .on("broadcast", { event: "ping" }, ({ payload }) => {
+        const { ts } = payload as { ts?: number };
+        if (typeof ts !== "number") return;
+        channelRef.current?.send({
+          type: "broadcast",
+          event: "pong",
+          payload: { ts, playerIdx: playerIdxRef.current },
+        }).catch(() => {});
+      })
+      // Guest: receive updated ping values from host
+      .on("broadcast", { event: "ping_update" }, ({ payload }) => {
+        const { pings } = payload as { pings?: Record<string, number> };
+        if (!pings) return;
+        const next = new Map<number, number>();
+        for (const [k, v] of Object.entries(pings)) {
+          next.set(Number(k), v);
+        }
+        pingMapRef.current = next;
+        setPingMap(new Map(next));
+      })
       .subscribe(async (status) => {
         if (status === "SUBSCRIBED") {
-          // Determine player index: use max(existingGuestIdx)+1 to avoid collisions
-          // when guests leave and indices become non-contiguous
-          const state = channel.presenceState() as PresenceState;
-          const allPresent = Object.values(state).flat();
-          const existingGuests = allPresent.filter((p: PresenceInfo) => p.role === "guest");
-          const maxGuestIdx = existingGuests.reduce((max, p) => {
-            return typeof p.playerIdx === "number" && p.playerIdx > max ? p.playerIdx : max;
-          }, 0);
-          const assignedIdx = maxGuestIdx + 1; // host=0, guests start at 1
-          if (assignedIdx > 7) {
-            console.warn("[coop] Room is full (max 8 players); cannot join.");
-            return;
-          }
-          playerIdxRef.current = assignedIdx;
-          await channel.track({ role: "guest", playerIdx: assignedIdx, initials: localInitialsRef.current });
+          // Generate a unique clientId and request host-authoritative player index assignment.
+          // This avoids the race condition where two guests compute the same playerIdx from
+          // stale presence state.
+          clientIdRef.current = crypto.randomUUID();
+          await channel.send({
+            type: "broadcast",
+            event: "request_index",
+            payload: { clientId: clientIdRef.current, initials: localInitialsRef.current },
+          });
           setIsConnected(true);
-          rebuildInitialsMap(channel);
           // Check if host is already present and whether game is in progress
-          const allPresent2 = Object.values(state).flat() as PresenceInfo[];
-          for (const p of allPresent2) {
+          const state = channel.presenceState() as PresenceState;
+          const allPresent = Object.values(state).flat() as PresenceInfo[];
+          for (const p of allPresent) {
             if (p.role === "host") {
               setOpponentConnected(true);
               if (p.gameInProgress) {
@@ -290,7 +383,7 @@ export function useMultiplayer() {
               break;
             }
           }
-          // guestCount = number of guest presences; join event for self will update it after track
+          const existingGuests = allPresent.filter((p: PresenceInfo) => p.role === "guest");
           guestCountRef.current = existingGuests.length;
           setGuestCount(existingGuests.length);
         }
@@ -386,6 +479,10 @@ export function useMultiplayer() {
   }, []);
 
   const disconnect = useCallback(() => {
+    if (pingIntervalRef.current) {
+      clearInterval(pingIntervalRef.current);
+      pingIntervalRef.current = null;
+    }
     if (channelRef.current) {
       supabase.removeChannel(channelRef.current);
       channelRef.current = null;
@@ -403,6 +500,10 @@ export function useMultiplayer() {
     gameInProgressRef.current = false;
     localInitialsRef.current = "";
     setHostDisconnected(false);
+    pingMapRef.current = new Map();
+    setPingMap(new Map());
+    assignedIndicesRef.current = new Map();
+    clientIdRef.current = "";
   }, []);
 
   /** Call this before createRoom/joinRoom to set the player's own initials */
@@ -446,6 +547,9 @@ export function useMultiplayer() {
 
   useEffect(() => {
     return () => {
+      if (pingIntervalRef.current) {
+        clearInterval(pingIntervalRef.current);
+      }
       if (channelRef.current) {
         supabase.removeChannel(channelRef.current);
       }
@@ -461,6 +565,7 @@ export function useMultiplayer() {
     guestCountRef,
     gameInProgress,
     playerInitialsMap,
+    pingMap,
     chatMessages,
     localInitialsRef,
     remoteStateRef,
