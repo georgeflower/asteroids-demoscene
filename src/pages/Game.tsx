@@ -5394,6 +5394,15 @@ const Game = () => {
     }
   }, [gameMode, multiplayer.isHost, multiplayer.gameInProgress, multiplayer.guestCount, initOnlineCoop]);
 
+  // When the host disconnects while a guest is still in the lobby (including late
+  // joiners stuck in the "Joining" phase), immediately disconnect and return to menu.
+  useEffect(() => {
+    if (multiplayer.hostDisconnected && !multiplayer.isHost && gameModeRef.current === "online_lobby") {
+      multiplayer.disconnect();
+      setGameMode("menu");
+    }
+  }, [multiplayer.hostDisconnected, multiplayer.isHost]);
+
   // Host (duel): worker message handler – broadcast every tick for minimum lag
   useEffect(() => {
     if (gameMode !== "online" || !multiplayer.isHost) return;
@@ -6992,7 +7001,7 @@ const Game = () => {
         )}
 
         {/* Host disconnected modal */}
-        {(gameMode === "online_coop" || gameMode === "online") && multiplayer.hostDisconnected && (
+        {(gameMode === "online_coop" || gameMode === "online" || gameMode === "online_lobby") && multiplayer.hostDisconnected && (
           <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/90 z-50">
             <div
               className="text-3xl sm:text-4xl font-mono text-[hsl(var(--game-danger))] mb-8 animate-pulse text-center"
