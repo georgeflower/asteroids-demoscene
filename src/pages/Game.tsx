@@ -7092,7 +7092,7 @@ const Game = () => {
         )}
       </div>
 
-      {isTouchDevice && gameMode === "solo" && (
+      {isTouchDevice && (gameMode === "solo" || gameMode === "online_coop") && (
         <div
           className="mt-4 w-full max-w-[800px] select-none"
           style={{ touchAction: "none", userSelect: "none", WebkitUserSelect: "none" }}
