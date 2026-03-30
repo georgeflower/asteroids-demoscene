@@ -177,6 +177,13 @@ export function useMultiplayer() {
         if (newPresences.some((p: any) => p.role === "host")) {
           setOpponentConnected(true);
           setHostDisconnected(false);
+          // If the host's presence shows game is in progress, update state so the
+          // spectator transition effect in Game.tsx fires (handles re-track timing).
+          const hostPresence = newPresences.find((p: any) => p.role === "host");
+          if (hostPresence?.gameInProgress && !gameInProgressRef.current) {
+            setGameInProgressState(true);
+            gameInProgressRef.current = true;
+          }
         }
         const state = channel.presenceState() as PresenceState;
         const allGuests = Object.values(state).flat().filter((p: PresenceInfo) => p.role === "guest");
