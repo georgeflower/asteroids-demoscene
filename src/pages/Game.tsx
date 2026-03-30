@@ -5099,8 +5099,8 @@ const Game = () => {
     };
   }, [initOnlineCoop]);
 
-  // Guest late-joiner: when gameInProgress is detected in the lobby, mark as spectating.
-  // Actual initOnlineCoop is handled by the players_added event (authoritative player count).
+  // Guest late-joiner: when gameInProgress is detected in the lobby, transition to
+  // spectator mode so they can see the ongoing game and receive restart events.
   const spectatorInitedRef = useRef(false);
   useEffect(() => {
     if (
@@ -5111,12 +5111,17 @@ const Game = () => {
     ) {
       spectatorInitedRef.current = true;
       setIsSpectating(true);
+      // Transition from lobby into the game view as a spectator.
+      // Use guestCount+1 as a reasonable playerCount estimate; the host's
+      // coop_state broadcasts will supply the authoritative state.
+      const estimatedPlayerCount = multiplayer.guestCount + 1;
+      initOnlineCoop(false, estimatedPlayerCount);
     }
     // Reset the guard when leaving the lobby
     if (gameMode !== "online_lobby") {
       spectatorInitedRef.current = false;
     }
-  }, [gameMode, multiplayer.isHost, multiplayer.gameInProgress]);
+  }, [gameMode, multiplayer.isHost, multiplayer.gameInProgress, multiplayer.guestCount, initOnlineCoop]);
 
   // Host (duel): worker message handler – broadcast every tick for minimum lag
   useEffect(() => {
