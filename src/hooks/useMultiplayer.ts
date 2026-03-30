@@ -57,6 +57,10 @@ export function useMultiplayer() {
   // 16 ms setInterval polling that was the main source of guest-side lag.
   const onRemoteStateRef = useRef<((state: DuelNetState) => void) | null>(null);
   const onRemoteCoopStateRef = useRef<((state: CoopNetState) => void) | null>(null);
+  // Callback invoked on host when a guest signals they are ready to restart
+  const onPlayerReadyRef = useRef<((playerIdx: number) => void) | null>(null);
+  // Callback invoked on the host when a guest leaves the room
+  const onPlayerLeaveRef = useRef<((playerIdx: number) => void) | null>(null);
 
   /** Rebuild the playerIdx→initials map from the current presence state */
   const rebuildInitialsMap = useCallback((channel: ReturnType<typeof supabase.channel>) => {
@@ -104,7 +108,7 @@ export function useMultiplayer() {
         setGuestCount(allGuests.length);
         rebuildInitialsMap(channel);
       })
-      .on("presence", { event: "leave" }, ({ leftPresences: _leftPresences }) => {
+      .on("presence", { event: "leave" }, ({ leftPresences }) => {
         const state = channel.presenceState() as PresenceState;
         const allGuests = Object.values(state).flat().filter((p: PresenceInfo) => p.role === "guest");
         guestCountRef.current = allGuests.length;
@@ -113,6 +117,12 @@ export function useMultiplayer() {
           setOpponentConnected(false);
         }
         rebuildInitialsMap(channel);
+        // Notify the game about which guest indices left (so it can adjust ready tracking)
+        for (const p of leftPresences as PresenceInfo[]) {
+          if (p.role === "guest" && typeof p.playerIdx === "number") {
+            onPlayerLeaveRef.current?.(p.playerIdx);
+          }
+        }
       })
       .on("broadcast", { event: "player_input" }, ({ payload }) => {
         const { playerIdx, ...inp } = payload as InputState & { playerIdx?: number };
@@ -131,6 +141,12 @@ export function useMultiplayer() {
           chatHistoryRef.current = next;
           return next;
         });
+      })
+      .on("broadcast", { event: "player_ready" }, ({ payload }) => {
+        const { playerIdx } = (payload ?? {}) as { playerIdx?: number };
+        if (typeof playerIdx === "number") {
+          onPlayerReadyRef.current?.(playerIdx);
+        }
       })
       .subscribe(async (status) => {
         if (status === "SUBSCRIBED") {
@@ -349,6 +365,15 @@ export function useMultiplayer() {
     }).catch(() => {});
   }, []);
 
+  /** Guest: signal to host that this player is ready to start after a restart */
+  const sendPlayerReady = useCallback(() => {
+    channelRef.current?.send({
+      type: "broadcast",
+      event: "player_ready",
+      payload: { playerIdx: playerIdxRef.current },
+    }).catch(() => {});
+  }, []);
+
   const disconnect = useCallback(() => {
     if (channelRef.current) {
       supabase.removeChannel(channelRef.current);
@@ -437,6 +462,8 @@ export function useMultiplayer() {
     onRemoteStateRef,
     onRemoteCoopStateRef,
     onPlayersAddedRef,
+    onPlayerReadyRef,
+    onPlayerLeaveRef,
     hostDisconnected,
     createRoom,
     joinRoom,
@@ -446,6 +473,7 @@ export function useMultiplayer() {
     startGame,
     sendChatMessage,
     sendGameRestart,
+    sendPlayerReady,
     disconnect,
     setLocalInitials,
     setGameInProgress,
