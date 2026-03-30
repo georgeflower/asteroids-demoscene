@@ -6505,14 +6505,18 @@ const Game = () => {
               {gameMode === "online_coop" && multiplayer.isHost && (
                 <Button
                   onClick={() => {
-                    multiplayer.sendGameRestart();
+                    const deadline = Date.now() + 20_000;
+                    restartDeadlineRef.current = deadline;
+                    setRestartCountdown(20);
+                    multiplayer.sendGameRestart(deadline);
                     multiplayer.setGameInProgress(true);
-                    initCoop(true, coopPlayerCount);
+                    // Don't initCoop yet — wait for countdown to finish
                   }}
                   className="text-base sm:text-lg px-6 py-3 font-mono"
                   style={{ fontFamily: "'Press Start 2P', monospace" }}
+                  disabled={restartCountdown != null && restartCountdown > 0}
                 >
-                  RESTART
+                  {restartCountdown != null && restartCountdown > 0 ? `WAITING ${restartCountdown}s` : "RESTART"}
                 </Button>
               )}
               {gameMode === "online_coop" && !multiplayer.isHost && hostRestarted && (
