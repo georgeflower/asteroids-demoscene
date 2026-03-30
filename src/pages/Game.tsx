@@ -5075,18 +5075,46 @@ const Game = () => {
     };
   }, [initOnline, initOnlineCoop]);
 
-  // Guest: listen for game_restart from host and show the READY button
+  // Guest: listen for game_restart from host and show the READY button + countdown
   useEffect(() => {
-    multiplayer.onGameRestartRef.current = (playerCount?: number) => {
+    multiplayer.onGameRestartRef.current = (playerCount?: number, deadline?: number) => {
       // Use gameModeRef (not gameMode state) to get the current value inside the callback closure
       if (gameModeRef.current === "online_coop") {
         if (playerCount != null) {
           setCoopPlayerCount(playerCount);
         }
         setHostRestarted(true);
+        // Start countdown from the shared deadline
+        if (deadline != null) {
+          restartDeadlineRef.current = deadline;
+          const remaining = Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
+          setRestartCountdown(remaining);
+        }
       }
     };
   }, [multiplayer.onGameRestartRef]);
+
+  // Countdown timer effect — ticks every second and auto-starts when it hits 0
+  useEffect(() => {
+    if (restartCountdown == null || restartCountdown <= 0) return;
+    const timer = setTimeout(() => {
+      const deadline = restartDeadlineRef.current;
+      if (deadline == null) { setRestartCountdown(null); return; }
+      const remaining = Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
+      setRestartCountdown(remaining);
+      if (remaining <= 0) {
+        // Auto-start: guest who hasn't pressed READY yet
+        if (gameMode === "online_coop" && !multiplayer.isHost && hostRestarted) {
+          setHostRestarted(false);
+          setIsSpectating(false);
+          initOnlineCoop(false, coopPlayerCount);
+        }
+        restartDeadlineRef.current = null;
+        setRestartCountdown(null);
+      }
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [restartCountdown, gameMode, multiplayer.isHost, hostRestarted, coopPlayerCount, initOnlineCoop]);
 
   // Guest/late-joiner: listen for players_added to enter an in-progress game
   useEffect(() => {
