@@ -1588,6 +1588,8 @@ const Game = () => {
         setCoopWaveComplete(false);
         setCoopPlayerStats([]);
         setHostRestarted(false);
+        restartDeadlineRef.current = null;
+        setRestartCountdown(null);
         setGameMode("online_coop");
         broadcastTickRef.current = 0;
         prevCoopThrustRef.current = false;
