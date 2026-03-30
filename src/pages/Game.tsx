@@ -7020,13 +7020,16 @@ const Game = () => {
           </div>
         )}
 
-        {/* Player list overlay with ping — top-right, always visible during online co-op */}
+        {/* Player list overlay with ping — top-right, always visible during online co-op.
+             pointer-events-none keeps it from blocking the QUIT button at the same position. */}
         {(gameMode === "online_coop" || gameMode === "online") && (
-          <PlayerList
-            playerInitialsMap={multiplayer.playerInitialsMap}
-            pingMap={multiplayer.pingMap}
-            localPlayerIdx={multiplayer.playerIdxRef.current}
-          />
+          <div className="pointer-events-none">
+            <PlayerList
+              playerInitialsMap={multiplayer.playerInitialsMap}
+              pingMap={multiplayer.pingMap}
+              localPlayerIdx={multiplayer.playerIdxRef.current}
+            />
+          </div>
         )}
 
         {/* Host disconnected modal */}

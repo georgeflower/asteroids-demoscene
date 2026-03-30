@@ -214,8 +214,23 @@ export function useMultiplayer() {
           const initialPings = new Map<number, number>([[0, 0]]);
           pingMapRef.current = initialPings;
           setPingMap(new Map(initialPings));
-          // Periodically broadcast ping so guests can measure RTT
+          // Periodically broadcast ping so guests can measure RTT.
+          // Also reconcile assignedIndicesRef against presence state to release
+          // slots for guests that requested an index but disconnected before tracking.
           pingIntervalRef.current = setInterval(() => {
+            // Reconcile: remove entries whose clientId is no longer in presence state
+            const currentState = channel.presenceState() as PresenceState;
+            const trackedClientIds = new Set(
+              Object.values(currentState)
+                .flat()
+                .map((p: PresenceInfo) => p.clientId)
+                .filter(Boolean),
+            );
+            for (const clientId of assignedIndicesRef.current.keys()) {
+              if (!trackedClientIds.has(clientId)) {
+                assignedIndicesRef.current.delete(clientId);
+              }
+            }
             channel.send({
               type: "broadcast",
               event: "ping",
@@ -329,18 +344,24 @@ export function useMultiplayer() {
         const { clientId, playerIdx } = payload as { clientId?: string; playerIdx?: number };
         if (typeof playerIdx !== "number" || clientId !== clientIdRef.current) return;
         playerIdxRef.current = playerIdx;
-        await channel.track({
-          role: "guest",
-          playerIdx,
-          initials: localInitialsRef.current,
-          clientId,
-        });
-        rebuildInitialsMap(channel);
+        try {
+          await channel.track({
+            role: "guest",
+            playerIdx,
+            initials: localInitialsRef.current,
+            clientId,
+          });
+          rebuildInitialsMap(channel);
+        } catch (error) {
+          console.error("[coop] Failed to track guest presence after index assignment", error);
+        }
       })
-      // Guest: reply to host ping with a pong (enables RTT measurement)
+      // Guest: reply to host ping with a pong (enables RTT measurement).
+      // Only reply once a valid guest index has been assigned (playerIdx > 0) to avoid
+      // pongs being attributed to player 0 (host) before assign_index arrives.
       .on("broadcast", { event: "ping" }, ({ payload }) => {
         const { ts } = payload as { ts?: number };
-        if (typeof ts !== "number") return;
+        if (typeof ts !== "number" || playerIdxRef.current === 0) return;
         channelRef.current?.send({
           type: "broadcast",
           event: "pong",
@@ -364,11 +385,40 @@ export function useMultiplayer() {
           // This avoids the race condition where two guests compute the same playerIdx from
           // stale presence state.
           clientIdRef.current = crypto.randomUUID();
-          await channel.send({
-            type: "broadcast",
-            event: "request_index",
-            payload: { clientId: clientIdRef.current, initials: localInitialsRef.current },
-          });
+          const myClientId = clientIdRef.current;
+
+          // Send request_index with up to 3 attempts and backoff so transient failures
+          // don't silently leave the guest without a playerIdx.
+          const MAX_ATTEMPTS = 3;
+          const SEND_TIMEOUT_MS = 5000;
+          let sent = false;
+          for (let attempt = 1; attempt <= MAX_ATTEMPTS && !sent; attempt++) {
+            try {
+              let timeoutId: ReturnType<typeof setTimeout>;
+              const timeoutPromise = new Promise<never>((_, reject) => {
+                timeoutId = setTimeout(() => reject(new Error("request_index timed out")), SEND_TIMEOUT_MS);
+              });
+              const sendPromise = channel.send({
+                type: "broadcast",
+                event: "request_index",
+                payload: { clientId: myClientId, initials: localInitialsRef.current },
+              });
+              await Promise.race([sendPromise, timeoutPromise]);
+              clearTimeout(timeoutId!);
+              sent = true;
+            } catch (err) {
+              if (attempt >= MAX_ATTEMPTS) {
+                console.error("[coop] Failed to send request_index after retries; disconnecting.", err);
+                try { await channel.unsubscribe(); } catch (unsubErr) {
+                  console.error("[coop] Failed to unsubscribe after request_index failure.", unsubErr);
+                }
+                setIsConnected(false);
+                return;
+              }
+              await new Promise((resolve) => setTimeout(resolve, 250 * attempt));
+            }
+          }
+
           setIsConnected(true);
           // Check if host is already present and whether game is in progress
           const state = channel.presenceState() as PresenceState;
@@ -386,6 +436,22 @@ export function useMultiplayer() {
           const existingGuests = allPresent.filter((p: PresenceInfo) => p.role === "guest");
           guestCountRef.current = existingGuests.length;
           setGuestCount(existingGuests.length);
+
+          // Detect if assign_index never arrives (e.g. host didn't receive request_index).
+          // If we are still untracked after the timeout, log a warning.
+          const ASSIGN_INDEX_TIMEOUT_MS = 10000;
+          setTimeout(() => {
+            try {
+              const currentState = channel.presenceState() as PresenceState;
+              const allPresences = Object.values(currentState).flat() as PresenceInfo[];
+              const selfPresent = allPresences.some(
+                (p) => p.role === "guest" && p.clientId === myClientId,
+              );
+              if (!selfPresent && channelRef.current === channel) {
+                console.warn("[coop] Timed out waiting for assign_index; guest may be invisible. Try rejoining.");
+              }
+            } catch { /* ignore */ }
+          }, ASSIGN_INDEX_TIMEOUT_MS);
         }
       });
 

@@ -1,5 +1,3 @@
-import React from "react";
-
 interface PlayerListProps {
   playerInitialsMap: Map<number, string>;
   pingMap: Map<number, number>;
