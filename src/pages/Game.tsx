@@ -5142,8 +5142,12 @@ const Game = () => {
         restartDeadlineRef.current = null;
         if (gameModeRef.current === "online_coop") {
           if (isHostRef.current) {
-            // Host auto-starts the game when countdown expires
-            initCoopRef.current(true, coopPlayerCountRef.current);
+            // Host auto-starts the game when countdown expires.
+            // Use expectedGuestsForRestartRef + 1 so the count stays accurate
+            // if guests left mid-countdown (the ref is kept in sync by onPlayerLeaveRef).
+            const pc = expectedGuestsForRestartRef.current + 1;
+            expectedGuestsForRestartRef.current = 0; // disarm ready tracking
+            initCoopRef.current(true, pc);
           } else if (hostRestartedRef.current) {
             // Guest who hasn't pressed READY — auto-start them
             setHostRestarted(false);
@@ -5166,11 +5170,15 @@ const Game = () => {
   useEffect(() => {
     multiplayer.onPlayerReadyRef.current = (playerIdx: number) => {
       if (!isHostRef.current || gameModeRef.current !== "online_coop") return;
+      // Guard: ignore late player_ready broadcasts after a restart has already started
+      // (expectedGuestsForRestartRef is zeroed when initCoop fires).
+      if (expectedGuestsForRestartRef.current === 0) return;
       readyPlayerIdxsRef.current.add(playerIdx);
       if (readyPlayerIdxsRef.current.size >= expectedGuestsForRestartRef.current) {
         // All guests are ready — cancel the countdown and start immediately.
         // Use expectedGuestsForRestartRef + 1 (host) for the authoritative player count.
         const pc = expectedGuestsForRestartRef.current + 1;
+        expectedGuestsForRestartRef.current = 0; // disarm so further broadcasts are ignored
         restartDeadlineRef.current = null;
         setRestartCountdown(null);
         initCoopRef.current(true, pc);
@@ -5199,6 +5207,7 @@ const Game = () => {
       ) {
         // All remaining guests are ready — start immediately with updated count.
         const pc = expectedGuestsForRestartRef.current + 1;
+        expectedGuestsForRestartRef.current = 0; // disarm so further broadcasts are ignored
         restartDeadlineRef.current = null;
         setRestartCountdown(null);
         initCoopRef.current(true, pc);
@@ -6608,9 +6617,12 @@ const Game = () => {
                 ) : (
                   <Button
                     onClick={() => {
-                      const totalPlayers = multiplayer.guestCount + 1;
+                      // Use the ref (not state) to get the accurate guest count at click time,
+                      // avoiding stale values from asynchronous presence updates.
+                      const currentGuestCount = multiplayer.guestCountRef.current ?? multiplayer.guestCount;
+                      const totalPlayers = currentGuestCount + 1;
                       readyPlayerIdxsRef.current = new Set();
-                      expectedGuestsForRestartRef.current = multiplayer.guestCount;
+                      expectedGuestsForRestartRef.current = currentGuestCount;
                       multiplayer.setGameInProgress(true);
                       if (totalPlayers <= 2) {
                         // Only 2 players — no countdown, broadcast without deadline so guest
