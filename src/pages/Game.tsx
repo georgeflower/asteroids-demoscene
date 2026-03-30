@@ -5103,11 +5103,16 @@ const Game = () => {
       const remaining = Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
       setRestartCountdown(remaining);
       if (remaining <= 0) {
-        // Auto-start: guest who hasn't pressed READY yet
-        if (gameMode === "online_coop" && !multiplayer.isHost && hostRestarted) {
-          setHostRestarted(false);
-          setIsSpectating(false);
-          initOnlineCoop(false, coopPlayerCount);
+        if (gameMode === "online_coop") {
+          if (multiplayer.isHost) {
+            // Host auto-starts the game when countdown expires
+            initCoop(true, coopPlayerCount);
+          } else if (hostRestarted) {
+            // Guest who hasn't pressed READY — auto-start them
+            setHostRestarted(false);
+            setIsSpectating(false);
+            initOnlineCoop(false, coopPlayerCount);
+          }
         }
         restartDeadlineRef.current = null;
         setRestartCountdown(null);
