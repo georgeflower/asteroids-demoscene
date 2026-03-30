@@ -8,6 +8,7 @@ import { haptics } from "@/utils/haptics";
 import { useMultiplayer } from "@/hooks/useMultiplayer";
 import OnlineLobby from "@/components/OnlineLobby";
 import LobbyChat from "@/components/LobbyChat";
+import PlayerList from "@/components/PlayerList";
 import CRTBootOverlay from "@/components/CRTBootOverlay";
 import ControlSettings from "@/components/ControlSettings";
 import { loadBindings, displayKeyName, type ControlBindings } from "@/hooks/useControlSettings";
@@ -283,6 +284,11 @@ const FRAME_MIN_TIME = FIXED_TIMESTEP; // 60 FPS render cap (tied to fixed times
 // accidentally skipping a frame due to sub-millisecond precision drift.
 const FRAME_TIME_TOLERANCE = 1;
 
+/** Guest inputs are sent at 20 Hz (every 50 ms) to reduce channel traffic. */
+const ONLINE_INPUT_SEND_INTERVAL_MS = 50;
+/** Coop state is broadcast every Nth worker tick; at 60 Hz this gives ~20 Hz. */
+const ONLINE_STATE_BROADCAST_TICK_INTERVAL = 3;
+
 const GAME_VERSION = "0.2.1";
 
 const LOCAL_SCORES_KEY = "asteroids_local_highscores";
@@ -537,6 +543,10 @@ const Game = () => {
   // Client-side prediction: guest runs local physics for its own ship (P2)
   // to eliminate the feel of input lag between sends and authoritative state updates.
   const guestPredictedShipRef = useRef<Ship | null>(null);
+
+  // Throttle refs for online co-op: limit broadcast and input-send rates to 20 Hz
+  const netBroadcastTickRef = useRef(0);
+  const lastInputSentRef = useRef(0);
 
   // Sound state tracking for co-op modes (thrust, fire, hyperspace)
   const prevCoopThrustRef = useRef(false);
@@ -4931,7 +4941,11 @@ const Game = () => {
               }
             }
           }
-          multiplayer.sendInputs(localInput, multiplayer.playerIdxRef.current);
+          // Throttle input sends to ~20 Hz to reduce channel flood
+          if (currentTime - lastInputSentRef.current >= ONLINE_INPUT_SEND_INTERVAL_MS) {
+            lastInputSentRef.current = currentTime;
+            multiplayer.sendInputs(localInput, multiplayer.playerIdxRef.current);
+          }
         }
         updateOnlineVisuals();
         // Physics run in the worker; updatesThisFrame stays 0 (already initialised)
@@ -5425,8 +5439,10 @@ const Game = () => {
     if (gameMode !== "online_coop" || !multiplayer.isHost) return;
     const worker = workerRef.current;
     if (!worker) return;
-    // Reset guard whenever the effect re-runs (new game)
+    // Reset guard and tick counter whenever the effect re-runs (new game)
     addingWaitingPlayersRef.current = false;
+    // Reset tick counter so throttling starts fresh for each new game
+    netBroadcastTickRef.current = 0;
     worker.onmessage = (e: MessageEvent) => {
       if (e.data.type === "state") {
         const net: CoopNetState = e.data.data;
@@ -5448,7 +5464,11 @@ const Game = () => {
           addingWaitingPlayersRef.current = false;
         }
         applyCoopNetStateRef.current(net);
-        sendCoopStateRef.current(net);
+        // Throttle network broadcast to ~20 Hz (every 3rd tick at 60 Hz)
+        netBroadcastTickRef.current++;
+        if (netBroadcastTickRef.current % ONLINE_STATE_BROADCAST_TICK_INTERVAL === 0) {
+          sendCoopStateRef.current(net);
+        }
       }
     };
   }, [gameMode, multiplayer.isHost, multiplayer.getWaitingPlayerCount, multiplayer.sendPlayersAdded, coopGeneration]);
@@ -6997,6 +7017,18 @@ const Game = () => {
                 CHAT [TAB]
               </button>
             )}
+          </div>
+        )}
+
+        {/* Player list overlay with ping — top-right, always visible during online co-op.
+             pointer-events-none keeps it from blocking the QUIT button at the same position. */}
+        {(gameMode === "online_coop" || gameMode === "online") && (
+          <div className="pointer-events-none">
+            <PlayerList
+              playerInitialsMap={multiplayer.playerInitialsMap}
+              pingMap={multiplayer.pingMap}
+              localPlayerIdx={multiplayer.playerIdxRef.current}
+            />
           </div>
         )}
 
