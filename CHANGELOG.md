@@ -2,6 +2,28 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.0] - 2026-03-31
+
+### Added
+
+- **Online Co-op Mode**: Cooperative multiplayer via room codes with host-authoritative game state broadcast over Realtime
+- **Online Lobby**: Room creation, joining, and real-time player list with presence tracking
+- **Lobby Chat**: Text chat in the online lobby for pre-game coordination
+- **20-Second Restart Countdown**: After game over in co-op, host triggers a 20s timer visible to all players before the next round auto-starts
+- **Late-Joiner Spectator Mode**: Players joining a room mid-game automatically enter spectator mode, watching the ongoing session and joining as active players on the next restart
+- **Buy Me a Coffee**: Added support link on the main menu
+
+### Changed
+
+- **Global Highscores Disabled**: Global highscore submission temporarily turned off; local scores still tracked
+- **Improved Network Performance**: Better lag handling and ping display for online multiplayer
+
+### Fixed
+
+- **Co-op Restart**: Fixed worker `onmessage` handler not re-attaching after restart, causing blinking ships and missing asteroids
+- **Late Joiners Stuck in Lobby**: Fixed issue where players joining mid-game never transitioned to spectator mode
+- **Keyboard State Persistence**: Fixed bug where keyboard state from the previous game persisted into new games, causing ships to automatically move without key input
+
 ## [0.2.1] - 2026-03-24
 
 ### Fixed

@@ -134,7 +134,7 @@ export function useMultiplayer() {
         rebuildInitialsMap(channel);
         // Notify the game about which guest indices left (so it can adjust ready tracking)
         // and clean up host-side assignment tracking
-        for (const p of leftPresences as PresenceInfo[]) {
+        for (const p of leftPresences as unknown as PresenceInfo[]) {
           if (p.role === "guest") {
             if (p.clientId) {
               assignedIndicesRef.current.delete(p.clientId);
