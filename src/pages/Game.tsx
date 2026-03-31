@@ -6291,7 +6291,31 @@ const Game = () => {
                 📋 CHANGELOG
               </div>
               <pre className="font-mono text-[11px] text-[hsl(var(--game-foreground))] whitespace-pre-wrap leading-relaxed opacity-90">
-                {`[0.2.1] - 2026-03-24
+                {`[0.3.0] - 2026-03-31
+
+  Added
+  - Online Co-op Mode: play cooperatively with
+    friends via room codes (host-authoritative)
+  - Online Lobby: room creation, join, and player
+    list with real-time presence
+  - Lobby Chat: text chat in the online lobby
+  - 20-second restart countdown timer in co-op
+  - Late-joiner spectator mode: join mid-game and
+    watch until next round
+  - Buy Me a Coffee link on main menu
+
+  Changed
+  - Global highscores temporarily disabled
+    (local scores still tracked)
+  - Improved network lag handling and ping display
+  - Co-op restart: worker re-attachment fix
+    prevents blinking ships / missing asteroids
+
+  Fixed
+  - Keyboard state persistence across game restarts
+  - Late joiners no longer stuck in lobby
+
+[0.2.1] - 2026-03-24
 
   Fixed
   - Keyboard State Persistence: Fixed bug where keyboard
@@ -6343,35 +6367,6 @@ const Game = () => {
   - Hall of Fame: top 3 all-time scores on main menu
   - Old Highscores: scrollable top 30 archive overlay
   - Highscore Reset: fresh active scoreboard
-
-[0.1.4]
-
-  - Hyperspace charge indicator (circular SVG)
-  - Controls condensed to single-line row
-  - Marquee GIF replacements & country flags
-  - Version moved to HUD next to WAVE
-  - autoPlayMusic defaults to false
-
-[0.1.3] - 2026-03-11
-
-  Fixed
-  - 11 ESLint errors (type safety, ES module compliance)
-  - High score rank alignment with CSS whitespace
-
-[0.1.2] - 2026-03-10
-
-  Fixed
-  - Shield power-up activation during spawn invulnerability
-  - Music player auto-resume between game modes
-  - Pause music state checkbox sync
-
-[0.1.1] - 2026-03-10
-
-  Changed
-  - Hyperspace key: H → Left/Right Ctrl
-  - Hyperspace teleports to safe location
-  - Added 10-second hyperspace cooldown
-  - Removed random 10% death chance from hyperspace
 
 [0.1.0] - Initial Release
 
