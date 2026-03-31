@@ -524,10 +524,10 @@ export function useMultiplayer() {
   }, []);
 
   /** Host: broadcast a game restart event to all guests */
-  const sendGameRestart = useCallback((deadline?: number) => {
+  const sendGameRestart = useCallback((deadline?: number, playerCountOverride?: number) => {
     const channel = channelRef.current;
     if (!channel) return;
-    const playerCount = 1 + guestCountRef.current;
+    const playerCount = playerCountOverride ?? (1 + guestCountRef.current);
     channel.send({
       type: "broadcast",
       event: "game_restart",

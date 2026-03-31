@@ -425,6 +425,8 @@ const Game = () => {
   const readyPlayerIdxsRef = useRef<Set<number>>(new Set());
   // Number of guests expected to press ready (set when host triggers restart)
   const expectedGuestsForRestartRef = useRef(0);
+  // Authoritative player count from the last coop worker state (includes mid-game additions)
+  const lastCoopPlayerCountRef = useRef(0);
   const coopGenerationRef = useRef(0);
   const [menuSelection, setMenuSelection] = useState(0); // 0=solo, 1=duel, 2=coop, 3=online, 4=settings
   const [gameOverSelection, setGameOverSelection] = useState(0); // 0=play again, 1=menu
@@ -5362,7 +5364,10 @@ const Game = () => {
   useEffect(() => {
     multiplayer.onGuestJoinedRef.current = () => {
       if (!isHostRef.current || restartDeadlineRef.current == null) return;
-      multiplayer.sendGameRestart(restartDeadlineRef.current);
+      // Re-broadcast the restart so the late-joining guest receives it. Use
+      // expectedGuestsForRestartRef which was already set correctly by the RESTART
+      // button handler (it accounts for mid-game spectator promotions via lastCoopPlayerCountRef).
+      multiplayer.sendGameRestart(restartDeadlineRef.current, expectedGuestsForRestartRef.current + 1);
     };
   }, [multiplayer.onGuestJoinedRef, multiplayer.sendGameRestart]);
 
@@ -5463,6 +5468,8 @@ const Game = () => {
         if (!net.gameOver && addingWaitingPlayersRef.current) {
           addingWaitingPlayersRef.current = false;
         }
+        // Track the authoritative player count so the RESTART handler can use it
+        lastCoopPlayerCountRef.current = net.playerCount;
         applyCoopNetStateRef.current(net);
         // Throttle network broadcast to ~20 Hz (every 3rd tick at 60 Hz)
         netBroadcastTickRef.current++;
@@ -5546,6 +5553,7 @@ const Game = () => {
     setRestartCountdown(null);
     readyPlayerIdxsRef.current = new Set();
     expectedGuestsForRestartRef.current = 0;
+    lastCoopPlayerCountRef.current = 0;
     setIsSpectating(false);
     isPausedRef.current = false;
     setIsPaused(false);
@@ -6800,9 +6808,13 @@ const Game = () => {
                       // Use the ref (not state) to get the accurate guest count at click time,
                       // avoiding stale values from asynchronous presence updates.
                       const currentGuestCount = multiplayer.guestCountRef.current ?? multiplayer.guestCount;
-                      const totalPlayers = currentGuestCount + 1;
+                      // Use the authoritative player count from the coop worker if it is higher
+                      // than the current presence count (handles mid-game spectator promotions).
+                      // If lastCoopPlayerCountRef is 0 (no state received yet), Math.max falls
+                      // back to the presence-derived count, preserving existing behaviour.
+                      const totalPlayers = Math.max(currentGuestCount + 1, lastCoopPlayerCountRef.current);
                       readyPlayerIdxsRef.current = new Set();
-                      expectedGuestsForRestartRef.current = currentGuestCount;
+                      expectedGuestsForRestartRef.current = totalPlayers - 1;
                       multiplayer.setGameInProgress(true);
                       if (totalPlayers <= 2) {
                         // Only 2 players — no countdown, broadcast without deadline so guest
@@ -6810,7 +6822,7 @@ const Game = () => {
                         // Ensure any previous countdown state is cleared.
                         restartDeadlineRef.current = null;
                         setRestartCountdown(null);
-                        multiplayer.sendGameRestart(undefined);
+                        multiplayer.sendGameRestart(undefined, totalPlayers);
                         // Host waits for the single guest's player_ready signal
                       } else {
                         // 3+ players — trigger a 20-second countdown
@@ -6818,7 +6830,7 @@ const Game = () => {
                         restartDeadlineRef.current = deadline;
                         setRestartCountdown(20);
                         setCountdownKey((k) => k + 1);
-                        multiplayer.sendGameRestart(deadline);
+                        multiplayer.sendGameRestart(deadline, totalPlayers);
                       }
                     }}
                     className="text-base sm:text-lg px-6 py-3 font-mono"
