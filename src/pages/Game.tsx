@@ -7045,7 +7045,7 @@ const Game = () => {
         )}
 
         {/* Host disconnected modal */}
-        {(gameMode === "online_coop" || gameMode === "online" || gameMode === "online_lobby") && multiplayer.hostDisconnected && (
+        {(gameModeRef.current === "online_coop" || gameModeRef.current === "online" || gameModeRef.current === "online_lobby") && multiplayer.hostDisconnected && (
           <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/90 z-50">
             <div
               className="text-3xl sm:text-4xl font-mono text-[hsl(var(--game-danger))] mb-8 animate-pulse text-center"
