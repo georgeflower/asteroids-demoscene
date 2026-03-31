@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import hyperspaceIcon from "@/assets/hyperspace.png";
+import bmcIcon from "@/assets/buymeacoffee.png";
 import { soundEffects } from "@/utils/soundEffects";
 import { haptics } from "@/utils/haptics";
 import { useMultiplayer } from "@/hooks/useMultiplayer";
