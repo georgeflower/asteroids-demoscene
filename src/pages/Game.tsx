@@ -6235,13 +6235,22 @@ const Game = () => {
           <div>ONLINE: Create or join a room to duel remotely</div>
         </div>
 
-        <div className="mt-4">
+        <div className="mt-4 flex items-center gap-4 justify-center">
           <button
             onClick={() => setShowChangelog(true)}
             className="text-[hsl(var(--game-foreground))] font-mono text-[10px] opacity-50 hover:opacity-100 transition-opacity uppercase tracking-widest"
           >
             📋 CHANGELOG
           </button>
+          <a
+            href="https://buymeacoffee.com/qumran"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="opacity-60 hover:opacity-100 transition-opacity"
+            title="Buy me a coffee"
+          >
+            <img src={bmcIcon} alt="Buy me a coffee" className="h-6 w-6" />
+          </a>
         </div>
 
         {/* Settings overlay */}
