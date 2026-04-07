@@ -469,6 +469,11 @@ const Game = () => {
   const marqueeGradientRef = useRef<CanvasGradient | null>(null);
   const olMarqueeGradientRef = useRef<CanvasGradient | null>(null);
   const cachedCanvasSize = useRef<{ w: number; h: number }>({ w: 0, h: 0 });
+  // Pre-rendered Amiga Ball boss cache (avoids ~1100 fillRect calls per frame)
+  const amigaBallCacheRef = useRef<{ canvas: OffscreenCanvas; lastRotAngle: number; lastHitFlash: boolean } | null>(null);
+  // Pre-rendered star layer canvases (one per parallax layer, avoids 120 arc() calls/frame)
+  const starLayerCanvasesRef = useRef<(OffscreenCanvas | null)[]>([null, null, null]);
+  const starLayerStarsRef = useRef<Star[]>([]);
 
   // Build or rebuild cached overlays when canvas size changes
   const ensureCachedOverlays = useCallback((ctx: CanvasRenderingContext2D) => {
@@ -657,33 +662,49 @@ const Game = () => {
   }, []);
 
   // --- Crypto helpers for anti-cheat ---
-  const solvePoW = useCallback(async (challenge: string, difficulty: number): Promise<number> => {
-    let nonce = 0;
-    while (true) {
-      const data = new TextEncoder().encode(challenge + nonce.toString());
-      const hashBuffer = await crypto.subtle.digest("SHA-256", data);
-      const hashArray = new Uint8Array(hashBuffer);
-      let zeroBits = 0;
-      let found = false;
-      for (const byte of hashArray) {
-        if (byte === 0) {
-          zeroBits += 8;
-        } else {
-          for (let bit = 7; bit >= 0; bit--) {
-            if ((byte & (1 << bit)) === 0) zeroBits++;
-            else {
-              found = true;
-              break;
+  const solvePoW = useCallback((challenge: string, difficulty: number): Promise<number> => {
+    if (HIGH_SCORES_ENABLED && typeof Worker !== "undefined") {
+      return new Promise((resolve, reject) => {
+        const worker = new Worker(new URL("../workers/powWorker.ts", import.meta.url), { type: "module" });
+        worker.onmessage = (e: MessageEvent<{ nonce: number }>) => {
+          resolve(e.data.nonce);
+          worker.terminate();
+        };
+        worker.onerror = (err) => {
+          reject(err);
+          worker.terminate();
+        };
+        worker.postMessage({ challenge, difficulty });
+      });
+    }
+    // Fallback: solve on main thread (yielding every 1000 iterations)
+    return (async () => {
+      let nonce = 0;
+      while (true) {
+        const data = new TextEncoder().encode(challenge + nonce.toString());
+        const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+        const hashArray = new Uint8Array(hashBuffer);
+        let zeroBits = 0;
+        let found = false;
+        for (const byte of hashArray) {
+          if (byte === 0) {
+            zeroBits += 8;
+          } else {
+            for (let bit = 7; bit >= 0; bit--) {
+              if ((byte & (1 << bit)) === 0) zeroBits++;
+              else {
+                found = true;
+                break;
+              }
             }
           }
+          if (found || zeroBits >= difficulty) break;
         }
-        if (found || zeroBits >= difficulty) break;
+        if (zeroBits >= difficulty) return nonce;
+        nonce++;
+        if (nonce % 1000 === 0) await new Promise((r) => setTimeout(r, 0));
       }
-      if (zeroBits >= difficulty) return nonce;
-      nonce++;
-      // Yield to main thread every 1000 iterations
-      if (nonce % 1000 === 0) await new Promise((r) => setTimeout(r, 0));
-    }
+    })();
   }, []);
 
   const computeHMAC = useCallback(async (key: string, message: string): Promise<string> => {
@@ -3176,31 +3197,34 @@ const Game = () => {
       return p.lifetime > 0;
     });
 
-    // Collision: Bullets vs Asteroids
+    // === Unified bullet collision pass (single iteration over bullets) ===
     const newAsteroids: Asteroid[] = [];
+    const killedAsteroids = new Set<Asteroid>();
+    const killedUFOs = new Set<typeof state.ufos[number]>();
+    const killedAliens = new Set<Alien>();
+    const multiplier = state.powerUpActive.multiplier > 0 ? 2 : 1;
+
     state.bullets = state.bullets.filter((bullet) => {
       if (bullet.isUFO || bullet.isAlien) return true;
-      let bulletAlive = true;
-      state.asteroids = state.asteroids.filter((asteroid) => {
+
+      // --- vs Asteroids ---
+      for (const asteroid of state.asteroids) {
+        if (killedAsteroids.has(asteroid)) continue;
         const radius = asteroid.size === "large" ? 40 : asteroid.size === "medium" ? 25 : 12;
         if (checkCollision(bullet.pos, 2, asteroid.pos, radius)) {
-          bulletAlive = false;
-          const multiplier = state.powerUpActive.multiplier > 0 ? 2 : 1;
+          killedAsteroids.add(asteroid);
           const pts = ASTEROID_POINTS[asteroid.size] * multiplier;
           state.score += pts;
           setDisplayScore(state.score);
           gameStatsRef.current.asteroidsDestroyed++;
-
           const aColor = theme.asteroids[asteroid.size === "large" ? 0 : asteroid.size === "medium" ? 1 : 2];
           spawnFloatingText(asteroid.pos, `+${pts}`, aColor, 14);
           spawnExplosion(asteroid.pos, aColor, asteroid.size === "large" ? 15 : asteroid.size === "medium" ? 10 : 6);
-
           if (Math.floor((state.score - pts) / 10000) < Math.floor(state.score / 10000)) {
             state.lives++;
             setDisplayLives(state.lives);
             spawnFloatingText(state.ship.pos, "EXTRA LIFE!", "#CC66FF", 22);
           }
-
           if (asteroid.size === "large") {
             newAsteroids.push(createAsteroid(asteroid.pos.x, asteroid.pos.y, "medium", state.wave));
             newAsteroids.push(createAsteroid(asteroid.pos.x, asteroid.pos.y, "medium", state.wave));
@@ -3212,26 +3236,18 @@ const Game = () => {
           } else {
             soundEffects.smallExplode();
           }
-
           const powerUp = createPowerUp(asteroid.pos.x, asteroid.pos.y);
           if (powerUp) state.powerUps.push(powerUp);
           return false;
         }
-        return true;
-      });
-      return bulletAlive;
-    });
-    state.asteroids.push(...newAsteroids);
+      }
 
-    // Collision: Bullets vs UFOs
-    state.bullets = state.bullets.filter((bullet) => {
-      if (bullet.isUFO || bullet.isAlien) return true;
-      let bulletAlive = true;
-      state.ufos = state.ufos.filter((ufo) => {
+      // --- vs UFOs ---
+      for (const ufo of state.ufos) {
+        if (killedUFOs.has(ufo)) continue;
         const radius = ufo.size === "large" ? 20 : 10;
         if (checkCollision(bullet.pos, 2, ufo.pos, radius)) {
-          bulletAlive = false;
-          const multiplier = state.powerUpActive.multiplier > 0 ? 2 : 1;
+          killedUFOs.add(ufo);
           const pts = UFO_POINTS[ufo.size] * multiplier;
           state.score += pts;
           setDisplayScore(state.score);
@@ -3242,104 +3258,78 @@ const Game = () => {
           if (powerUp) state.powerUps.push(powerUp);
           return false;
         }
-        return true;
-      });
-      return bulletAlive;
-    });
+      }
 
-    // Collision: Bullets vs Aliens
-    state.bullets = state.bullets.filter((bullet) => {
-      if (bullet.isUFO || bullet.isAlien) return true;
-      let bulletAlive = true;
-      state.aliens = state.aliens.filter((alien) => {
-        if (alien.isInvisible) return true; // Can't hit invisible sentinels
-        const radius =
-          alien.type === "brown" ? 12 : alien.type === "purpleSwarm" ? 8 : 14;
+      // --- vs Aliens ---
+      for (const alien of state.aliens) {
+        if (killedAliens.has(alien) || alien.isInvisible) continue;
+        const radius = alien.type === "brown" ? 12 : alien.type === "purpleSwarm" ? 8 : 14;
         if (checkCollision(bullet.pos, 2, alien.pos, radius)) {
-          bulletAlive = false;
           alien.hp--;
           if (alien.hp <= 0) {
-            const ptsMap: Record<string, number> = {
-              brown: 300,
-              greenMan: 500,
-              blueSentinel: 600,
-              purpleSwarm: 100,
-            };
-            const pts = (ptsMap[alien.type] ?? 300) * (state.powerUpActive.multiplier > 0 ? 2 : 1);
+            killedAliens.add(alien);
+            const ptsMap: Record<string, number> = { brown: 300, greenMan: 500, blueSentinel: 600, purpleSwarm: 100 };
+            const pts = (ptsMap[alien.type] ?? 300) * multiplier;
             state.score += pts;
             setDisplayScore(state.score);
             soundEffects.explode();
-            const colorMap: Record<string, string> = {
-              brown: "#AA6633",
-              greenMan: "#44FF44",
-              blueSentinel: "#4488FF",
-              purpleSwarm: "#AA44FF",
-            };
+            const colorMap: Record<string, string> = { brown: "#AA6633", greenMan: "#44FF44", blueSentinel: "#4488FF", purpleSwarm: "#AA44FF" };
             const color = colorMap[alien.type] ?? "#FFFFFF";
             spawnFloatingText(alien.pos, `+${pts}`, color, 16);
             spawnExplosion(alien.pos, color, 12);
             const powerUp = createPowerUp(alien.pos.x, alien.pos.y);
             if (powerUp) state.powerUps.push(powerUp);
-            return false;
           } else {
             spawnFloatingText(alien.pos, "HIT!", "#FFFFFF", 12);
           }
+          return false;
         }
-        return true;
-      });
-      return bulletAlive;
-    });
+      }
 
-    // Collision: Bullets vs Boss
-    if (state.boss && state.boss.entered) {
-      state.bullets = state.bullets.filter((bullet) => {
-        if (!state.boss) return true; // Boss defeated mid-filter, keep remaining bullets
-        if (bullet.isUFO || bullet.isAlien) return true;
+      // --- vs Boss ---
+      if (state.boss && state.boss.entered) {
         const bossHitRadius =
-          state.boss!.bossType === "amigaBall"
-            ? 50
-            : state.boss!.bossType === "flyingSaucer"
-              ? 55
-              : state.boss!.bossType === "borgCube"
-                ? 50
-                : 60;
-        if (checkCollision(bullet.pos, 2, state.boss!.pos, bossHitRadius)) {
-          state.boss!.hp--;
-          state.boss!.hitFlash = 10;
+          state.boss.bossType === "amigaBall" ? 50 :
+          state.boss.bossType === "flyingSaucer" ? 55 :
+          state.boss.bossType === "borgCube" ? 50 : 60;
+        if (checkCollision(bullet.pos, 2, state.boss.pos, bossHitRadius)) {
+          state.boss.hp--;
+          state.boss.hitFlash = 10;
           spawnExplosion(bullet.pos, "#FF88FF", 5);
           spawnFloatingText(bullet.pos, "HIT!", "#FF88FF", 14);
-
-          if (state.boss!.hp <= 0) {
-            const pts = (2000 + state.wave * 200) * (state.powerUpActive.multiplier > 0 ? 2 : 1);
+          if (state.boss.hp <= 0) {
+            const pts = (2000 + state.wave * 200) * multiplier;
             state.score += pts;
             setDisplayScore(state.score);
-            spawnFloatingText(state.boss!.pos, `+${pts}`, "#FFFF00", 24);
-            spawnExplosion(state.boss!.pos, "#FF44FF", 30);
-            spawnExplosion(state.boss!.pos, "#FFFF44", 20);
+            spawnFloatingText(state.boss.pos, `+${pts}`, "#FFFF00", 24);
+            spawnExplosion(state.boss.pos, "#FF44FF", 30);
+            spawnExplosion(state.boss.pos, "#FFFF44", 20);
             soundEffects.explode();
-
             const bossDropTypes: PowerUp["type"][] = ["shield", "rapidFire", "extraLife", "multiplier"];
             state.powerUps.push({
-              pos: { ...state.boss!.pos },
+              pos: { ...state.boss.pos },
               vel: { x: Math.random() - 0.5, y: Math.random() - 0.5 },
               rotation: 0,
               type: bossDropTypes[Math.floor(Math.random() * bossDropTypes.length)],
               lifetime: 600,
             });
-
             state.boss = null;
             state.bossDefeated = true;
             state.pendingNextWave = true;
             addDebugLog("boss", `Boss defeated! Score: +${pts}`);
-            // Boss defeated
-
-            // Advance is deferred to next update tick to avoid same-frame state churn
           }
           return false;
         }
-        return true;
-      });
-    }
+      }
+
+      return true;
+    });
+
+    // Apply deferred entity removals from unified collision pass
+    if (killedAsteroids.size > 0) state.asteroids = state.asteroids.filter((a) => !killedAsteroids.has(a));
+    state.asteroids.push(...newAsteroids);
+    if (killedUFOs.size > 0) state.ufos = state.ufos.filter((u) => !killedUFOs.has(u));
+    if (killedAliens.size > 0) state.aliens = state.aliens.filter((a) => !killedAliens.has(a));
 
     // Collision: Ship vs Asteroids
     if (!state.ship.invulnerable && state.powerUpActive.shield === 0) {
@@ -3416,6 +3406,83 @@ const Game = () => {
     }
   }, [nextWave, loseLife, shootBullet, hyperspace, addDebugLog]);
 
+  // ===== STAR LAYER PRE-RENDER HELPER =====
+  const buildStarLayerCanvases = (stars: Star[]) => {
+    starLayerStarsRef.current = stars;
+    for (let layer = 0; layer < 3; layer++) {
+      const oc = new OffscreenCanvas(CANVAS_WIDTH, CANVAS_HEIGHT);
+      const octx = oc.getContext("2d")!;
+      octx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+      for (const star of stars) {
+        if (star.layer !== layer) continue;
+        octx.fillStyle = `rgba(200, 220, 255, ${star.brightness})`;
+        octx.beginPath();
+        octx.arc(star.x, star.y, star.size, 0, Math.PI * 2);
+        octx.fill();
+      }
+      starLayerCanvasesRef.current[layer] = oc;
+    }
+  };
+
+  // ===== AMIGA BALL PRE-RENDER HELPER =====
+  const renderAmigaBall = (radius: number, rotAngle: number, hitFlash: boolean): OffscreenCanvas => {
+    const size = radius * 2 + 4;
+    const oc = new OffscreenCanvas(size, size);
+    const octx = oc.getContext("2d")!;
+    const lx = -0.5, ly = -0.7, lz = 0.5;
+    const llen = Math.hypot(lx, ly, lz);
+    const ldx = lx / llen, ldy = ly / llen, ldz = lz / llen;
+    const step = 3;
+    const cx = radius + 2, cy = radius + 2;
+    for (let py = -radius; py < radius; py += step) {
+      const xRange = Math.sqrt(radius * radius - py * py);
+      for (let px = -xRange; px < xRange; px += step) {
+        const nz = Math.sqrt(Math.max(0, radius * radius - px * px - py * py)) / radius;
+        const nx = px / radius;
+        const ny = py / radius;
+        const theta = Math.atan2(ny, nx);
+        const phi = Math.asin(Math.min(1, Math.max(-1, nz)));
+        const u = (((theta + rotAngle) / Math.PI) * 4 + 100) % 1;
+        const v = (((phi + Math.PI / 2) / Math.PI) * 4 + 100) % 1;
+        const isRed = (Math.floor(u * 2) + Math.floor(v * 2)) % 2 === 0;
+        const dot = nx * ldx + ny * ldy + nz * ldz;
+        const diffuse = Math.max(0.15, dot);
+        const reflZ = 2 * dot * nz - ldz;
+        const spec = Math.pow(Math.max(0, reflZ), 20) * 0.6;
+        let r: number, g: number, b: number;
+        if (hitFlash) {
+          r = g = b = 255;
+        } else if (isRed) {
+          r = Math.min(255, Math.floor(204 * diffuse + spec * 255));
+          g = Math.min(255, Math.floor(spec * 255));
+          b = Math.min(255, Math.floor(spec * 255));
+        } else {
+          r = Math.min(255, Math.floor(255 * diffuse + spec * 255));
+          g = Math.min(255, Math.floor(255 * diffuse + spec * 255));
+          b = Math.min(255, Math.floor(255 * diffuse + spec * 255));
+        }
+        octx.fillStyle = `rgb(${r},${g},${b})`;
+        octx.fillRect(cx + px - step / 2, cy + py - step / 2, step, step);
+      }
+    }
+    return oc;
+  };
+
+  const getAmigaBallCanvas = (radius: number, rotAngle: number, hitFlash: boolean): OffscreenCanvas => {
+    const cache = amigaBallCacheRef.current;
+    const ROT_THRESHOLD = (2 * Math.PI) / 180; // 2 degrees
+    if (
+      cache &&
+      Math.abs(cache.lastRotAngle - rotAngle) < ROT_THRESHOLD &&
+      cache.lastHitFlash === hitFlash
+    ) {
+      return cache.canvas;
+    }
+    const canvas = renderAmigaBall(radius, rotAngle, hitFlash);
+    amigaBallCacheRef.current = { canvas, lastRotAngle: rotAngle, lastHitFlash: hitFlash };
+    return canvas;
+  };
+
   // ===== DRAW SHIP HELPER =====
   const drawShip = (ctx: CanvasRenderingContext2D, ship: Ship, color: string, label?: string) => {
     ctx.save();
@@ -3462,18 +3529,23 @@ const Game = () => {
     ctx.fillStyle = bgColor;
     ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
-    // Parallax starfield
+    // Parallax starfield (using pre-rendered layer canvases for performance)
     const time = drawTimestampRef.current * 0.001;
-    stars.forEach((star) => {
-      const parallaxSpeed = [0.1, 0.3, 0.6][star.layer];
-      const offsetX = (time * parallaxSpeed * 10) % CANVAS_WIDTH;
-      const drawX = (((star.x - offsetX) % CANVAS_WIDTH) + CANVAS_WIDTH) % CANVAS_WIDTH;
-      const twinkle = 0.7 + Math.sin(time * 2 + star.x * 0.1) * 0.3;
-      ctx.fillStyle = `rgba(200, 220, 255, ${star.brightness * twinkle})`;
-      ctx.beginPath();
-      ctx.arc(drawX, star.y, star.size, 0, Math.PI * 2);
-      ctx.fill();
-    });
+    if (starLayerStarsRef.current !== stars) {
+      buildStarLayerCanvases(stars);
+    }
+    const PARALLAX_SPEEDS = [0.1, 0.3, 0.6];
+    for (let layer = 0; layer < 3; layer++) {
+      const layerCanvas = starLayerCanvasesRef.current[layer];
+      if (!layerCanvas) continue;
+      const offsetX = Math.round((time * PARALLAX_SPEEDS[layer] * 10) % CANVAS_WIDTH);
+      // Composite twice to handle wrap-around
+      ctx.save();
+      ctx.globalAlpha = 0.85 + 0.15 * Math.sin(time * 2 * (layer + 1));
+      ctx.drawImage(layerCanvas, -offsetX, 0);
+      if (offsetX > 0) ctx.drawImage(layerCanvas, CANVAS_WIDTH - offsetX, 0);
+      ctx.restore();
+    }
 
     // Particles (no shadow for performance)
     particles.forEach((p) => {
@@ -3919,50 +3991,9 @@ const Game = () => {
         } else if (boss.bossType === "amigaBall") {
           const radius = 50;
           const rotAngle = boss.rotAngle ?? 0;
-          const lightDir = { x: -0.5, y: -0.7, z: 0.5 };
-          const lightLen = Math.hypot(lightDir.x, lightDir.y, lightDir.z);
-          lightDir.x /= lightLen;
-          lightDir.y /= lightLen;
-          lightDir.z /= lightLen;
-          const step = 3;
-          for (let py = -radius; py < radius; py += step) {
-            const xRange = Math.sqrt(radius * radius - py * py);
-            for (let px = -xRange; px < xRange; px += step) {
-              const nz = Math.sqrt(Math.max(0, radius * radius - px * px - py * py)) / radius;
-              const nx = px / radius;
-              const ny = py / radius;
-              const theta = Math.atan2(ny, nx);
-              const phi = Math.asin(Math.min(1, Math.max(-1, nz)));
-              const u = (((theta + rotAngle) / Math.PI) * 4 + 100) % 1;
-              const v = (((phi + Math.PI / 2) / Math.PI) * 4 + 100) % 1;
-              const checkerU = Math.floor(u * 2) % 2;
-              const checkerV = Math.floor(v * 2) % 2;
-              const isRed = (checkerU + checkerV) % 2 === 0;
-              const dot = nx * lightDir.x + ny * lightDir.y + nz * lightDir.z;
-              const diffuse = Math.max(0.15, dot);
-              const reflX = 2 * dot * nx - lightDir.x;
-              const reflY = 2 * dot * ny - lightDir.y;
-              const reflZ = 2 * dot * nz - lightDir.z;
-              const spec = Math.pow(Math.max(0, reflZ), 20) * 0.6;
-              let r, g, b: number;
-              if (isRed) {
-                r = Math.min(255, Math.floor(204 * diffuse + spec * 255));
-                g = Math.min(255, Math.floor(spec * 255));
-                b = Math.min(255, Math.floor(spec * 255));
-              } else {
-                r = Math.min(255, Math.floor(255 * diffuse + spec * 255));
-                g = Math.min(255, Math.floor(255 * diffuse + spec * 255));
-                b = Math.min(255, Math.floor(255 * diffuse + spec * 255));
-              }
-              if (boss.hitFlash > 0) {
-                r = 255;
-                g = 255;
-                b = 255;
-              }
-              ctx.fillStyle = `rgb(${r},${g},${b})`;
-              ctx.fillRect(px - step / 2, py - step / 2, step, step);
-            }
-          }
+          const hitFlash = boss.hitFlash > 0;
+          const ballCanvas = getAmigaBallCanvas(radius, rotAngle, hitFlash);
+          ctx.drawImage(ballCanvas, -radius - 2, -radius - 2);
         } else if (boss.bossType === "flyingSaucer") {
           const flash = boss.hitFlash > 0;
           ctx.fillStyle = flash ? "#FFFFFF" : "#446688";
@@ -4282,69 +4313,12 @@ const Game = () => {
           ctx.arc(0, -5, 6, 0, Math.PI * 2);
           ctx.fill();
         } else if (boss.bossType === "amigaBall") {
-          // Procedural Amiga checkered bouncing ball
+          // Procedural Amiga checkered bouncing ball (pre-rendered to offscreen canvas)
           const radius = 50;
           const rotAngle = boss.rotAngle ?? 0;
-          const lightDir = { x: -0.5, y: -0.7, z: 0.5 }; // upper-left light
-          const lightLen = Math.hypot(lightDir.x, lightDir.y, lightDir.z);
-          lightDir.x /= lightLen;
-          lightDir.y /= lightLen;
-          lightDir.z /= lightLen;
-
-          // Draw sphere scanline by scanline using checkerboard + lighting
-          const step = 3; // pixel step for performance
-          for (let py = -radius; py < radius; py += step) {
-            const xRange = Math.sqrt(radius * radius - py * py);
-            for (let px = -xRange; px < xRange; px += step) {
-              // Compute sphere normal
-              const nz = Math.sqrt(Math.max(0, radius * radius - px * px - py * py)) / radius;
-              const nx = px / radius;
-              const ny = py / radius;
-
-              // UV mapping for checkerboard
-              const theta = Math.atan2(ny, nx); // longitude
-              const phi = Math.asin(Math.min(1, Math.max(-1, nz))); // latitude
-
-              // Apply rotation offset
-              const u = (((theta + rotAngle) / Math.PI) * 4 + 100) % 1;
-              const v = (((phi + Math.PI / 2) / Math.PI) * 4 + 100) % 1;
-
-              // Checkerboard
-              const checkerU = Math.floor(u * 2) % 2;
-              const checkerV = Math.floor(v * 2) % 2;
-              const isRed = (checkerU + checkerV) % 2 === 0;
-
-              // Lighting: dot product with light direction
-              const dot = nx * lightDir.x + ny * lightDir.y + nz * lightDir.z;
-              const diffuse = Math.max(0.15, dot);
-
-              // Specular highlight
-              const reflX = 2 * dot * nx - lightDir.x;
-              const reflY = 2 * dot * ny - lightDir.y;
-              const reflZ = 2 * dot * nz - lightDir.z;
-              const spec = Math.pow(Math.max(0, reflZ), 20) * 0.6;
-
-              let r: number, g: number, b: number;
-              if (isRed) {
-                r = Math.min(255, Math.floor(204 * diffuse + spec * 255));
-                g = Math.min(255, Math.floor(0 * diffuse + spec * 255));
-                b = Math.min(255, Math.floor(0 * diffuse + spec * 255));
-              } else {
-                r = Math.min(255, Math.floor(255 * diffuse + spec * 255));
-                g = Math.min(255, Math.floor(255 * diffuse + spec * 255));
-                b = Math.min(255, Math.floor(255 * diffuse + spec * 255));
-              }
-
-              if (boss.hitFlash > 0) {
-                r = 255;
-                g = 255;
-                b = 255;
-              }
-
-              ctx.fillStyle = `rgb(${r},${g},${b})`;
-              ctx.fillRect(px - step / 2, py - step / 2, step, step);
-            }
-          }
+          const hitFlash = boss.hitFlash > 0;
+          const ballCanvas = getAmigaBallCanvas(radius, rotAngle, hitFlash);
+          ctx.drawImage(ballCanvas, -radius - 2, -radius - 2);
 
           // Shadow beneath ball
           ctx.save();
