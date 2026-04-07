@@ -612,7 +612,7 @@ const Game = () => {
 
   const loadHallOfFame = useCallback(async () => {
     // Fetch server-side deduplicated top-3 via RPC (avoids fetching 1000+ rows client-side)
-    const { data, error } = await supabase.rpc("get_hall_of_fame");
+    const { data, error } = await supabase.rpc("get_hall_of_fame" as any);
     if (error || !data) {
       // Fallback to client-side merge on RPC failure
       const [oldRes, currentRes] = await Promise.all([
