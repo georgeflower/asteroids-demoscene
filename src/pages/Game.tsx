@@ -54,6 +54,7 @@ interface UFO extends GameObject {
   size: "large" | "small";
   shootTimer: number;
   waveOffset: number;
+  beepTimer: number;
 }
 
 interface PowerUp extends GameObject {
@@ -369,6 +370,7 @@ const Game = () => {
   const coopStateRef = useRef<CoopState | null>(null);
   const keysRef = useRef<{ [key: string]: boolean }>({});
   const animationFrameRef = useRef<number>();
+  const drawTimestampRef = useRef<number>(0);
   const lastShotRef = useRef(0);
   const lastShotP2Ref = useRef(0);
   const enteringInitialsRef = useRef(false);
@@ -455,6 +457,7 @@ const Game = () => {
   const radioStartedRef = useRef(false);
   const onelinerRef = useRef<{ author: string; message: string; flag: string }[] | null>(null);
   const lastOnelinerTimeRef = useRef<string>("");
+  const olTextCacheRef = useRef<{ text: string; totalWidth: number } | null>(null);
   const nowPlayingMarqueeXRef = useRef<number>(CANVAS_WIDTH);
   const onelinerMarqueeXRef = useRef<number>(CANVAS_WIDTH);
 
@@ -1007,6 +1010,7 @@ const Game = () => {
       size,
       shootTimer: 60 + Math.random() * 60,
       waveOffset: Math.random() * Math.PI * 2,
+      beepTimer: 120 + Math.random() * 60,
     };
   };
 
@@ -1819,7 +1823,7 @@ const Game = () => {
         size: u.size,
         shootTimer: 999,
         waveOffset: u.waveOffset,
-        direction: u.vx > 0 ? 1 : -1,
+        beepTimer: 120,
       }));
 
       // Per-player state
@@ -2608,8 +2612,10 @@ const Game = () => {
 
       if (ufo.pos.x < -30 || ufo.pos.x > CANVAS_WIDTH + 30) return false;
 
-      if (Math.floor(Date.now() / 1000) % 2 === 0 && Math.floor(Date.now() / 100) % 10 === 0) {
+      ufo.beepTimer--;
+      if (ufo.beepTimer <= 0) {
         soundEffects.ufoBeep();
+        ufo.beepTimer = 120 + Math.random() * 60;
       }
 
       ufo.shootTimer--;
@@ -3403,7 +3409,7 @@ const Game = () => {
     ctx.save();
     ctx.translate(ship.pos.x, ship.pos.y);
     ctx.rotate(ship.rotation);
-    if (!ship.invulnerable || Math.floor(Date.now() / 100) % 2 === 0) {
+    if (!ship.invulnerable || Math.floor(drawTimestampRef.current / 100) % 2 === 0) {
       ctx.strokeStyle = color;
       ctx.lineWidth = 2;
       ctx.shadowBlur = 8;
@@ -3445,7 +3451,7 @@ const Game = () => {
     ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
     // Parallax starfield
-    const time = Date.now() * 0.001;
+    const time = drawTimestampRef.current * 0.001;
     stars.forEach((star) => {
       const parallaxSpeed = [0.1, 0.3, 0.6][star.layer];
       const offsetX = (time * parallaxSpeed * 10) % CANVAS_WIDTH;
@@ -3719,7 +3725,8 @@ const Game = () => {
     });
   };
 
-  const draw = useCallback(() => {
+  const draw = useCallback((rafTimestamp: number) => {
+    drawTimestampRef.current = rafTimestamp;
     const canvas = canvasRef.current;
     if (!canvas) return;
     if (!ctx2dRef.current) {
@@ -3845,7 +3852,7 @@ const Game = () => {
         ctx.beginPath();
         ctx.ellipse(0, -radius / 4, radius / 2, radius / 3, 0, 0, Math.PI, true);
         ctx.stroke();
-        const pulse = 0.3 + Math.sin(Date.now() * 0.005) * 0.2;
+        const pulse = 0.3 + Math.sin(drawTimestampRef.current * 0.005) * 0.2;
         ctx.globalAlpha = pulse;
         ctx.fillStyle = ufoColor;
         ctx.beginPath();
@@ -4209,7 +4216,7 @@ const Game = () => {
         ctx.beginPath();
         ctx.ellipse(0, -radius / 4, radius / 2, radius / 3, 0, 0, Math.PI, true);
         ctx.stroke();
-        const pulse = 0.3 + Math.sin(Date.now() * 0.005) * 0.2;
+        const pulse = 0.3 + Math.sin(drawTimestampRef.current * 0.005) * 0.2;
         ctx.globalAlpha = pulse;
         ctx.fillStyle = ufoColor;
         ctx.beginPath();
@@ -4710,27 +4717,33 @@ const Game = () => {
       const gifTokens = [":necta:", ":nectawall:", "d^^b", ":D", ":he-man:"];
       const gifHeight = 14;
 
-      // Calculate total width
-      let totalWidth = 0;
-      let remaining = olText;
-      while (remaining.length > 0) {
-        let earliestIdx = remaining.length;
-        let earliestToken = "";
-        for (const token of gifTokens) {
-          const idx = remaining.indexOf(token);
-          if (idx !== -1 && idx < earliestIdx) {
-            earliestIdx = idx;
-            earliestToken = token;
+      // Calculate total width (cached — only recompute when olText changes)
+      let totalWidth: number;
+      if (olTextCacheRef.current?.text === olText) {
+        totalWidth = olTextCacheRef.current.totalWidth;
+      } else {
+        totalWidth = 0;
+        let remaining = olText;
+        while (remaining.length > 0) {
+          let earliestIdx = remaining.length;
+          let earliestToken = "";
+          for (const token of gifTokens) {
+            const idx = remaining.indexOf(token);
+            if (idx !== -1 && idx < earliestIdx) {
+              earliestIdx = idx;
+              earliestToken = token;
+            }
+          }
+          if (earliestToken) {
+            totalWidth += ctx.measureText(remaining.substring(0, earliestIdx)).width;
+            totalWidth += gifHeight; // GIF width = height (square)
+            remaining = remaining.substring(earliestIdx + earliestToken.length);
+          } else {
+            totalWidth += ctx.measureText(remaining).width;
+            remaining = "";
           }
         }
-        if (earliestToken) {
-          totalWidth += ctx.measureText(remaining.substring(0, earliestIdx)).width;
-          totalWidth += gifHeight; // GIF width = height (square)
-          remaining = remaining.substring(earliestIdx + earliestToken.length);
-        } else {
-          totalWidth += ctx.measureText(remaining).width;
-          remaining = "";
-        }
+        olTextCacheRef.current = { text: olText, totalWidth };
       }
 
       // Advance marquee position
@@ -4753,7 +4766,7 @@ const Game = () => {
       ctx.textAlign = "left";
 
       let drawX = onelinerMarqueeXRef.current;
-      remaining = olText;
+      let remaining = olText;
       while (remaining.length > 0) {
         let earliestIdx = remaining.length;
         let earliestToken = "";
@@ -4969,7 +4982,7 @@ const Game = () => {
         }
       }
 
-      draw();
+      draw(currentTime);
 
       // FPS tracking for overlay – writes to module-level counters (no setState)
       _fps.frames++;
