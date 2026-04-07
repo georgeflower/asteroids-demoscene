@@ -53,7 +53,6 @@ interface Bullet extends GameObject {
 interface UFO extends GameObject {
   size: "large" | "small";
   shootTimer: number;
-  direction: number;
   waveOffset: number;
 }
 
@@ -90,7 +89,7 @@ interface Star {
 }
 
 interface Alien extends GameObject {
-  type: "brown" | "greenMan" | "redDrone" | "blueSentinel" | "purpleSwarm";
+  type: "brown" | "greenMan" | "blueSentinel" | "purpleSwarm";
   hp: number;
   moveTimer: number;
   shootTimer: number;
@@ -202,7 +201,6 @@ interface GameState {
   lives: number;
   wave: number;
   gameOver: boolean;
-  paused: boolean;
   powerUpActive: {
     shield: number;
     rapidFire: number;
@@ -365,6 +363,7 @@ function FpsOverlay() {
 const Game = () => {
   const navigate = useNavigate();
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const ctx2dRef = useRef<CanvasRenderingContext2D | null>(null);
   const gameStateRef = useRef<GameState | null>(null);
   const duelStateRef = useRef<DuelState | null>(null);
   const coopStateRef = useRef<CoopState | null>(null);
@@ -731,7 +730,7 @@ const Game = () => {
   const sendHeartbeat = useCallback(async () => {
     const token = gameSessionTokenRef.current;
     const state = gameStateRef.current;
-    if (!token || !state || state.gameOver || state.paused) return;
+    if (!token || !state || state.gameOver || isPausedRef.current) return;
     try {
       const score = state.score;
       const level = state.wave;
@@ -1007,7 +1006,6 @@ const Game = () => {
       rotation: 0,
       size,
       shootTimer: 60 + Math.random() * 60,
-      direction: side === 0 ? 1 : -1,
       waveOffset: Math.random() * Math.PI * 2,
     };
   };
@@ -1016,22 +1014,6 @@ const Game = () => {
     const side = Math.random() < 0.5 ? -20 : CANVAS_WIDTH + 20;
     const dir = side < 0 ? 1 : -1;
 
-    if (type === "redDrone") {
-      const speed = (1.0 + Math.random() * 0.8) * getSpeedScale(wave);
-      return {
-        pos: { x: side, y: 30 + Math.random() * (CANVAS_HEIGHT - 60) },
-        vel: { x: dir * speed, y: (Math.random() - 0.5) * speed },
-        rotation: 0,
-        type,
-        hp: 1,
-        moveTimer: 0,
-        shootTimer: 9999,
-        zigzagPhase: Math.random() * Math.PI * 2,
-        dashTimer: 400 + Math.random() * 200,
-        isDashing: false,
-        orbitAngle: Math.random() * Math.PI * 2,
-      };
-    }
     if (type === "blueSentinel") {
       return {
         pos: { x: side, y: 30 + Math.random() * (CANVAS_HEIGHT - 60) },
@@ -1098,7 +1080,7 @@ const Game = () => {
 
   const createBoss = (wave: number): Boss => {
     // Determine boss type based on wave: 5=amigaBall, 10=flyingSaucer, 15=tentacle, 20=borgCube, then cycle
-    const bossIndex = (wave / 5 - 1) % 4; // 0,1,2,3
+    const bossIndex = Math.floor((wave / 5 - 1) % 4); // 0,1,2,3
     const bossTypes: Boss["bossType"][] = ["amigaBall", "flyingSaucer", "tentacle", "borgCube"];
     const bossType = bossTypes[bossIndex] || "tentacle";
     const baseHp = 3 + wave;
@@ -1203,13 +1185,16 @@ const Game = () => {
     keysRef.current = {};
     const asteroids: Asteroid[] = [];
     for (let i = 0; i < 4; i++) {
-      const x = Math.random() * CANVAS_WIDTH;
-      const y = Math.random() * CANVAS_HEIGHT;
-      const dist = Math.hypot(x - CANVAS_WIDTH / 2, y - CANVAS_HEIGHT / 2);
+      let x: number, y: number, dist: number;
+      let retries = 0;
+      do {
+        x = Math.random() * CANVAS_WIDTH;
+        y = Math.random() * CANVAS_HEIGHT;
+        dist = Math.hypot(x - CANVAS_WIDTH / 2, y - CANVAS_HEIGHT / 2);
+        retries++;
+      } while (dist <= 100 && retries < 100);
       if (dist > 100) {
         asteroids.push(createAsteroid(x, y, "large", 1));
-      } else {
-        i--;
       }
     }
 
@@ -1223,7 +1208,6 @@ const Game = () => {
       lives: 3,
       wave: 1,
       gameOver: false,
-      paused: false,
       powerUpActive: { shield: 0, rapidFire: 0, multiplier: 0 },
       floatingTexts: [],
       particles: [],
@@ -1250,9 +1234,11 @@ const Game = () => {
     setGameMode("solo");
     checkVersion();
     // Start a new game session for secure score submission
-    startGameSession();
+    if (HIGH_SCORES_ENABLED) {
+      startGameSession();
+      startHeartbeatInterval();
+    }
     gameStartTimeRef.current = Date.now();
-    startHeartbeatInterval();
     // Game started
     // Focus canvas for input capture
     setTimeout(() => {
@@ -1840,6 +1826,7 @@ const Game = () => {
       const prevScore = cs.score;
       const prevWave = cs.wave;
       const prevLives = [...(cs.lives ?? [])]; // capture BEFORE overwriting cs.lives
+      const prevEliminated = [...(cs.eliminated ?? [])]; // capture BEFORE overwriting
       cs.lives = net.lives ?? [3, 3];
       cs.eliminated = net.eliminated ?? Array.from({ length: pc }, () => false);
       cs.respawnTimer = net.respawnTimer;
@@ -1885,7 +1872,8 @@ const Game = () => {
       if (cs.wave !== prevWave) setCoopWave(cs.wave);
       const livesChanged = cs.lives.some((l, i) => l !== prevLives[i]);
       if (livesChanged) setCoopLives([...cs.lives]);
-      setCoopEliminated([...cs.eliminated]);
+      const eliminatedChanged = cs.eliminated.some((e, i) => e !== prevEliminated[i]);
+      if (eliminatedChanged) setCoopEliminated([...cs.eliminated]);
       if (net.gameOver) {
         setCoopGameOver(true);
         if (net.playerScores) {
@@ -1937,7 +1925,7 @@ const Game = () => {
         flyingSaucer: "FLYING SAUCER",
         borgCube: "BORG CUBE",
       };
-      const bType = (state.wave / 5 - 1) % 4;
+      const bType = Math.floor((state.wave / 5 - 1) % 4);
       const bTypes = ["amigaBall", "flyingSaucer", "tentacle", "borgCube"];
       const bossLabel = bossNames[bTypes[bType]] || "BOSS";
       spawnFloatingText({ x: CANVAS_WIDTH / 2, y: CANVAS_HEIGHT / 2 + 10 }, `⚠ ${bossLabel} INCOMING ⚠`, "#FF4444", 22);
@@ -1951,13 +1939,16 @@ const Game = () => {
     const asteroids: Asteroid[] = [];
 
     for (let i = 0; i < numAsteroids; i++) {
-      const x = Math.random() * CANVAS_WIDTH;
-      const y = Math.random() * CANVAS_HEIGHT;
-      const dist = Math.hypot(x - CANVAS_WIDTH / 2, y - CANVAS_HEIGHT / 2);
+      let x: number, y: number, dist: number;
+      let retries = 0;
+      do {
+        x = Math.random() * CANVAS_WIDTH;
+        y = Math.random() * CANVAS_HEIGHT;
+        dist = Math.hypot(x - CANVAS_WIDTH / 2, y - CANVAS_HEIGHT / 2);
+        retries++;
+      } while (dist <= 150 && retries < 100);
       if (dist > 150) {
         asteroids.push(createAsteroid(x, y, "large", state.wave));
-      } else {
-        i--;
       }
     }
 
@@ -2015,7 +2006,8 @@ const Game = () => {
   const checkCollision = (pos1: Vector, radius1: number, pos2: Vector, radius2: number): boolean => {
     const dx = pos1.x - pos2.x;
     const dy = pos1.y - pos2.y;
-    return Math.sqrt(dx * dx + dy * dy) < radius1 + radius2;
+    const r = radius1 + radius2;
+    return dx * dx + dy * dy < r * r;
   };
 
   const loseLife = useCallback(
@@ -2057,7 +2049,7 @@ const Game = () => {
         setShowLifeLost(true);
       }
     },
-    [isHighScore, loadLeaderboard, addDebugLog],
+    [isHighScore, loadLeaderboard, addDebugLog, stopHeartbeatInterval],
   );
 
   const shootBullet = useCallback(() => {
@@ -2509,7 +2501,6 @@ const Game = () => {
     if (
       !gameStateRef.current ||
       gameStateRef.current.gameOver ||
-      gameStateRef.current.paused ||
       showLifeLostRef.current
     )
       return;
@@ -2698,38 +2689,6 @@ const Game = () => {
             isAlien: true,
             color: "#44FF44",
           });
-        }
-      } else if (alien.type === "redDrone") {
-        // Orbit around player, then periodically dash
-        const dx = state.ship.pos.x - alien.pos.x;
-        const dy = state.ship.pos.y - alien.pos.y;
-        const dist = Math.hypot(dx, dy);
-        alien.orbitAngle = (alien.orbitAngle ?? 0) + 0.01;
-        alien.dashTimer = (alien.dashTimer ?? 400) - 1;
-
-        if (alien.isDashing) {
-          // Dash toward player at reduced speed
-          const spd = 2.0 * getSpeedScale(state.wave);
-          const ang = Math.atan2(dy, dx);
-          alien.vel.x = Math.cos(ang) * spd;
-          alien.vel.y = Math.sin(ang) * spd;
-          if (dist < 30 || alien.dashTimer! < -60) {
-            alien.isDashing = false;
-            alien.dashTimer = 400 + Math.random() * 200;
-          }
-        } else {
-          // Orbit at ~120px distance
-          const orbitDist = 120;
-          const targetX = state.ship.pos.x + Math.cos(alien.orbitAngle!) * orbitDist;
-          const targetY = state.ship.pos.y + Math.sin(alien.orbitAngle!) * orbitDist;
-          alien.vel.x += (targetX - alien.pos.x) * 0.01;
-          alien.vel.y += (targetY - alien.pos.y) * 0.01;
-          alien.vel.x *= 0.95;
-          alien.vel.y *= 0.95;
-          if (alien.dashTimer! <= 0) {
-            alien.isDashing = true;
-            alien.dashTimer = 0;
-          }
         }
       } else if (alien.type === "blueSentinel") {
         // Teleport + burst fire + invisibility
@@ -3145,7 +3104,8 @@ const Game = () => {
           case "shield":
             state.powerUpActive.shield = 300;
             state.ship.invulnerable = true;
-            state.ship.invulnerableTime = 0; // Clear spawn invulnerability timer
+            // Preserve existing spawn invulnerability; only clear if shield duration is longer
+            if (state.ship.invulnerableTime < 300) state.ship.invulnerableTime = 300;
             break;
           case "rapidFire":
             state.powerUpActive.rapidFire = 600;
@@ -3276,7 +3236,7 @@ const Game = () => {
       state.aliens = state.aliens.filter((alien) => {
         if (alien.isInvisible) return true; // Can't hit invisible sentinels
         const radius =
-          alien.type === "brown" ? 12 : alien.type === "redDrone" ? 10 : alien.type === "purpleSwarm" ? 8 : 14;
+          alien.type === "brown" ? 12 : alien.type === "purpleSwarm" ? 8 : 14;
         if (checkCollision(bullet.pos, 2, alien.pos, radius)) {
           bulletAlive = false;
           alien.hp--;
@@ -3284,7 +3244,6 @@ const Game = () => {
             const ptsMap: Record<string, number> = {
               brown: 300,
               greenMan: 500,
-              redDrone: 200,
               blueSentinel: 600,
               purpleSwarm: 100,
             };
@@ -3295,7 +3254,6 @@ const Game = () => {
             const colorMap: Record<string, string> = {
               brown: "#AA6633",
               greenMan: "#44FF44",
-              redDrone: "#FF4444",
               blueSentinel: "#4488FF",
               purpleSwarm: "#AA44FF",
             };
@@ -3392,7 +3350,7 @@ const Game = () => {
     // Collision: Ship vs Aliens
     if (!state.ship.invulnerable && state.powerUpActive.shield === 0) {
       for (const alien of state.aliens) {
-        const alienRadius = alien.type === "redDrone" ? 10 : alien.type === "purpleSwarm" ? 8 : 12;
+        const alienRadius = alien.type === "purpleSwarm" ? 8 : 12;
         if (alien.isInvisible) continue;
         if (checkCollision(state.ship.pos, SHIP_SIZE, alien.pos, alienRadius)) {
           addDebugLog("collision", `Ship hit ${alien.type} alien`);
@@ -3764,7 +3722,10 @@ const Game = () => {
   const draw = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext("2d");
+    if (!ctx2dRef.current) {
+      ctx2dRef.current = canvas.getContext("2d");
+    }
+    const ctx = ctx2dRef.current;
     if (!ctx) return;
     ensureCachedOverlays(ctx);
 
