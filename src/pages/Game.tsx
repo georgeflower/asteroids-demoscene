@@ -15,6 +15,7 @@ import ControlSettings from "@/components/ControlSettings";
 import { loadBindings, displayKeyName, type ControlBindings } from "@/hooks/useControlSettings";
 import type { DuelNetState, CoopNetState, SessionMode } from "@/types/multiplayer";
 import { DEBUG_ENABLED, DEBUG_CATEGORIES, type DebugCategory, type DebugLogEntry } from "@/constants/debug";
+import { SPAWN_INVULNERABILITY_FRAMES, SHIELD_DURATION, RAPID_FIRE_DURATION, MULTIPLIER_DURATION, POWERUP_DROP_RATE_SOLO, DEFAULT_TURN_SPEED, BULLET_LIFETIME } from "@/constants/gameConstants";
 
 interface Vector {
   x: number;
@@ -303,7 +304,6 @@ const HIGH_SCORES_ENABLED = false;
 
 const SHIP_SIZE = 10;
 const BULLET_SPEED = 7;
-const BULLET_LIFETIME = 60;
 const ASTEROID_SPEEDS = { large: 0.5, medium: 0.8, small: 1.2 };
 const ASTEROID_POINTS = { large: 20, medium: 50, small: 100 };
 const UFO_POINTS = { large: 200, small: 1000 };
@@ -604,37 +604,40 @@ const Game = () => {
   }, []);
 
   const loadHallOfFame = useCallback(async () => {
-    // Fetch from both tables in parallel
-    const [oldRes, currentRes] = await Promise.all([
-      supabase
-        .from("high_scores")
-        .select("initials, score, created_at")
-        .order("score", { ascending: false })
-        .limit(1000),
-      supabase
-        .from("current_high_scores")
-        .select("initials, score, created_at")
-        .order("score", { ascending: false })
-        .limit(1000),
-    ]);
-    const allRows = [...(oldRes.data || []), ...(currentRes.data || [])].sort((a, b) => b.score - a.score);
-
-    // Deduplicate: best score per initials, with overall rank
-    const seen = new Set<string>();
-    const unique: { initials: string; score: number; date: string; rank: number }[] = [];
-    allRows.forEach((row, idx) => {
-      const key = row.initials.toUpperCase();
-      if (!seen.has(key)) {
-        seen.add(key);
-        unique.push({
-          initials: row.initials,
-          score: row.score,
-          date: new Date(row.created_at).toLocaleDateString(),
-          rank: idx + 1,
-        });
-      }
-    });
-    return unique.slice(0, 3);
+    // Fetch server-side deduplicated top-3 via RPC (avoids fetching 1000+ rows client-side)
+    const { data, error } = await supabase.rpc("get_hall_of_fame");
+    if (error || !data) {
+      // Fallback to client-side merge on RPC failure
+      const [oldRes, currentRes] = await Promise.all([
+        supabase
+          .from("high_scores")
+          .select("initials, score, created_at")
+          .order("score", { ascending: false })
+          .limit(100),
+        supabase
+          .from("current_high_scores")
+          .select("initials, score, created_at")
+          .order("score", { ascending: false })
+          .limit(100),
+      ]);
+      const allRows = [...(oldRes.data || []), ...(currentRes.data || [])].sort((a, b) => b.score - a.score);
+      const seen = new Set<string>();
+      const unique: { initials: string; score: number; date: string; rank: number }[] = [];
+      allRows.forEach((row, idx) => {
+        const key = row.initials.toUpperCase();
+        if (!seen.has(key)) {
+          seen.add(key);
+          unique.push({ initials: row.initials, score: row.score, date: new Date(row.created_at).toLocaleDateString(), rank: idx + 1 });
+        }
+      });
+      return unique.slice(0, 3);
+    }
+    return (data as { initials: string; score: number; created_at: string }[]).map((row, idx) => ({
+      initials: row.initials,
+      score: row.score,
+      date: new Date(row.created_at).toLocaleDateString(),
+      rank: idx + 1,
+    }));
   }, []);
 
   const loadOldLeaderboard = useCallback(async () => {
@@ -968,7 +971,7 @@ const Game = () => {
     pos: { x: x ?? CANVAS_WIDTH / 2, y: y ?? CANVAS_HEIGHT / 2 },
     vel: { x: 0, y: 0 },
     rotation: -Math.PI / 2,
-    rotationSpeed: controlBindingsRef.current.turnSpeed || 0.055,
+    rotationSpeed: controlBindingsRef.current.turnSpeed || DEFAULT_TURN_SPEED5,
     thrust: 0.08,
     isThrusting: false,
     invulnerable: true,
@@ -1138,7 +1141,7 @@ const Game = () => {
   };
 
   const createPowerUp = (x: number, y: number): PowerUp | null => {
-    if (Math.random() > 0.15) return null;
+    if (Math.random() > POWERUP_DROP_RATE_SOLO) return null;
     const types: PowerUp["type"][] = ["shield", "rapidFire", "extraLife", "multiplier"];
     const type = types[Math.floor(Math.random() * types.length)];
     return {
@@ -1464,7 +1467,7 @@ const Game = () => {
     if (isHost) {
       const worker = new Worker(new URL("../workers/gameWorker.ts", import.meta.url), { type: "module" });
       workerRef.current = worker;
-      worker.postMessage({ type: "init", turnSpeed: controlBindingsRef.current.turnSpeed || 0.05 });
+      worker.postMessage({ type: "init", turnSpeed: controlBindingsRef.current.turnSpeed || DEFAULT_TURN_SPEED });
     } else {
       // Guest: initialise client-side prediction ship (mirrors ship2 starting pos/rot)
       guestPredictedShipRef.current = createShip(CANVAS_WIDTH * 0.75, CANVAS_HEIGHT / 2);
@@ -1569,7 +1572,7 @@ const Game = () => {
     }
     const worker = new Worker(new URL("../workers/coopWorker.ts", import.meta.url), { type: "module" });
     workerRef.current = worker;
-    worker.postMessage({ type: "init", turnSpeed: controlBindingsRef.current.turnSpeed || 0.05, playerCount: pc });
+    worker.postMessage({ type: "init", turnSpeed: controlBindingsRef.current.turnSpeed || DEFAULT_TURN_SPEED, playerCount: pc });
 
     // Bump generation so worker onmessage effects re-attach to the new worker
     coopGenerationRef.current += 1;
@@ -2201,7 +2204,7 @@ const Game = () => {
     state.ship.vel = { x: 0, y: 0 };
     state.ship.hyperspaceCooldown = 600; // 10 seconds at 60fps
     state.ship.invulnerable = true;
-    state.ship.invulnerableTime = 120; // 2 seconds of invulnerability after hyperspace
+    state.ship.invulnerableTime = SPAWN_INVULNERABILITY_FRAMES; // 2 seconds of invulnerability after hyperspace
 
     // Hyperspace jump executed
   }, []);
@@ -2274,7 +2277,7 @@ const Game = () => {
           ship.pos = { x: Math.random() * CANVAS_WIDTH, y: Math.random() * CANVAS_HEIGHT };
           ship.vel = { x: 0, y: 0 };
           ship.invulnerable = true;
-          ship.invulnerableTime = 120;
+          ship.invulnerableTime = SPAWN_INVULNERABILITY_FRAMES;
         }
       }
     }
@@ -2664,6 +2667,16 @@ const Game = () => {
       }
     }
 
+    // Pre-compute purple swarm flock groups (avoids O(n²) filter inside the update loop)
+    const flockMap = new Map<number, Alien[]>();
+    for (const alien of state.aliens) {
+      if (alien.type === "purpleSwarm" && alien.flockId !== undefined) {
+        const group = flockMap.get(alien.flockId);
+        if (group) group.push(alien);
+        else flockMap.set(alien.flockId, [alien]);
+      }
+    }
+
     // Update aliens
     state.aliens = state.aliens.filter((alien) => {
       alien.moveTimer++;
@@ -2756,9 +2769,8 @@ const Game = () => {
         }
       } else if (alien.type === "purpleSwarm") {
         // Boids-like flocking toward centroid of same flock, chase player
-        const flockMates = state.aliens.filter(
-          (a) => a.type === "purpleSwarm" && a.flockId === alien.flockId && a !== alien,
-        );
+        const group = alien.flockId !== undefined ? (flockMap.get(alien.flockId) ?? []) : [];
+        const flockMates = group.filter((a) => a !== alien);
         let cx = state.ship.pos.x,
           cy = state.ship.pos.y;
         if (flockMates.length > 0) {
@@ -3108,13 +3120,13 @@ const Game = () => {
 
         switch (powerUp.type) {
           case "shield":
-            state.powerUpActive.shield = 300;
+            state.powerUpActive.shield = SHIELD_DURATION;
             state.ship.invulnerable = true;
             // Preserve existing spawn invulnerability; only clear if shield duration is longer
-            if (state.ship.invulnerableTime < 300) state.ship.invulnerableTime = 300;
+            if (state.ship.invulnerableTime < SHIELD_DURATION) state.ship.invulnerableTime = SHIELD_DURATION;
             break;
           case "rapidFire":
-            state.powerUpActive.rapidFire = 600;
+            state.powerUpActive.rapidFire = RAPID_FIRE_DURATION;
             break;
           case "extraLife": {
             state.lives++;
@@ -3122,7 +3134,7 @@ const Game = () => {
             break;
           }
           case "multiplier":
-            state.powerUpActive.multiplier = 900;
+            state.powerUpActive.multiplier = MULTIPLIER_DURATION;
             break;
         }
         soundEffects.powerUp();
@@ -4883,7 +4895,7 @@ const Game = () => {
           // Apply inputs locally to the predicted ship for zero-feel latency
           const pred = guestPredictedShipRef.current;
           if (pred) {
-            const turnSpeed = controlBindingsRef.current.turnSpeed || 0.05;
+            const turnSpeed = controlBindingsRef.current.turnSpeed || DEFAULT_TURN_SPEED;
             if (localInput.left) pred.rotation -= turnSpeed;
             if (localInput.right) pred.rotation += turnSpeed;
             pred.isThrusting = localInput.up;
