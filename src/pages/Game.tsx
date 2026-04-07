@@ -15,7 +15,7 @@ import ControlSettings from "@/components/ControlSettings";
 import { loadBindings, displayKeyName, type ControlBindings } from "@/hooks/useControlSettings";
 import type { DuelNetState, CoopNetState, SessionMode } from "@/types/multiplayer";
 import { DEBUG_ENABLED, DEBUG_CATEGORIES, type DebugCategory, type DebugLogEntry } from "@/constants/debug";
-import { SPAWN_INVULNERABILITY_FRAMES, SHIELD_DURATION, RAPID_FIRE_DURATION, MULTIPLIER_DURATION, POWERUP_DROP_RATE_SOLO, DEFAULT_TURN_SPEED, BULLET_LIFETIME } from "@/constants/gameConstants";
+import { SPAWN_INVULNERABILITY_FRAMES, SHIELD_DURATION, RAPID_FIRE_DURATION, MULTIPLIER_DURATION, POWERUP_DROP_RATE_SOLO, DEFAULT_TURN_SPEED, BULLET_LIFETIME, BOSS_TYPES, BOSS_NAMES } from "@/constants/gameConstants";
 
 interface Vector {
   x: number;
@@ -1109,8 +1109,7 @@ const Game = () => {
   const createBoss = (wave: number): Boss => {
     // Determine boss type based on wave: 5=amigaBall, 10=flyingSaucer, 15=tentacle, 20=borgCube, then cycle
     const bossIndex = Math.floor((wave / 5 - 1) % 4); // 0,1,2,3
-    const bossTypes: Boss["bossType"][] = ["amigaBall", "flyingSaucer", "tentacle", "borgCube"];
-    const bossType = bossTypes[bossIndex] || "tentacle";
+    const bossType = (BOSS_TYPES[bossIndex] ?? "tentacle") as Boss["bossType"];
     const baseHp = 3 + wave;
 
     const base: Boss = {
@@ -1947,15 +1946,8 @@ const Game = () => {
 
       const theme = getTheme(state.wave);
       spawnFloatingText({ x: CANVAS_WIDTH / 2, y: CANVAS_HEIGHT / 2 - 40 }, `WAVE ${state.wave}`, theme.ship, 28);
-      const bossNames: Record<string, string> = {
-        tentacle: "BOSS",
-        amigaBall: "AMIGA BALL",
-        flyingSaucer: "FLYING SAUCER",
-        borgCube: "BORG CUBE",
-      };
       const bType = Math.floor((state.wave / 5 - 1) % 4);
-      const bTypes = ["amigaBall", "flyingSaucer", "tentacle", "borgCube"];
-      const bossLabel = bossNames[bTypes[bType]] || "BOSS";
+      const bossLabel = BOSS_NAMES[BOSS_TYPES[bType]] ?? "BOSS";
       spawnFloatingText({ x: CANVAS_WIDTH / 2, y: CANVAS_HEIGHT / 2 + 10 }, `⚠ ${bossLabel} INCOMING ⚠`, "#FF4444", 22);
       // Boss wave started
       return;
@@ -3406,6 +3398,209 @@ const Game = () => {
     }
   }, [nextWave, loseLife, shootBullet, hyperspace, addDebugLog]);
 
+  // ===== SHARED BOSS DRAW HELPER =====
+  const drawBossOnCanvas = (ctx: CanvasRenderingContext2D, boss: Boss, hpBarY: number) => {
+    ctx.save();
+    ctx.translate(boss.pos.x, boss.pos.y);
+
+    if (boss.bossType === "tentacle") {
+      const bossColor = boss.hitFlash > 0 ? "#FFFFFF" : "#FF44CC";
+      const tentCount = boss.tentacles;
+      for (let i = 0; i < tentCount; i++) {
+        const baseAngle = (i / tentCount) * Math.PI * 2;
+        ctx.strokeStyle = boss.hitFlash > 0 ? "#FFFFFF" : "#CC44AA";
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        const segments = 5;
+        for (let s = 1; s <= segments; s++) {
+          const d = s * 18;
+          const w = Math.sin(boss.phase * 2 + i + s * 0.8) * 15;
+          const tx = Math.cos(baseAngle) * d + Math.cos(baseAngle + Math.PI / 2) * w;
+          const ty = Math.sin(baseAngle) * d + Math.sin(baseAngle + Math.PI / 2) * w;
+          ctx.lineTo(tx, ty);
+        }
+        ctx.stroke();
+      }
+      const pulse = 1 + Math.sin(boss.phase * 3) * 0.05;
+      const bodyR = 45 * pulse;
+      ctx.fillStyle = boss.hitFlash > 0 ? "#FFFFFF" : "#331133";
+      ctx.strokeStyle = bossColor;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(0, 0, bodyR, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = bossColor;
+      ctx.beginPath();
+      ctx.arc(0, -5, 12, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#000000";
+      ctx.beginPath();
+      ctx.arc(0, -5, 6, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (boss.bossType === "amigaBall") {
+      const radius = 50;
+      const rotAngle = boss.rotAngle ?? 0;
+      const hitFlash = boss.hitFlash > 0;
+      const ballCanvas = getAmigaBallCanvas(radius, rotAngle, hitFlash);
+      ctx.drawImage(ballCanvas, -radius - 2, -radius - 2);
+      // Shadow beneath ball
+      ctx.save();
+      ctx.translate(0, radius + 10);
+      ctx.scale(1, 0.3);
+      ctx.fillStyle = "rgba(0,0,0,0.3)";
+      ctx.beginPath();
+      ctx.arc(0, 0, radius * 0.8, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    } else if (boss.bossType === "flyingSaucer") {
+      const flash = boss.hitFlash > 0;
+      ctx.fillStyle = flash ? "#FFFFFF" : "#446688";
+      ctx.strokeStyle = flash ? "#FFFFFF" : "#88AACC";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.ellipse(0, -12, 25, 18, 0, Math.PI, 0);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = flash ? "#FFFFFF" : "#334455";
+      ctx.strokeStyle = flash ? "#FFFFFF" : "#667788";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.ellipse(0, 0, 55, 14, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      const lightCount = 8;
+      for (let i = 0; i < lightCount; i++) {
+        const lAngle = (i / lightCount) * Math.PI * 2 + boss.phase * 2;
+        const lx = Math.cos(lAngle) * 45;
+        const ly = Math.sin(lAngle) * 10;
+        const brightness = (Math.sin(boss.phase * 3 + i) + 1) / 2;
+        ctx.fillStyle = `rgba(255, ${flash ? 255 : Math.floor(200 * brightness)}, ${flash ? 255 : 0}, ${0.5 + brightness * 0.5})`;
+        ctx.beginPath();
+        ctx.arc(lx, ly, 3, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      if (boss.tractorBeamActive) {
+        ctx.save();
+        ctx.globalAlpha = 0.15 + Math.sin(boss.phase * 5) * 0.1;
+        const grad = ctx.createLinearGradient(0, 14, 0, 200);
+        grad.addColorStop(0, "#00FF88");
+        grad.addColorStop(1, "rgba(0,255,136,0)");
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.moveTo(-20, 14);
+        ctx.lineTo(20, 14);
+        ctx.lineTo(60, 200);
+        ctx.lineTo(-60, 200);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+      }
+      if (boss.miniSaucers) {
+        boss.miniSaucers.forEach((ms) => {
+          ctx.save();
+          ctx.translate(ms.pos.x - boss.pos.x, ms.pos.y - boss.pos.y);
+          ctx.fillStyle = "#556677";
+          ctx.strokeStyle = "#88FFAA";
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.ellipse(0, 0, 12, 4, 0, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.stroke();
+          ctx.fillStyle = "#88FFAA";
+          ctx.beginPath();
+          ctx.ellipse(0, -3, 6, 4, 0, Math.PI, 0);
+          ctx.fill();
+          ctx.restore();
+        });
+      }
+    } else if (boss.bossType === "borgCube") {
+      const flash = boss.hitFlash > 0;
+      const cubeSize = 45;
+      const rotX = boss.cubeRotX ?? 0;
+      const rotY = boss.cubeRotY ?? 0;
+      const verts = [
+        [-1, -1, -1], [1, -1, -1], [1, 1, -1], [-1, 1, -1],
+        [-1, -1, 1], [1, -1, 1], [1, 1, 1], [-1, 1, 1],
+      ].map(([x, y, z]) => {
+        const x2 = x * Math.cos(rotY) - z * Math.sin(rotY);
+        const z2 = x * Math.sin(rotY) + z * Math.cos(rotY);
+        const y2 = y * Math.cos(rotX) - z2 * Math.sin(rotX);
+        const z3 = y * Math.sin(rotX) + z2 * Math.cos(rotX);
+        const scale = 150 / (150 + z3 * cubeSize * 0.3);
+        return { x: x2 * cubeSize * scale, y: y2 * cubeSize * scale };
+      });
+      const edges = [
+        [0, 1], [1, 2], [2, 3], [3, 0],
+        [4, 5], [5, 6], [6, 7], [7, 4],
+        [0, 4], [1, 5], [2, 6], [3, 7],
+      ];
+      ctx.save();
+      ctx.globalAlpha = 0.2;
+      ctx.fillStyle = "#00FF44";
+      ctx.beginPath();
+      ctx.arc(0, 0, cubeSize * 1.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+      ctx.strokeStyle = flash ? "#FFFFFF" : "#00FF44";
+      ctx.lineWidth = 2;
+      edges.forEach(([a, b]) => {
+        ctx.beginPath();
+        ctx.moveTo(verts[a].x, verts[a].y);
+        ctx.lineTo(verts[b].x, verts[b].y);
+        ctx.stroke();
+      });
+      ctx.fillStyle = flash ? "#FFFFFF" : "#88FF88";
+      verts.forEach((v) => {
+        ctx.beginPath();
+        ctx.arc(v.x, v.y, 3, 0, Math.PI * 2);
+        ctx.fill();
+      });
+      if (boss.miniCubes) {
+        boss.miniCubes.forEach((mc) => {
+          ctx.save();
+          ctx.translate(mc.pos.x - boss.pos.x, mc.pos.y - boss.pos.y);
+          ctx.rotate(mc.rotAngle);
+          ctx.strokeStyle = "#00FF44";
+          ctx.lineWidth = 1;
+          const s = 8;
+          ctx.strokeRect(-s / 2, -s / 2, s, s);
+          ctx.strokeStyle = "rgba(0,255,68,0.4)";
+          ctx.beginPath();
+          ctx.moveTo(-s / 2, 0); ctx.lineTo(s / 2, 0);
+          ctx.moveTo(0, -s / 2); ctx.lineTo(0, s / 2);
+          ctx.stroke();
+          ctx.restore();
+        });
+      }
+    }
+
+    ctx.restore();
+
+    // HP bar
+    const bossBarColors: Record<string, string> = {
+      tentacle: "#FF44CC", amigaBall: "#CC0000", flyingSaucer: "#00FF88", borgCube: "#00FF44",
+    };
+    const barW = 200, barH = 8;
+    const barX = (CANVAS_WIDTH - barW) / 2;
+    const hpFrac = boss.hp / boss.maxHp;
+    const barColor = bossBarColors[boss.bossType] ?? "#FF44CC";
+    ctx.save();
+    ctx.globalAlpha = 0.7;
+    ctx.strokeStyle = barColor;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(barX, hpBarY, barW, barH);
+    ctx.fillStyle = hpFrac > 0.3 ? barColor : "#FF0000";
+    ctx.fillRect(barX, hpBarY, barW * hpFrac, barH);
+    ctx.globalAlpha = 0.9;
+    ctx.font = "8px 'Press Start 2P', monospace";
+    ctx.fillStyle = "#FFFFFF";
+    ctx.textAlign = "center";
+    ctx.fillText(BOSS_NAMES[boss.bossType] ?? "BOSS", CANVAS_WIDTH / 2, hpBarY - 4);
+    ctx.restore();
+  };
+
   // ===== STAR LAYER PRE-RENDER HELPER =====
   const buildStarLayerCanvases = (stars: Star[]) => {
     starLayerStarsRef.current = stars;
@@ -3946,189 +4141,9 @@ const Game = () => {
         ctx.restore();
       });
 
-      // Draw boss (same rendering as solo mode)
+      // Draw boss using shared helper
       if (cs.boss) {
-        const boss = cs.boss;
-        ctx.save();
-        ctx.translate(boss.pos.x, boss.pos.y);
-
-        if (boss.bossType === "tentacle") {
-          const bossColor = boss.hitFlash > 0 ? "#FFFFFF" : "#FF44CC";
-          const tentCount = boss.tentacles;
-          for (let i = 0; i < tentCount; i++) {
-            const baseAngle = (i / tentCount) * Math.PI * 2;
-            ctx.strokeStyle = boss.hitFlash > 0 ? "#FFFFFF" : "#CC44AA";
-            ctx.lineWidth = 3;
-            ctx.beginPath();
-            ctx.moveTo(0, 0);
-            const segments = 5;
-            for (let s = 1; s <= segments; s++) {
-              const d = s * 18;
-              const w = Math.sin(boss.phase * 2 + i + s * 0.8) * 15;
-              const tx = Math.cos(baseAngle) * d + Math.cos(baseAngle + Math.PI / 2) * w;
-              const ty = Math.sin(baseAngle) * d + Math.sin(baseAngle + Math.PI / 2) * w;
-              ctx.lineTo(tx, ty);
-            }
-            ctx.stroke();
-          }
-          const pulse = 1 + Math.sin(boss.phase * 3) * 0.05;
-          const bodyR = 45 * pulse;
-          ctx.fillStyle = boss.hitFlash > 0 ? "#FFFFFF" : "#331133";
-          ctx.strokeStyle = bossColor;
-          ctx.lineWidth = 3;
-          ctx.beginPath();
-          ctx.arc(0, 0, bodyR, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.stroke();
-          ctx.fillStyle = bossColor;
-          ctx.beginPath();
-          ctx.arc(0, -5, 12, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.fillStyle = "#000000";
-          ctx.beginPath();
-          ctx.arc(0, -5, 6, 0, Math.PI * 2);
-          ctx.fill();
-        } else if (boss.bossType === "amigaBall") {
-          const radius = 50;
-          const rotAngle = boss.rotAngle ?? 0;
-          const hitFlash = boss.hitFlash > 0;
-          const ballCanvas = getAmigaBallCanvas(radius, rotAngle, hitFlash);
-          ctx.drawImage(ballCanvas, -radius - 2, -radius - 2);
-        } else if (boss.bossType === "flyingSaucer") {
-          const flash = boss.hitFlash > 0;
-          ctx.fillStyle = flash ? "#FFFFFF" : "#446688";
-          ctx.strokeStyle = flash ? "#FFFFFF" : "#88AACC";
-          ctx.lineWidth = 2;
-          ctx.beginPath();
-          ctx.ellipse(0, -12, 25, 18, 0, Math.PI, 0);
-          ctx.fill();
-          ctx.stroke();
-          ctx.fillStyle = flash ? "#FFFFFF" : "#334455";
-          ctx.strokeStyle = flash ? "#FFFFFF" : "#667788";
-          ctx.beginPath();
-          ctx.ellipse(0, 0, 55, 14, 0, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.stroke();
-          const lightCount = 8;
-          for (let i = 0; i < lightCount; i++) {
-            const lAngle = (i / lightCount) * Math.PI * 2 + boss.phase * 2;
-            const lx = Math.cos(lAngle) * 45;
-            const ly = Math.sin(lAngle) * 10;
-            const brightness = (Math.sin(boss.phase * 3 + i) + 1) / 2;
-            ctx.fillStyle = `rgba(${flash ? 255 : 255}, ${flash ? 255 : Math.floor(200 * brightness)}, ${flash ? 255 : 0}, ${0.5 + brightness * 0.5})`;
-            ctx.beginPath();
-            ctx.arc(lx, ly, 3, 0, Math.PI * 2);
-            ctx.fill();
-          }
-          if (boss.tractorBeamActive) {
-            ctx.save();
-            ctx.globalAlpha = 0.15 + Math.sin(boss.phase * 5) * 0.1;
-            const grad = ctx.createLinearGradient(0, 14, 0, 200);
-            grad.addColorStop(0, "#00FF88");
-            grad.addColorStop(1, "rgba(0,255,136,0)");
-            ctx.fillStyle = grad;
-            ctx.beginPath();
-            ctx.moveTo(-20, 14);
-            ctx.lineTo(20, 14);
-            ctx.lineTo(60, 200);
-            ctx.lineTo(-60, 200);
-            ctx.closePath();
-            ctx.fill();
-            ctx.restore();
-          }
-        } else if (boss.bossType === "borgCube") {
-          const flash = boss.hitFlash > 0;
-          const cubeSize = 45;
-          const rotX = boss.cubeRotX ?? 0;
-          const rotY = boss.cubeRotY ?? 0;
-          const verts = [
-            [-1, -1, -1],
-            [1, -1, -1],
-            [1, 1, -1],
-            [-1, 1, -1],
-            [-1, -1, 1],
-            [1, -1, 1],
-            [1, 1, 1],
-            [-1, 1, 1],
-          ].map(([x, y, z]) => {
-            const x2 = x * Math.cos(rotY) - z * Math.sin(rotY);
-            const z2 = x * Math.sin(rotY) + z * Math.cos(rotY);
-            const y2 = y * Math.cos(rotX) - z2 * Math.sin(rotX);
-            const z3 = y * Math.sin(rotX) + z2 * Math.cos(rotX);
-            const scale = 150 / (150 + z3 * cubeSize * 0.3);
-            return { x: x2 * cubeSize * scale, y: y2 * cubeSize * scale };
-          });
-          const edges = [
-            [0, 1],
-            [1, 2],
-            [2, 3],
-            [3, 0],
-            [4, 5],
-            [5, 6],
-            [6, 7],
-            [7, 4],
-            [0, 4],
-            [1, 5],
-            [2, 6],
-            [3, 7],
-          ];
-          ctx.save();
-          ctx.globalAlpha = 0.2;
-          ctx.fillStyle = "#00FF44";
-          ctx.beginPath();
-          ctx.arc(0, 0, cubeSize * 1.5, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.restore();
-          ctx.strokeStyle = flash ? "#FFFFFF" : "#00FF44";
-          ctx.lineWidth = 2;
-          edges.forEach(([a, b]) => {
-            ctx.beginPath();
-            ctx.moveTo(verts[a].x, verts[a].y);
-            ctx.lineTo(verts[b].x, verts[b].y);
-            ctx.stroke();
-          });
-          ctx.fillStyle = flash ? "#FFFFFF" : "#88FF88";
-          verts.forEach((v) => {
-            ctx.beginPath();
-            ctx.arc(v.x, v.y, 3, 0, Math.PI * 2);
-            ctx.fill();
-          });
-        }
-
-        ctx.restore();
-
-        // Boss HP bar
-        const barW = 200,
-          barH = 8;
-        const barX = (CANVAS_WIDTH - barW) / 2;
-        const barY = CANVAS_HEIGHT - 48;
-        const hpFrac = boss.hp / boss.maxHp;
-        ctx.save();
-        ctx.globalAlpha = 0.7;
-        const bossBarColors: Record<string, string> = {
-          tentacle: "#FF44CC",
-          amigaBall: "#CC0000",
-          flyingSaucer: "#00FF88",
-          borgCube: "#00FF44",
-        };
-        const barColor = bossBarColors[boss.bossType] || "#FF44CC";
-        ctx.strokeStyle = barColor;
-        ctx.lineWidth = 1;
-        ctx.strokeRect(barX, barY, barW, barH);
-        ctx.fillStyle = hpFrac > 0.3 ? barColor : "#FF0000";
-        ctx.fillRect(barX, barY, barW * hpFrac, barH);
-        ctx.globalAlpha = 0.9;
-        ctx.font = "8px 'Press Start 2P', monospace";
-        ctx.fillStyle = "#FFFFFF";
-        ctx.textAlign = "center";
-        const bossNames: Record<string, string> = {
-          tentacle: "BOSS",
-          amigaBall: "AMIGA BALL",
-          flyingSaucer: "FLYING SAUCER",
-          borgCube: "BORG CUBE",
-        };
-        ctx.fillText(bossNames[boss.bossType] || "BOSS", CANVAS_WIDTH / 2, barY - 4);
-        ctx.restore();
+        drawBossOnCanvas(ctx, cs.boss, CANVAS_HEIGHT - 48);
       }
 
       // Power-up active HUD bars (for my own ship in online, all in local)
@@ -4271,296 +4286,7 @@ const Game = () => {
 
       // Boss
       if (state.boss) {
-        const boss = state.boss;
-        ctx.save();
-        ctx.translate(boss.pos.x, boss.pos.y);
-
-        if (boss.bossType === "tentacle") {
-          // Original tentacle boss drawing
-          const bossColor = boss.hitFlash > 0 ? "#FFFFFF" : "#FF44CC";
-          const tentCount = boss.tentacles;
-          for (let i = 0; i < tentCount; i++) {
-            const baseAngle = (i / tentCount) * Math.PI * 2;
-            ctx.strokeStyle = boss.hitFlash > 0 ? "#FFFFFF" : "#CC44AA";
-            ctx.lineWidth = 3;
-            ctx.beginPath();
-            ctx.moveTo(0, 0);
-            const segments = 5;
-            for (let s = 1; s <= segments; s++) {
-              const dist = s * 18;
-              const wave = Math.sin(boss.phase * 2 + i + s * 0.8) * 15;
-              const tx = Math.cos(baseAngle) * dist + Math.cos(baseAngle + Math.PI / 2) * wave;
-              const ty = Math.sin(baseAngle) * dist + Math.sin(baseAngle + Math.PI / 2) * wave;
-              ctx.lineTo(tx, ty);
-            }
-            ctx.stroke();
-          }
-          const pulse = 1 + Math.sin(boss.phase * 3) * 0.05;
-          const bodyR = 45 * pulse;
-          ctx.fillStyle = boss.hitFlash > 0 ? "#FFFFFF" : "#331133";
-          ctx.strokeStyle = bossColor;
-          ctx.lineWidth = 3;
-          ctx.beginPath();
-          ctx.arc(0, 0, bodyR, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.stroke();
-          ctx.fillStyle = bossColor;
-          ctx.beginPath();
-          ctx.arc(0, -5, 12, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.fillStyle = "#000000";
-          ctx.beginPath();
-          ctx.arc(0, -5, 6, 0, Math.PI * 2);
-          ctx.fill();
-        } else if (boss.bossType === "amigaBall") {
-          // Procedural Amiga checkered bouncing ball (pre-rendered to offscreen canvas)
-          const radius = 50;
-          const rotAngle = boss.rotAngle ?? 0;
-          const hitFlash = boss.hitFlash > 0;
-          const ballCanvas = getAmigaBallCanvas(radius, rotAngle, hitFlash);
-          ctx.drawImage(ballCanvas, -radius - 2, -radius - 2);
-
-          // Shadow beneath ball
-          ctx.save();
-          ctx.translate(0, radius + 10);
-          ctx.scale(1, 0.3);
-          ctx.fillStyle = "rgba(0,0,0,0.3)";
-          ctx.beginPath();
-          ctx.arc(0, 0, radius * 0.8, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.restore();
-        } else if (boss.bossType === "flyingSaucer") {
-          // Flying saucer
-          const flash = boss.hitFlash > 0;
-          // Dome
-          ctx.fillStyle = flash ? "#FFFFFF" : "#446688";
-          ctx.strokeStyle = flash ? "#FFFFFF" : "#88AACC";
-          ctx.lineWidth = 2;
-          ctx.beginPath();
-          ctx.ellipse(0, -12, 25, 18, 0, Math.PI, 0);
-          ctx.fill();
-          ctx.stroke();
-          // Body disc
-          ctx.fillStyle = flash ? "#FFFFFF" : "#334455";
-          ctx.strokeStyle = flash ? "#FFFFFF" : "#667788";
-          ctx.lineWidth = 2;
-          ctx.beginPath();
-          ctx.ellipse(0, 0, 55, 14, 0, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.stroke();
-          // Rotating lights
-          const lightCount = 8;
-          for (let i = 0; i < lightCount; i++) {
-            const lAngle = (i / lightCount) * Math.PI * 2 + boss.phase * 2;
-            const lx = Math.cos(lAngle) * 45;
-            const ly = Math.sin(lAngle) * 10;
-            const brightness = (Math.sin(boss.phase * 3 + i) + 1) / 2;
-            ctx.fillStyle = `rgba(${flash ? 255 : 255}, ${flash ? 255 : Math.floor(200 * brightness)}, ${flash ? 255 : 0}, ${0.5 + brightness * 0.5})`;
-            ctx.beginPath();
-            ctx.arc(lx, ly, 3, 0, Math.PI * 2);
-            ctx.fill();
-          }
-          // Tractor beam
-          if (boss.tractorBeamActive) {
-            ctx.save();
-            ctx.globalAlpha = 0.15 + Math.sin(boss.phase * 5) * 0.1;
-            const grad = ctx.createLinearGradient(0, 14, 0, 200);
-            grad.addColorStop(0, "#00FF88");
-            grad.addColorStop(1, "rgba(0,255,136,0)");
-            ctx.fillStyle = grad;
-            ctx.beginPath();
-            ctx.moveTo(-20, 14);
-            ctx.lineTo(20, 14);
-            ctx.lineTo(60, 200);
-            ctx.lineTo(-60, 200);
-            ctx.closePath();
-            ctx.fill();
-            ctx.restore();
-          }
-
-          // Draw mini-saucers
-          if (boss.miniSaucers) {
-            boss.miniSaucers.forEach((ms) => {
-              ctx.save();
-              ctx.translate(ms.pos.x - boss.pos.x, ms.pos.y - boss.pos.y);
-              ctx.fillStyle = "#556677";
-              ctx.strokeStyle = "#88FFAA";
-              ctx.lineWidth = 1;
-              ctx.beginPath();
-              ctx.ellipse(0, 0, 12, 4, 0, 0, Math.PI * 2);
-              ctx.fill();
-              ctx.stroke();
-              ctx.fillStyle = "#88FFAA";
-              ctx.beginPath();
-              ctx.ellipse(0, -3, 6, 4, 0, Math.PI, 0);
-              ctx.fill();
-              ctx.restore();
-            });
-          }
-        } else if (boss.bossType === "borgCube") {
-          // 3D wireframe rotating cube
-          const flash = boss.hitFlash > 0;
-          const cubeSize = 45;
-          const rotX = boss.cubeRotX ?? 0;
-          const rotY = boss.cubeRotY ?? 0;
-
-          // Define cube vertices
-          const verts = [
-            [-1, -1, -1],
-            [1, -1, -1],
-            [1, 1, -1],
-            [-1, 1, -1],
-            [-1, -1, 1],
-            [1, -1, 1],
-            [1, 1, 1],
-            [-1, 1, 1],
-          ].map(([x, y, z]) => {
-            // Rotate around Y
-            const x2 = x * Math.cos(rotY) - z * Math.sin(rotY);
-            const z2 = x * Math.sin(rotY) + z * Math.cos(rotY);
-            // Rotate around X
-            const y2 = y * Math.cos(rotX) - z2 * Math.sin(rotX);
-            const z3 = y * Math.sin(rotX) + z2 * Math.cos(rotX);
-            // Project
-            const scale = 150 / (150 + z3 * cubeSize * 0.3);
-            return { x: x2 * cubeSize * scale, y: y2 * cubeSize * scale };
-          });
-
-          const edges = [
-            [0, 1],
-            [1, 2],
-            [2, 3],
-            [3, 0],
-            [4, 5],
-            [5, 6],
-            [6, 7],
-            [7, 4],
-            [0, 4],
-            [1, 5],
-            [2, 6],
-            [3, 7],
-          ];
-          const cubeColor = flash ? "#FFFFFF" : "#00FF44";
-
-          // Glow effect
-          ctx.save();
-          ctx.globalAlpha = 0.2;
-          ctx.fillStyle = "#00FF44";
-          ctx.beginPath();
-          ctx.arc(0, 0, cubeSize * 1.5, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.restore();
-
-          // Draw edges
-          ctx.strokeStyle = cubeColor;
-          ctx.lineWidth = 2;
-          edges.forEach(([a, b]) => {
-            ctx.beginPath();
-            ctx.moveTo(verts[a].x, verts[a].y);
-            ctx.lineTo(verts[b].x, verts[b].y);
-            ctx.stroke();
-          });
-
-          // Draw vertices as bright dots
-          ctx.fillStyle = flash ? "#FFFFFF" : "#88FF88";
-          verts.forEach((v) => {
-            ctx.beginPath();
-            ctx.arc(v.x, v.y, 3, 0, Math.PI * 2);
-            ctx.fill();
-          });
-
-          // Inner grid lines for Borg look
-          ctx.strokeStyle = flash ? "#FFFFFF" : "rgba(0,255,68,0.3)";
-          ctx.lineWidth = 1;
-          // Draw grid on front face
-          for (let i = 1; i < 3; i++) {
-            const t = i / 3;
-            const x1 = verts[0].x + (verts[1].x - verts[0].x) * t;
-            const y1 = verts[0].y + (verts[1].y - verts[0].y) * t;
-            const x2 = verts[3].x + (verts[2].x - verts[3].x) * t;
-            const y2 = verts[3].y + (verts[2].y - verts[3].y) * t;
-            ctx.beginPath();
-            ctx.moveTo(x1, y1);
-            ctx.lineTo(x2, y2);
-            ctx.stroke();
-            const x3 = verts[0].x + (verts[3].x - verts[0].x) * t;
-            const y3 = verts[0].y + (verts[3].y - verts[0].y) * t;
-            const x4 = verts[1].x + (verts[2].x - verts[1].x) * t;
-            const y4 = verts[1].y + (verts[2].y - verts[1].y) * t;
-            ctx.beginPath();
-            ctx.moveTo(x3, y3);
-            ctx.lineTo(x4, y4);
-            ctx.stroke();
-          }
-
-          // "REGEN" indicator glow
-          if ((boss.regenTimer ?? 0) > 150) {
-            ctx.save();
-            ctx.globalAlpha = 0.3 + Math.sin(boss.phase * 10) * 0.2;
-            ctx.fillStyle = "#00FF44";
-            ctx.beginPath();
-            ctx.arc(0, 0, cubeSize * 0.6, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.restore();
-          }
-
-          // Draw mini cubes
-          if (boss.miniCubes) {
-            boss.miniCubes.forEach((mc) => {
-              ctx.save();
-              ctx.translate(mc.pos.x - boss.pos.x, mc.pos.y - boss.pos.y);
-              ctx.rotate(mc.rotAngle);
-              ctx.strokeStyle = "#00FF44";
-              ctx.lineWidth = 1;
-              const s = 8;
-              ctx.strokeRect(-s / 2, -s / 2, s, s);
-              // Inner cross
-              ctx.strokeStyle = "rgba(0,255,68,0.4)";
-              ctx.beginPath();
-              ctx.moveTo(-s / 2, 0);
-              ctx.lineTo(s / 2, 0);
-              ctx.moveTo(0, -s / 2);
-              ctx.lineTo(0, s / 2);
-              ctx.stroke();
-              ctx.restore();
-            });
-          }
-        }
-
-        ctx.restore();
-
-        // HP Bar (shared by all bosses)
-        ctx.save();
-        const barW = 200;
-        const barH = 8;
-        const barX = (CANVAS_WIDTH - barW) / 2;
-        const barY = CANVAS_HEIGHT - 30;
-        const hpFrac = boss.hp / boss.maxHp;
-        ctx.globalAlpha = 0.7;
-        const bossBarColors: Record<string, string> = {
-          tentacle: "#FF44CC",
-          amigaBall: "#CC0000",
-          flyingSaucer: "#00FF88",
-          borgCube: "#00FF44",
-        };
-        const barColor = bossBarColors[boss.bossType] || "#FF44CC";
-        ctx.strokeStyle = barColor;
-        ctx.lineWidth = 1;
-        ctx.strokeRect(barX, barY, barW, barH);
-        ctx.fillStyle = hpFrac > 0.3 ? barColor : "#FF0000";
-        ctx.fillRect(barX, barY, barW * hpFrac, barH);
-        ctx.globalAlpha = 0.9;
-        ctx.font = "8px 'Press Start 2P', monospace";
-        ctx.fillStyle = "#FFFFFF";
-        ctx.textAlign = "center";
-        const bossNames: Record<string, string> = {
-          tentacle: "BOSS",
-          amigaBall: "AMIGA BALL",
-          flyingSaucer: "FLYING SAUCER",
-          borgCube: "BORG CUBE",
-        };
-        ctx.fillText(bossNames[boss.bossType] || "BOSS", CANVAS_WIDTH / 2, barY - 4);
-        ctx.restore();
+        drawBossOnCanvas(ctx, state.boss, CANVAS_HEIGHT - 30);
       }
 
       // Power-ups
