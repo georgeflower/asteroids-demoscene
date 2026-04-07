@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect } from "react";
+import { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import type { InputState, DuelNetState, CoopNetState, SessionMode, ChatMessage } from "@/types/multiplayer";
 
@@ -622,7 +622,7 @@ export function useMultiplayer() {
     };
   }, []);
 
-  return {
+  return useMemo(() => ({
     roomCode,
     isHost,
     isConnected,
@@ -662,5 +662,30 @@ export function useMultiplayer() {
     setGameInProgress,
     sendPlayersAdded,
     getWaitingPlayerCount,
-  };
+  }), [
+    roomCode,
+    isHost,
+    isConnected,
+    opponentConnected,
+    guestCount,
+    gameInProgress,
+    playerInitialsMap,
+    pingMap,
+    chatMessages,
+    hostDisconnected,
+    createRoom,
+    joinRoom,
+    sendState,
+    sendCoopState,
+    sendInputs,
+    startGame,
+    sendChatMessage,
+    sendGameRestart,
+    sendPlayerReady,
+    disconnect,
+    setLocalInitials,
+    setGameInProgress,
+    sendPlayersAdded,
+    getWaitingPlayerCount,
+  ]);
 }

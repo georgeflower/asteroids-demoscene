@@ -1,10 +1,29 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
 
 const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version, x-admin-key',
 };
+const ALLOWED_ORIGINS = [
+  'https://asteroids-demoscene.lovable.app',
+  'https://id-preview--b6edd2f4-8993-4a05-a257-466f1a773f73.lovable.app',
+  'https://b6edd2f4-8993-4a05-a257-466f1a773f73.lovableproject.com',
+];
+
+function getAllowedOrigin(req: Request): string | null {
+  const origin = req.headers.get('origin') || '';
+  if (ALLOWED_ORIGINS.length === 0) return origin || '*';
+  const matched = ALLOWED_ORIGINS.find(allowed => origin.startsWith(allowed));
+  return matched ? origin : null;
+}
+
+function getCorsHeaders(req: Request): Record<string, string> {
+  const allowedOrigin = getAllowedOrigin(req);
+  return {
+    ...corsHeaders,
+    'Access-Control-Allow-Origin': allowedOrigin ?? '',
+  };
+}
 
 interface ScoreSubmission {
   initials: string;
@@ -75,11 +94,6 @@ function getMinCheckpoints(score: number): number {
   return 0;
 }
 
-const ALLOWED_ORIGINS = [
-  'https://asteroids-demoscene.lovable.app',
-  'https://id-preview--b6edd2f4-8993-4a05-a257-466f1a773f73.lovable.app',
-  'https://b6edd2f4-8993-4a05-a257-466f1a773f73.lovableproject.com',
-];
 
 function validateOrigin(req: Request): boolean {
   const origin = req.headers.get('origin') || '';
@@ -906,7 +920,7 @@ async function handleSubmit(req: Request, supabaseAdmin: any) {
 async function handleAdminData(req: Request, supabaseAdmin: any) {
   const adminKey = req.headers.get('x-admin-key') || '';
   const expectedKey = Deno.env.get('ADMIN_SECRET_KEY') || '';
-  if (!expectedKey || adminKey !== expectedKey) {
+  if (!expectedKey || !timingSafeEqual(adminKey, expectedKey)) {
     return errorResponse('Unauthorized', 401);
   }
 
@@ -946,7 +960,7 @@ async function handleAdminData(req: Request, supabaseAdmin: any) {
 async function handleAdminDelete(req: Request, supabaseAdmin: any) {
   const adminKey = req.headers.get('x-admin-key') || '';
   const expectedKey = Deno.env.get('ADMIN_SECRET_KEY') || '';
-  if (!expectedKey || adminKey !== expectedKey) {
+  if (!expectedKey || !timingSafeEqual(adminKey, expectedKey)) {
     return errorResponse('Unauthorized', 401);
   }
 
@@ -970,8 +984,22 @@ async function handleAdminDelete(req: Request, supabaseAdmin: any) {
 
 // --- Main handler ---
 Deno.serve(async (req) => {
+  const allowedOrigin = getAllowedOrigin(req);
+  const dynamicCorsHeaders = {
+    ...corsHeaders,
+    'Access-Control-Allow-Origin': allowedOrigin ?? '',
+  };
+
+  const withCors = async (res: Response): Promise<Response> => {
+    const body = await res.arrayBuffer();
+    return new Response(body, {
+      status: res.status,
+      headers: { ...Object.fromEntries(res.headers.entries()), 'Access-Control-Allow-Origin': allowedOrigin ?? '' },
+    });
+  };
+
   if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
+    return new Response(null, { headers: dynamicCorsHeaders });
   }
 
   try {
@@ -983,28 +1011,28 @@ Deno.serve(async (req) => {
     const url = new URL(req.url);
 
     if (url.pathname.endsWith('/start-session') && req.method === 'POST') {
-      return await handleStartSession(req, supabaseAdmin);
+      return withCors(await handleStartSession(req, supabaseAdmin));
     }
 
     if (url.pathname.endsWith('/heartbeat') && req.method === 'POST') {
-      return await handleHeartbeat(req, supabaseAdmin);
+      return withCors(await handleHeartbeat(req, supabaseAdmin));
     }
 
     if (url.pathname.endsWith('/submit') && req.method === 'POST') {
-      return await handleSubmit(req, supabaseAdmin);
+      return withCors(await handleSubmit(req, supabaseAdmin));
     }
 
     if (url.pathname.endsWith('/admin-data') && req.method === 'GET') {
-      return await handleAdminData(req, supabaseAdmin);
+      return withCors(await handleAdminData(req, supabaseAdmin));
     }
 
     if (url.pathname.endsWith('/admin-delete') && req.method === 'POST') {
-      return await handleAdminDelete(req, supabaseAdmin);
+      return withCors(await handleAdminDelete(req, supabaseAdmin));
     }
 
-    return errorResponse('Invalid endpoint', 404);
+    return withCors(errorResponse('Invalid endpoint', 404));
   } catch (error) {
     console.error('Error:', error);
-    return errorResponse('Internal server error', 500);
+    return withCors(errorResponse('Internal server error', 500));
   }
 });

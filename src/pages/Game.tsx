@@ -15,6 +15,8 @@ import ControlSettings from "@/components/ControlSettings";
 import { loadBindings, displayKeyName, type ControlBindings } from "@/hooks/useControlSettings";
 import type { DuelNetState, CoopNetState, SessionMode } from "@/types/multiplayer";
 import { DEBUG_ENABLED, DEBUG_CATEGORIES, type DebugCategory, type DebugLogEntry } from "@/constants/debug";
+import { SPAWN_INVULNERABILITY_FRAMES, SHIELD_DURATION, RAPID_FIRE_DURATION, MULTIPLIER_DURATION, POWERUP_DROP_RATE_SOLO, DEFAULT_TURN_SPEED, BULLET_LIFETIME, BOSS_TYPES, BOSS_NAMES, HIGH_SCORES_ENABLED } from "@/constants/gameConstants";
+import { readGamepad as readGamepadUtil } from "@/hooks/useInput";
 
 interface Vector {
   x: number;
@@ -53,8 +55,8 @@ interface Bullet extends GameObject {
 interface UFO extends GameObject {
   size: "large" | "small";
   shootTimer: number;
-  direction: number;
   waveOffset: number;
+  beepTimer: number;
 }
 
 interface PowerUp extends GameObject {
@@ -90,7 +92,7 @@ interface Star {
 }
 
 interface Alien extends GameObject {
-  type: "brown" | "greenMan" | "redDrone" | "blueSentinel" | "purpleSwarm";
+  type: "brown" | "greenMan" | "blueSentinel" | "purpleSwarm";
   hp: number;
   moveTimer: number;
   shootTimer: number;
@@ -202,7 +204,6 @@ interface GameState {
   lives: number;
   wave: number;
   gameOver: boolean;
-  paused: boolean;
   powerUpActive: {
     shield: number;
     rapidFire: number;
@@ -300,11 +301,11 @@ interface LocalScore {
 }
 
 // Set to true to re-enable the server high scores system.
-const HIGH_SCORES_ENABLED = false;
+// Set to true to re-enable the server high scores system (also in gameConstants.ts).
+// const HIGH_SCORES_ENABLED = false; // imported from gameConstants
 
 const SHIP_SIZE = 10;
 const BULLET_SPEED = 7;
-const BULLET_LIFETIME = 60;
 const ASTEROID_SPEEDS = { large: 0.5, medium: 0.8, small: 1.2 };
 const ASTEROID_POINTS = { large: 20, medium: 50, small: 100 };
 const UFO_POINTS = { large: 200, small: 1000 };
@@ -365,11 +366,13 @@ function FpsOverlay() {
 const Game = () => {
   const navigate = useNavigate();
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const ctx2dRef = useRef<CanvasRenderingContext2D | null>(null);
   const gameStateRef = useRef<GameState | null>(null);
   const duelStateRef = useRef<DuelState | null>(null);
   const coopStateRef = useRef<CoopState | null>(null);
   const keysRef = useRef<{ [key: string]: boolean }>({});
   const animationFrameRef = useRef<number>();
+  const drawTimestampRef = useRef<number>(0);
   const lastShotRef = useRef(0);
   const lastShotP2Ref = useRef(0);
   const enteringInitialsRef = useRef(false);
@@ -456,6 +459,7 @@ const Game = () => {
   const radioStartedRef = useRef(false);
   const onelinerRef = useRef<{ author: string; message: string; flag: string }[] | null>(null);
   const lastOnelinerTimeRef = useRef<string>("");
+  const olTextCacheRef = useRef<{ text: string; totalWidth: number } | null>(null);
   const nowPlayingMarqueeXRef = useRef<number>(CANVAS_WIDTH);
   const onelinerMarqueeXRef = useRef<number>(CANVAS_WIDTH);
 
@@ -467,6 +471,11 @@ const Game = () => {
   const marqueeGradientRef = useRef<CanvasGradient | null>(null);
   const olMarqueeGradientRef = useRef<CanvasGradient | null>(null);
   const cachedCanvasSize = useRef<{ w: number; h: number }>({ w: 0, h: 0 });
+  // Pre-rendered Amiga Ball boss cache (avoids ~1100 fillRect calls per frame)
+  const amigaBallCacheRef = useRef<{ canvas: OffscreenCanvas; lastRotAngle: number; lastHitFlash: boolean } | null>(null);
+  // Pre-rendered star layer canvases (one per parallax layer, avoids 120 arc() calls/frame)
+  const starLayerCanvasesRef = useRef<(OffscreenCanvas | null)[]>([null, null, null]);
+  const starLayerStarsRef = useRef<Star[]>([]);
 
   // Build or rebuild cached overlays when canvas size changes
   const ensureCachedOverlays = useCallback((ctx: CanvasRenderingContext2D) => {
@@ -602,37 +611,40 @@ const Game = () => {
   }, []);
 
   const loadHallOfFame = useCallback(async () => {
-    // Fetch from both tables in parallel
-    const [oldRes, currentRes] = await Promise.all([
-      supabase
-        .from("high_scores")
-        .select("initials, score, created_at")
-        .order("score", { ascending: false })
-        .limit(1000),
-      supabase
-        .from("current_high_scores")
-        .select("initials, score, created_at")
-        .order("score", { ascending: false })
-        .limit(1000),
-    ]);
-    const allRows = [...(oldRes.data || []), ...(currentRes.data || [])].sort((a, b) => b.score - a.score);
-
-    // Deduplicate: best score per initials, with overall rank
-    const seen = new Set<string>();
-    const unique: { initials: string; score: number; date: string; rank: number }[] = [];
-    allRows.forEach((row, idx) => {
-      const key = row.initials.toUpperCase();
-      if (!seen.has(key)) {
-        seen.add(key);
-        unique.push({
-          initials: row.initials,
-          score: row.score,
-          date: new Date(row.created_at).toLocaleDateString(),
-          rank: idx + 1,
-        });
-      }
-    });
-    return unique.slice(0, 3);
+    // Fetch server-side deduplicated top-3 via RPC (avoids fetching 1000+ rows client-side)
+    const { data, error } = await supabase.rpc("get_hall_of_fame");
+    if (error || !data) {
+      // Fallback to client-side merge on RPC failure
+      const [oldRes, currentRes] = await Promise.all([
+        supabase
+          .from("high_scores")
+          .select("initials, score, created_at")
+          .order("score", { ascending: false })
+          .limit(100),
+        supabase
+          .from("current_high_scores")
+          .select("initials, score, created_at")
+          .order("score", { ascending: false })
+          .limit(100),
+      ]);
+      const allRows = [...(oldRes.data || []), ...(currentRes.data || [])].sort((a, b) => b.score - a.score);
+      const seen = new Set<string>();
+      const unique: { initials: string; score: number; date: string; rank: number }[] = [];
+      allRows.forEach((row, idx) => {
+        const key = row.initials.toUpperCase();
+        if (!seen.has(key)) {
+          seen.add(key);
+          unique.push({ initials: row.initials, score: row.score, date: new Date(row.created_at).toLocaleDateString(), rank: idx + 1 });
+        }
+      });
+      return unique.slice(0, 3);
+    }
+    return (data as { initials: string; score: number; created_at: string }[]).map((row, idx) => ({
+      initials: row.initials,
+      score: row.score,
+      date: new Date(row.created_at).toLocaleDateString(),
+      rank: idx + 1,
+    }));
   }, []);
 
   const loadOldLeaderboard = useCallback(async () => {
@@ -652,33 +664,49 @@ const Game = () => {
   }, []);
 
   // --- Crypto helpers for anti-cheat ---
-  const solvePoW = useCallback(async (challenge: string, difficulty: number): Promise<number> => {
-    let nonce = 0;
-    while (true) {
-      const data = new TextEncoder().encode(challenge + nonce.toString());
-      const hashBuffer = await crypto.subtle.digest("SHA-256", data);
-      const hashArray = new Uint8Array(hashBuffer);
-      let zeroBits = 0;
-      let found = false;
-      for (const byte of hashArray) {
-        if (byte === 0) {
-          zeroBits += 8;
-        } else {
-          for (let bit = 7; bit >= 0; bit--) {
-            if ((byte & (1 << bit)) === 0) zeroBits++;
-            else {
-              found = true;
-              break;
+  const solvePoW = useCallback((challenge: string, difficulty: number): Promise<number> => {
+    if (HIGH_SCORES_ENABLED && typeof Worker !== "undefined") {
+      return new Promise((resolve, reject) => {
+        const worker = new Worker(new URL("../workers/powWorker.ts", import.meta.url), { type: "module" });
+        worker.onmessage = (e: MessageEvent<{ nonce: number }>) => {
+          resolve(e.data.nonce);
+          worker.terminate();
+        };
+        worker.onerror = (err) => {
+          reject(err);
+          worker.terminate();
+        };
+        worker.postMessage({ challenge, difficulty });
+      });
+    }
+    // Fallback: solve on main thread (yielding every 1000 iterations)
+    return (async () => {
+      let nonce = 0;
+      while (true) {
+        const data = new TextEncoder().encode(challenge + nonce.toString());
+        const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+        const hashArray = new Uint8Array(hashBuffer);
+        let zeroBits = 0;
+        let found = false;
+        for (const byte of hashArray) {
+          if (byte === 0) {
+            zeroBits += 8;
+          } else {
+            for (let bit = 7; bit >= 0; bit--) {
+              if ((byte & (1 << bit)) === 0) zeroBits++;
+              else {
+                found = true;
+                break;
+              }
             }
           }
+          if (found || zeroBits >= difficulty) break;
         }
-        if (found || zeroBits >= difficulty) break;
+        if (zeroBits >= difficulty) return nonce;
+        nonce++;
+        if (nonce % 1000 === 0) await new Promise((r) => setTimeout(r, 0));
       }
-      if (zeroBits >= difficulty) return nonce;
-      nonce++;
-      // Yield to main thread every 1000 iterations
-      if (nonce % 1000 === 0) await new Promise((r) => setTimeout(r, 0));
-    }
+    })();
   }, []);
 
   const computeHMAC = useCallback(async (key: string, message: string): Promise<string> => {
@@ -731,7 +759,7 @@ const Game = () => {
   const sendHeartbeat = useCallback(async () => {
     const token = gameSessionTokenRef.current;
     const state = gameStateRef.current;
-    if (!token || !state || state.gameOver || state.paused) return;
+    if (!token || !state || state.gameOver || isPausedRef.current) return;
     try {
       const score = state.score;
       const level = state.wave;
@@ -966,11 +994,11 @@ const Game = () => {
     pos: { x: x ?? CANVAS_WIDTH / 2, y: y ?? CANVAS_HEIGHT / 2 },
     vel: { x: 0, y: 0 },
     rotation: -Math.PI / 2,
-    rotationSpeed: controlBindingsRef.current.turnSpeed || 0.055,
+    rotationSpeed: controlBindingsRef.current.turnSpeed || DEFAULT_TURN_SPEED,
     thrust: 0.08,
     isThrusting: false,
     invulnerable: true,
-    invulnerableTime: 120,
+    invulnerableTime: SPAWN_INVULNERABILITY_FRAMES,
     hyperspaceCooldown: 0,
   });
 
@@ -1007,8 +1035,8 @@ const Game = () => {
       rotation: 0,
       size,
       shootTimer: 60 + Math.random() * 60,
-      direction: side === 0 ? 1 : -1,
       waveOffset: Math.random() * Math.PI * 2,
+      beepTimer: 120 + Math.random() * 60,
     };
   };
 
@@ -1016,22 +1044,6 @@ const Game = () => {
     const side = Math.random() < 0.5 ? -20 : CANVAS_WIDTH + 20;
     const dir = side < 0 ? 1 : -1;
 
-    if (type === "redDrone") {
-      const speed = (1.0 + Math.random() * 0.8) * getSpeedScale(wave);
-      return {
-        pos: { x: side, y: 30 + Math.random() * (CANVAS_HEIGHT - 60) },
-        vel: { x: dir * speed, y: (Math.random() - 0.5) * speed },
-        rotation: 0,
-        type,
-        hp: 1,
-        moveTimer: 0,
-        shootTimer: 9999,
-        zigzagPhase: Math.random() * Math.PI * 2,
-        dashTimer: 400 + Math.random() * 200,
-        isDashing: false,
-        orbitAngle: Math.random() * Math.PI * 2,
-      };
-    }
     if (type === "blueSentinel") {
       return {
         pos: { x: side, y: 30 + Math.random() * (CANVAS_HEIGHT - 60) },
@@ -1098,9 +1110,8 @@ const Game = () => {
 
   const createBoss = (wave: number): Boss => {
     // Determine boss type based on wave: 5=amigaBall, 10=flyingSaucer, 15=tentacle, 20=borgCube, then cycle
-    const bossIndex = (wave / 5 - 1) % 4; // 0,1,2,3
-    const bossTypes: Boss["bossType"][] = ["amigaBall", "flyingSaucer", "tentacle", "borgCube"];
-    const bossType = bossTypes[bossIndex] || "tentacle";
+    const bossIndex = Math.floor((wave / 5 - 1) % 4); // 0,1,2,3
+    const bossType = (BOSS_TYPES[bossIndex] ?? "tentacle") as Boss["bossType"];
     const baseHp = 3 + wave;
 
     const base: Boss = {
@@ -1152,7 +1163,7 @@ const Game = () => {
   };
 
   const createPowerUp = (x: number, y: number): PowerUp | null => {
-    if (Math.random() > 0.15) return null;
+    if (Math.random() > POWERUP_DROP_RATE_SOLO) return null;
     const types: PowerUp["type"][] = ["shield", "rapidFire", "extraLife", "multiplier"];
     const type = types[Math.floor(Math.random() * types.length)];
     return {
@@ -1168,28 +1179,7 @@ const Game = () => {
   const readGamepad = (
     index: number,
   ): { left: boolean; right: boolean; up: boolean; fire: boolean; hyperspace: boolean } => {
-    const result = { left: false, right: false, up: false, fire: false, hyperspace: false };
-    try {
-      const gamepads = navigator.getGamepads();
-      const gp = gamepads[index];
-      if (!gp) return result;
-      // Axes
-      if (gp.axes[0] < -GAMEPAD_DEADZONE) result.left = true;
-      if (gp.axes[0] > GAMEPAD_DEADZONE) result.right = true;
-      if (gp.axes[1] < -GAMEPAD_DEADZONE) result.up = true;
-      // D-pad (buttons 12-15 on standard layout)
-      if (gp.buttons[14]?.pressed) result.left = true;
-      if (gp.buttons[15]?.pressed) result.right = true;
-      if (gp.buttons[12]?.pressed) result.up = true;
-      // Fire, Hyperspace, Thrust (alt) - use gamepad bindings
-      const gb = controlBindingsRef.current.gamepad;
-      if (gp.buttons[gb.fire]?.pressed) result.fire = true;
-      if (gp.buttons[gb.hyperspace]?.pressed) result.hyperspace = true;
-      if (gp.buttons[gb.thrust]?.pressed) result.up = true;
-    } catch {
-      /* no gamepad API */
-    }
-    return result;
+    return readGamepadUtil(index, controlBindingsRef.current);
   };
 
   const checkVersion = useCallback(() => {
@@ -1203,13 +1193,16 @@ const Game = () => {
     keysRef.current = {};
     const asteroids: Asteroid[] = [];
     for (let i = 0; i < 4; i++) {
-      const x = Math.random() * CANVAS_WIDTH;
-      const y = Math.random() * CANVAS_HEIGHT;
-      const dist = Math.hypot(x - CANVAS_WIDTH / 2, y - CANVAS_HEIGHT / 2);
+      let x: number, y: number, dist: number;
+      let retries = 0;
+      do {
+        x = Math.random() * CANVAS_WIDTH;
+        y = Math.random() * CANVAS_HEIGHT;
+        dist = Math.hypot(x - CANVAS_WIDTH / 2, y - CANVAS_HEIGHT / 2);
+        retries++;
+      } while (dist <= 100 && retries < 100);
       if (dist > 100) {
         asteroids.push(createAsteroid(x, y, "large", 1));
-      } else {
-        i--;
       }
     }
 
@@ -1223,7 +1216,6 @@ const Game = () => {
       lives: 3,
       wave: 1,
       gameOver: false,
-      paused: false,
       powerUpActive: { shield: 0, rapidFire: 0, multiplier: 0 },
       floatingTexts: [],
       particles: [],
@@ -1250,9 +1242,11 @@ const Game = () => {
     setGameMode("solo");
     checkVersion();
     // Start a new game session for secure score submission
-    startGameSession();
+    if (HIGH_SCORES_ENABLED) {
+      startGameSession();
+      startHeartbeatInterval();
+    }
     gameStartTimeRef.current = Date.now();
-    startHeartbeatInterval();
     // Game started
     // Focus canvas for input capture
     setTimeout(() => {
@@ -1474,7 +1468,7 @@ const Game = () => {
     if (isHost) {
       const worker = new Worker(new URL("../workers/gameWorker.ts", import.meta.url), { type: "module" });
       workerRef.current = worker;
-      worker.postMessage({ type: "init", turnSpeed: controlBindingsRef.current.turnSpeed || 0.05 });
+      worker.postMessage({ type: "init", turnSpeed: controlBindingsRef.current.turnSpeed || DEFAULT_TURN_SPEED });
     } else {
       // Guest: initialise client-side prediction ship (mirrors ship2 starting pos/rot)
       guestPredictedShipRef.current = createShip(CANVAS_WIDTH * 0.75, CANVAS_HEIGHT / 2);
@@ -1579,7 +1573,7 @@ const Game = () => {
     }
     const worker = new Worker(new URL("../workers/coopWorker.ts", import.meta.url), { type: "module" });
     workerRef.current = worker;
-    worker.postMessage({ type: "init", turnSpeed: controlBindingsRef.current.turnSpeed || 0.05, playerCount: pc });
+    worker.postMessage({ type: "init", turnSpeed: controlBindingsRef.current.turnSpeed || DEFAULT_TURN_SPEED, playerCount: pc });
 
     // Bump generation so worker onmessage effects re-attach to the new worker
     coopGenerationRef.current += 1;
@@ -1833,13 +1827,14 @@ const Game = () => {
         size: u.size,
         shootTimer: 999,
         waveOffset: u.waveOffset,
-        direction: u.vx > 0 ? 1 : -1,
+        beepTimer: 120,
       }));
 
       // Per-player state
       const prevScore = cs.score;
       const prevWave = cs.wave;
       const prevLives = [...(cs.lives ?? [])]; // capture BEFORE overwriting cs.lives
+      const prevEliminated = [...(cs.eliminated ?? [])]; // capture BEFORE overwriting
       cs.lives = net.lives ?? [3, 3];
       cs.eliminated = net.eliminated ?? Array.from({ length: pc }, () => false);
       cs.respawnTimer = net.respawnTimer;
@@ -1885,7 +1880,8 @@ const Game = () => {
       if (cs.wave !== prevWave) setCoopWave(cs.wave);
       const livesChanged = cs.lives.some((l, i) => l !== prevLives[i]);
       if (livesChanged) setCoopLives([...cs.lives]);
-      setCoopEliminated([...cs.eliminated]);
+      const eliminatedChanged = cs.eliminated.some((e, i) => e !== prevEliminated[i]);
+      if (eliminatedChanged) setCoopEliminated([...cs.eliminated]);
       if (net.gameOver) {
         setCoopGameOver(true);
         if (net.playerScores) {
@@ -1931,15 +1927,8 @@ const Game = () => {
 
       const theme = getTheme(state.wave);
       spawnFloatingText({ x: CANVAS_WIDTH / 2, y: CANVAS_HEIGHT / 2 - 40 }, `WAVE ${state.wave}`, theme.ship, 28);
-      const bossNames: Record<string, string> = {
-        tentacle: "BOSS",
-        amigaBall: "AMIGA BALL",
-        flyingSaucer: "FLYING SAUCER",
-        borgCube: "BORG CUBE",
-      };
-      const bType = (state.wave / 5 - 1) % 4;
-      const bTypes = ["amigaBall", "flyingSaucer", "tentacle", "borgCube"];
-      const bossLabel = bossNames[bTypes[bType]] || "BOSS";
+      const bType = Math.floor((state.wave / 5 - 1) % 4);
+      const bossLabel = BOSS_NAMES[BOSS_TYPES[bType]] ?? "BOSS";
       spawnFloatingText({ x: CANVAS_WIDTH / 2, y: CANVAS_HEIGHT / 2 + 10 }, `⚠ ${bossLabel} INCOMING ⚠`, "#FF4444", 22);
       // Boss wave started
       return;
@@ -1951,13 +1940,16 @@ const Game = () => {
     const asteroids: Asteroid[] = [];
 
     for (let i = 0; i < numAsteroids; i++) {
-      const x = Math.random() * CANVAS_WIDTH;
-      const y = Math.random() * CANVAS_HEIGHT;
-      const dist = Math.hypot(x - CANVAS_WIDTH / 2, y - CANVAS_HEIGHT / 2);
+      let x: number, y: number, dist: number;
+      let retries = 0;
+      do {
+        x = Math.random() * CANVAS_WIDTH;
+        y = Math.random() * CANVAS_HEIGHT;
+        dist = Math.hypot(x - CANVAS_WIDTH / 2, y - CANVAS_HEIGHT / 2);
+        retries++;
+      } while (dist <= 150 && retries < 100);
       if (dist > 150) {
         asteroids.push(createAsteroid(x, y, "large", state.wave));
-      } else {
-        i--;
       }
     }
 
@@ -2015,7 +2007,8 @@ const Game = () => {
   const checkCollision = (pos1: Vector, radius1: number, pos2: Vector, radius2: number): boolean => {
     const dx = pos1.x - pos2.x;
     const dy = pos1.y - pos2.y;
-    return Math.sqrt(dx * dx + dy * dy) < radius1 + radius2;
+    const r = radius1 + radius2;
+    return dx * dx + dy * dy < r * r;
   };
 
   const loseLife = useCallback(
@@ -2057,7 +2050,7 @@ const Game = () => {
         setShowLifeLost(true);
       }
     },
-    [isHighScore, loadLeaderboard, addDebugLog],
+    [isHighScore, loadLeaderboard, addDebugLog, stopHeartbeatInterval],
   );
 
   const shootBullet = useCallback(() => {
@@ -2205,7 +2198,7 @@ const Game = () => {
     state.ship.vel = { x: 0, y: 0 };
     state.ship.hyperspaceCooldown = 600; // 10 seconds at 60fps
     state.ship.invulnerable = true;
-    state.ship.invulnerableTime = 120; // 2 seconds of invulnerability after hyperspace
+    state.ship.invulnerableTime = SPAWN_INVULNERABILITY_FRAMES; // 2 seconds of invulnerability after hyperspace
 
     // Hyperspace jump executed
   }, []);
@@ -2278,7 +2271,7 @@ const Game = () => {
           ship.pos = { x: Math.random() * CANVAS_WIDTH, y: Math.random() * CANVAS_HEIGHT };
           ship.vel = { x: 0, y: 0 };
           ship.invulnerable = true;
-          ship.invulnerableTime = 120;
+          ship.invulnerableTime = SPAWN_INVULNERABILITY_FRAMES;
         }
       }
     }
@@ -2509,7 +2502,6 @@ const Game = () => {
     if (
       !gameStateRef.current ||
       gameStateRef.current.gameOver ||
-      gameStateRef.current.paused ||
       showLifeLostRef.current
     )
       return;
@@ -2617,8 +2609,10 @@ const Game = () => {
 
       if (ufo.pos.x < -30 || ufo.pos.x > CANVAS_WIDTH + 30) return false;
 
-      if (Math.floor(Date.now() / 1000) % 2 === 0 && Math.floor(Date.now() / 100) % 10 === 0) {
+      ufo.beepTimer--;
+      if (ufo.beepTimer <= 0) {
         soundEffects.ufoBeep();
+        ufo.beepTimer = 120 + Math.random() * 60;
       }
 
       ufo.shootTimer--;
@@ -2667,6 +2661,16 @@ const Game = () => {
       }
     }
 
+    // Pre-compute purple swarm flock groups (avoids O(n²) filter inside the update loop)
+    const flockMap = new Map<number, Alien[]>();
+    for (const alien of state.aliens) {
+      if (alien.type === "purpleSwarm" && alien.flockId !== undefined) {
+        const group = flockMap.get(alien.flockId);
+        if (group) group.push(alien);
+        else flockMap.set(alien.flockId, [alien]);
+      }
+    }
+
     // Update aliens
     state.aliens = state.aliens.filter((alien) => {
       alien.moveTimer++;
@@ -2698,38 +2702,6 @@ const Game = () => {
             isAlien: true,
             color: "#44FF44",
           });
-        }
-      } else if (alien.type === "redDrone") {
-        // Orbit around player, then periodically dash
-        const dx = state.ship.pos.x - alien.pos.x;
-        const dy = state.ship.pos.y - alien.pos.y;
-        const dist = Math.hypot(dx, dy);
-        alien.orbitAngle = (alien.orbitAngle ?? 0) + 0.01;
-        alien.dashTimer = (alien.dashTimer ?? 400) - 1;
-
-        if (alien.isDashing) {
-          // Dash toward player at reduced speed
-          const spd = 2.0 * getSpeedScale(state.wave);
-          const ang = Math.atan2(dy, dx);
-          alien.vel.x = Math.cos(ang) * spd;
-          alien.vel.y = Math.sin(ang) * spd;
-          if (dist < 30 || alien.dashTimer! < -60) {
-            alien.isDashing = false;
-            alien.dashTimer = 400 + Math.random() * 200;
-          }
-        } else {
-          // Orbit at ~120px distance
-          const orbitDist = 120;
-          const targetX = state.ship.pos.x + Math.cos(alien.orbitAngle!) * orbitDist;
-          const targetY = state.ship.pos.y + Math.sin(alien.orbitAngle!) * orbitDist;
-          alien.vel.x += (targetX - alien.pos.x) * 0.01;
-          alien.vel.y += (targetY - alien.pos.y) * 0.01;
-          alien.vel.x *= 0.95;
-          alien.vel.y *= 0.95;
-          if (alien.dashTimer! <= 0) {
-            alien.isDashing = true;
-            alien.dashTimer = 0;
-          }
         }
       } else if (alien.type === "blueSentinel") {
         // Teleport + burst fire + invisibility
@@ -2791,9 +2763,8 @@ const Game = () => {
         }
       } else if (alien.type === "purpleSwarm") {
         // Boids-like flocking toward centroid of same flock, chase player
-        const flockMates = state.aliens.filter(
-          (a) => a.type === "purpleSwarm" && a.flockId === alien.flockId && a !== alien,
-        );
+        const group = alien.flockId !== undefined ? (flockMap.get(alien.flockId) ?? []) : [];
+        const flockMates = group.filter((a) => a !== alien);
         let cx = state.ship.pos.x,
           cy = state.ship.pos.y;
         if (flockMates.length > 0) {
@@ -3143,12 +3114,13 @@ const Game = () => {
 
         switch (powerUp.type) {
           case "shield":
-            state.powerUpActive.shield = 300;
+            state.powerUpActive.shield = SHIELD_DURATION;
             state.ship.invulnerable = true;
-            state.ship.invulnerableTime = 0; // Clear spawn invulnerability timer
+            // Preserve existing spawn invulnerability; only clear if shield duration is longer
+            state.ship.invulnerableTime = Math.max(state.ship.invulnerableTime, SHIELD_DURATION);
             break;
           case "rapidFire":
-            state.powerUpActive.rapidFire = 600;
+            state.powerUpActive.rapidFire = RAPID_FIRE_DURATION;
             break;
           case "extraLife": {
             state.lives++;
@@ -3156,7 +3128,7 @@ const Game = () => {
             break;
           }
           case "multiplier":
-            state.powerUpActive.multiplier = 900;
+            state.powerUpActive.multiplier = MULTIPLIER_DURATION;
             break;
         }
         soundEffects.powerUp();
@@ -3198,31 +3170,34 @@ const Game = () => {
       return p.lifetime > 0;
     });
 
-    // Collision: Bullets vs Asteroids
+    // === Unified bullet collision pass (single iteration over bullets) ===
     const newAsteroids: Asteroid[] = [];
+    const killedAsteroids = new Set<Asteroid>();
+    const killedUFOs = new Set<typeof state.ufos[number]>();
+    const killedAliens = new Set<Alien>();
+    const multiplier = state.powerUpActive.multiplier > 0 ? 2 : 1;
+
     state.bullets = state.bullets.filter((bullet) => {
       if (bullet.isUFO || bullet.isAlien) return true;
-      let bulletAlive = true;
-      state.asteroids = state.asteroids.filter((asteroid) => {
+
+      // --- vs Asteroids ---
+      for (const asteroid of state.asteroids) {
+        if (killedAsteroids.has(asteroid)) continue;
         const radius = asteroid.size === "large" ? 40 : asteroid.size === "medium" ? 25 : 12;
         if (checkCollision(bullet.pos, 2, asteroid.pos, radius)) {
-          bulletAlive = false;
-          const multiplier = state.powerUpActive.multiplier > 0 ? 2 : 1;
+          killedAsteroids.add(asteroid);
           const pts = ASTEROID_POINTS[asteroid.size] * multiplier;
           state.score += pts;
           setDisplayScore(state.score);
           gameStatsRef.current.asteroidsDestroyed++;
-
           const aColor = theme.asteroids[asteroid.size === "large" ? 0 : asteroid.size === "medium" ? 1 : 2];
           spawnFloatingText(asteroid.pos, `+${pts}`, aColor, 14);
           spawnExplosion(asteroid.pos, aColor, asteroid.size === "large" ? 15 : asteroid.size === "medium" ? 10 : 6);
-
           if (Math.floor((state.score - pts) / 10000) < Math.floor(state.score / 10000)) {
             state.lives++;
             setDisplayLives(state.lives);
             spawnFloatingText(state.ship.pos, "EXTRA LIFE!", "#CC66FF", 22);
           }
-
           if (asteroid.size === "large") {
             newAsteroids.push(createAsteroid(asteroid.pos.x, asteroid.pos.y, "medium", state.wave));
             newAsteroids.push(createAsteroid(asteroid.pos.x, asteroid.pos.y, "medium", state.wave));
@@ -3234,26 +3209,18 @@ const Game = () => {
           } else {
             soundEffects.smallExplode();
           }
-
           const powerUp = createPowerUp(asteroid.pos.x, asteroid.pos.y);
           if (powerUp) state.powerUps.push(powerUp);
           return false;
         }
-        return true;
-      });
-      return bulletAlive;
-    });
-    state.asteroids.push(...newAsteroids);
+      }
 
-    // Collision: Bullets vs UFOs
-    state.bullets = state.bullets.filter((bullet) => {
-      if (bullet.isUFO || bullet.isAlien) return true;
-      let bulletAlive = true;
-      state.ufos = state.ufos.filter((ufo) => {
+      // --- vs UFOs ---
+      for (const ufo of state.ufos) {
+        if (killedUFOs.has(ufo)) continue;
         const radius = ufo.size === "large" ? 20 : 10;
         if (checkCollision(bullet.pos, 2, ufo.pos, radius)) {
-          bulletAlive = false;
-          const multiplier = state.powerUpActive.multiplier > 0 ? 2 : 1;
+          killedUFOs.add(ufo);
           const pts = UFO_POINTS[ufo.size] * multiplier;
           state.score += pts;
           setDisplayScore(state.score);
@@ -3264,106 +3231,78 @@ const Game = () => {
           if (powerUp) state.powerUps.push(powerUp);
           return false;
         }
-        return true;
-      });
-      return bulletAlive;
-    });
+      }
 
-    // Collision: Bullets vs Aliens
-    state.bullets = state.bullets.filter((bullet) => {
-      if (bullet.isUFO || bullet.isAlien) return true;
-      let bulletAlive = true;
-      state.aliens = state.aliens.filter((alien) => {
-        if (alien.isInvisible) return true; // Can't hit invisible sentinels
-        const radius =
-          alien.type === "brown" ? 12 : alien.type === "redDrone" ? 10 : alien.type === "purpleSwarm" ? 8 : 14;
+      // --- vs Aliens ---
+      for (const alien of state.aliens) {
+        if (killedAliens.has(alien) || alien.isInvisible) continue;
+        const radius = alien.type === "brown" ? 12 : alien.type === "purpleSwarm" ? 8 : 14;
         if (checkCollision(bullet.pos, 2, alien.pos, radius)) {
-          bulletAlive = false;
           alien.hp--;
           if (alien.hp <= 0) {
-            const ptsMap: Record<string, number> = {
-              brown: 300,
-              greenMan: 500,
-              redDrone: 200,
-              blueSentinel: 600,
-              purpleSwarm: 100,
-            };
-            const pts = (ptsMap[alien.type] ?? 300) * (state.powerUpActive.multiplier > 0 ? 2 : 1);
+            killedAliens.add(alien);
+            const ptsMap: Record<string, number> = { brown: 300, greenMan: 500, blueSentinel: 600, purpleSwarm: 100 };
+            const pts = (ptsMap[alien.type] ?? 300) * multiplier;
             state.score += pts;
             setDisplayScore(state.score);
             soundEffects.explode();
-            const colorMap: Record<string, string> = {
-              brown: "#AA6633",
-              greenMan: "#44FF44",
-              redDrone: "#FF4444",
-              blueSentinel: "#4488FF",
-              purpleSwarm: "#AA44FF",
-            };
+            const colorMap: Record<string, string> = { brown: "#AA6633", greenMan: "#44FF44", blueSentinel: "#4488FF", purpleSwarm: "#AA44FF" };
             const color = colorMap[alien.type] ?? "#FFFFFF";
             spawnFloatingText(alien.pos, `+${pts}`, color, 16);
             spawnExplosion(alien.pos, color, 12);
             const powerUp = createPowerUp(alien.pos.x, alien.pos.y);
             if (powerUp) state.powerUps.push(powerUp);
-            return false;
           } else {
             spawnFloatingText(alien.pos, "HIT!", "#FFFFFF", 12);
           }
+          return false;
         }
-        return true;
-      });
-      return bulletAlive;
-    });
+      }
 
-    // Collision: Bullets vs Boss
-    if (state.boss && state.boss.entered) {
-      state.bullets = state.bullets.filter((bullet) => {
-        if (!state.boss) return true; // Boss defeated mid-filter, keep remaining bullets
-        if (bullet.isUFO || bullet.isAlien) return true;
+      // --- vs Boss ---
+      if (state.boss && state.boss.entered) {
         const bossHitRadius =
-          state.boss!.bossType === "amigaBall"
-            ? 50
-            : state.boss!.bossType === "flyingSaucer"
-              ? 55
-              : state.boss!.bossType === "borgCube"
-                ? 50
-                : 60;
-        if (checkCollision(bullet.pos, 2, state.boss!.pos, bossHitRadius)) {
-          state.boss!.hp--;
-          state.boss!.hitFlash = 10;
+          state.boss.bossType === "amigaBall" ? 50 :
+          state.boss.bossType === "flyingSaucer" ? 55 :
+          state.boss.bossType === "borgCube" ? 50 : 60;
+        if (checkCollision(bullet.pos, 2, state.boss.pos, bossHitRadius)) {
+          state.boss.hp--;
+          state.boss.hitFlash = 10;
           spawnExplosion(bullet.pos, "#FF88FF", 5);
           spawnFloatingText(bullet.pos, "HIT!", "#FF88FF", 14);
-
-          if (state.boss!.hp <= 0) {
-            const pts = (2000 + state.wave * 200) * (state.powerUpActive.multiplier > 0 ? 2 : 1);
+          if (state.boss.hp <= 0) {
+            const pts = (2000 + state.wave * 200) * multiplier;
             state.score += pts;
             setDisplayScore(state.score);
-            spawnFloatingText(state.boss!.pos, `+${pts}`, "#FFFF00", 24);
-            spawnExplosion(state.boss!.pos, "#FF44FF", 30);
-            spawnExplosion(state.boss!.pos, "#FFFF44", 20);
+            spawnFloatingText(state.boss.pos, `+${pts}`, "#FFFF00", 24);
+            spawnExplosion(state.boss.pos, "#FF44FF", 30);
+            spawnExplosion(state.boss.pos, "#FFFF44", 20);
             soundEffects.explode();
-
             const bossDropTypes: PowerUp["type"][] = ["shield", "rapidFire", "extraLife", "multiplier"];
             state.powerUps.push({
-              pos: { ...state.boss!.pos },
+              pos: { ...state.boss.pos },
               vel: { x: Math.random() - 0.5, y: Math.random() - 0.5 },
               rotation: 0,
               type: bossDropTypes[Math.floor(Math.random() * bossDropTypes.length)],
               lifetime: 600,
             });
-
             state.boss = null;
             state.bossDefeated = true;
             state.pendingNextWave = true;
             addDebugLog("boss", `Boss defeated! Score: +${pts}`);
-            // Boss defeated
-
-            // Advance is deferred to next update tick to avoid same-frame state churn
           }
           return false;
         }
-        return true;
-      });
-    }
+      }
+
+      return true;
+    });
+
+    // Apply deferred entity removals from unified collision pass
+    if (killedAsteroids.size > 0) state.asteroids = state.asteroids.filter((a) => !killedAsteroids.has(a));
+    state.asteroids.push(...newAsteroids);
+    if (killedUFOs.size > 0) state.ufos = state.ufos.filter((u) => !killedUFOs.has(u));
+    if (killedAliens.size > 0) state.aliens = state.aliens.filter((a) => !killedAliens.has(a));
 
     // Collision: Ship vs Asteroids
     if (!state.ship.invulnerable && state.powerUpActive.shield === 0) {
@@ -3392,7 +3331,7 @@ const Game = () => {
     // Collision: Ship vs Aliens
     if (!state.ship.invulnerable && state.powerUpActive.shield === 0) {
       for (const alien of state.aliens) {
-        const alienRadius = alien.type === "redDrone" ? 10 : alien.type === "purpleSwarm" ? 8 : 12;
+        const alienRadius = alien.type === "purpleSwarm" ? 8 : 12;
         if (alien.isInvisible) continue;
         if (checkCollision(state.ship.pos, SHIP_SIZE, alien.pos, alienRadius)) {
           addDebugLog("collision", `Ship hit ${alien.type} alien`);
@@ -3440,12 +3379,292 @@ const Game = () => {
     }
   }, [nextWave, loseLife, shootBullet, hyperspace, addDebugLog]);
 
+  // ===== SHARED BOSS DRAW HELPER =====
+  const drawBossOnCanvas = (ctx: CanvasRenderingContext2D, boss: Boss, hpBarY: number) => {
+    ctx.save();
+    ctx.translate(boss.pos.x, boss.pos.y);
+
+    if (boss.bossType === "tentacle") {
+      const bossColor = boss.hitFlash > 0 ? "#FFFFFF" : "#FF44CC";
+      const tentCount = boss.tentacles;
+      for (let i = 0; i < tentCount; i++) {
+        const baseAngle = (i / tentCount) * Math.PI * 2;
+        ctx.strokeStyle = boss.hitFlash > 0 ? "#FFFFFF" : "#CC44AA";
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        const segments = 5;
+        for (let s = 1; s <= segments; s++) {
+          const d = s * 18;
+          const w = Math.sin(boss.phase * 2 + i + s * 0.8) * 15;
+          const tx = Math.cos(baseAngle) * d + Math.cos(baseAngle + Math.PI / 2) * w;
+          const ty = Math.sin(baseAngle) * d + Math.sin(baseAngle + Math.PI / 2) * w;
+          ctx.lineTo(tx, ty);
+        }
+        ctx.stroke();
+      }
+      const pulse = 1 + Math.sin(boss.phase * 3) * 0.05;
+      const bodyR = 45 * pulse;
+      ctx.fillStyle = boss.hitFlash > 0 ? "#FFFFFF" : "#331133";
+      ctx.strokeStyle = bossColor;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(0, 0, bodyR, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = bossColor;
+      ctx.beginPath();
+      ctx.arc(0, -5, 12, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#000000";
+      ctx.beginPath();
+      ctx.arc(0, -5, 6, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (boss.bossType === "amigaBall") {
+      const radius = 50;
+      const rotAngle = boss.rotAngle ?? 0;
+      const hitFlash = boss.hitFlash > 0;
+      const ballCanvas = getAmigaBallCanvas(radius, rotAngle, hitFlash);
+      ctx.drawImage(ballCanvas, -radius - 2, -radius - 2);
+      // Shadow beneath ball
+      ctx.save();
+      ctx.translate(0, radius + 10);
+      ctx.scale(1, 0.3);
+      ctx.fillStyle = "rgba(0,0,0,0.3)";
+      ctx.beginPath();
+      ctx.arc(0, 0, radius * 0.8, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    } else if (boss.bossType === "flyingSaucer") {
+      const flash = boss.hitFlash > 0;
+      ctx.fillStyle = flash ? "#FFFFFF" : "#446688";
+      ctx.strokeStyle = flash ? "#FFFFFF" : "#88AACC";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.ellipse(0, -12, 25, 18, 0, Math.PI, 0);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = flash ? "#FFFFFF" : "#334455";
+      ctx.strokeStyle = flash ? "#FFFFFF" : "#667788";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.ellipse(0, 0, 55, 14, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      const lightCount = 8;
+      for (let i = 0; i < lightCount; i++) {
+        const lAngle = (i / lightCount) * Math.PI * 2 + boss.phase * 2;
+        const lx = Math.cos(lAngle) * 45;
+        const ly = Math.sin(lAngle) * 10;
+        const brightness = (Math.sin(boss.phase * 3 + i) + 1) / 2;
+        ctx.fillStyle = `rgba(255, ${flash ? 255 : Math.floor(200 * brightness)}, ${flash ? 255 : 0}, ${0.5 + brightness * 0.5})`;
+        ctx.beginPath();
+        ctx.arc(lx, ly, 3, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      if (boss.tractorBeamActive) {
+        ctx.save();
+        ctx.globalAlpha = 0.15 + Math.sin(boss.phase * 5) * 0.1;
+        const grad = ctx.createLinearGradient(0, 14, 0, 200);
+        grad.addColorStop(0, "#00FF88");
+        grad.addColorStop(1, "rgba(0,255,136,0)");
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.moveTo(-20, 14);
+        ctx.lineTo(20, 14);
+        ctx.lineTo(60, 200);
+        ctx.lineTo(-60, 200);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+      }
+      if (boss.miniSaucers) {
+        boss.miniSaucers.forEach((ms) => {
+          ctx.save();
+          ctx.translate(ms.pos.x - boss.pos.x, ms.pos.y - boss.pos.y);
+          ctx.fillStyle = "#556677";
+          ctx.strokeStyle = "#88FFAA";
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.ellipse(0, 0, 12, 4, 0, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.stroke();
+          ctx.fillStyle = "#88FFAA";
+          ctx.beginPath();
+          ctx.ellipse(0, -3, 6, 4, 0, Math.PI, 0);
+          ctx.fill();
+          ctx.restore();
+        });
+      }
+    } else if (boss.bossType === "borgCube") {
+      const flash = boss.hitFlash > 0;
+      const cubeSize = 45;
+      const rotX = boss.cubeRotX ?? 0;
+      const rotY = boss.cubeRotY ?? 0;
+      const verts = [
+        [-1, -1, -1], [1, -1, -1], [1, 1, -1], [-1, 1, -1],
+        [-1, -1, 1], [1, -1, 1], [1, 1, 1], [-1, 1, 1],
+      ].map(([x, y, z]) => {
+        const x2 = x * Math.cos(rotY) - z * Math.sin(rotY);
+        const z2 = x * Math.sin(rotY) + z * Math.cos(rotY);
+        const y2 = y * Math.cos(rotX) - z2 * Math.sin(rotX);
+        const z3 = y * Math.sin(rotX) + z2 * Math.cos(rotX);
+        const scale = 150 / (150 + z3 * cubeSize * 0.3);
+        return { x: x2 * cubeSize * scale, y: y2 * cubeSize * scale };
+      });
+      const edges = [
+        [0, 1], [1, 2], [2, 3], [3, 0],
+        [4, 5], [5, 6], [6, 7], [7, 4],
+        [0, 4], [1, 5], [2, 6], [3, 7],
+      ];
+      ctx.save();
+      ctx.globalAlpha = 0.2;
+      ctx.fillStyle = "#00FF44";
+      ctx.beginPath();
+      ctx.arc(0, 0, cubeSize * 1.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+      ctx.strokeStyle = flash ? "#FFFFFF" : "#00FF44";
+      ctx.lineWidth = 2;
+      edges.forEach(([a, b]) => {
+        ctx.beginPath();
+        ctx.moveTo(verts[a].x, verts[a].y);
+        ctx.lineTo(verts[b].x, verts[b].y);
+        ctx.stroke();
+      });
+      ctx.fillStyle = flash ? "#FFFFFF" : "#88FF88";
+      verts.forEach((v) => {
+        ctx.beginPath();
+        ctx.arc(v.x, v.y, 3, 0, Math.PI * 2);
+        ctx.fill();
+      });
+      if (boss.miniCubes) {
+        boss.miniCubes.forEach((mc) => {
+          ctx.save();
+          ctx.translate(mc.pos.x - boss.pos.x, mc.pos.y - boss.pos.y);
+          ctx.rotate(mc.rotAngle);
+          ctx.strokeStyle = "#00FF44";
+          ctx.lineWidth = 1;
+          const s = 8;
+          ctx.strokeRect(-s / 2, -s / 2, s, s);
+          ctx.strokeStyle = "rgba(0,255,68,0.4)";
+          ctx.beginPath();
+          ctx.moveTo(-s / 2, 0); ctx.lineTo(s / 2, 0);
+          ctx.moveTo(0, -s / 2); ctx.lineTo(0, s / 2);
+          ctx.stroke();
+          ctx.restore();
+        });
+      }
+    }
+
+    ctx.restore();
+
+    // HP bar
+    const bossBarColors: Record<string, string> = {
+      tentacle: "#FF44CC", amigaBall: "#CC0000", flyingSaucer: "#00FF88", borgCube: "#00FF44",
+    };
+    const barW = 200, barH = 8;
+    const barX = (CANVAS_WIDTH - barW) / 2;
+    const hpFrac = boss.hp / boss.maxHp;
+    const barColor = bossBarColors[boss.bossType] ?? "#FF44CC";
+    ctx.save();
+    ctx.globalAlpha = 0.7;
+    ctx.strokeStyle = barColor;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(barX, hpBarY, barW, barH);
+    ctx.fillStyle = hpFrac > 0.3 ? barColor : "#FF0000";
+    ctx.fillRect(barX, hpBarY, barW * hpFrac, barH);
+    ctx.globalAlpha = 0.9;
+    ctx.font = "8px 'Press Start 2P', monospace";
+    ctx.fillStyle = "#FFFFFF";
+    ctx.textAlign = "center";
+    ctx.fillText(BOSS_NAMES[boss.bossType] ?? "BOSS", CANVAS_WIDTH / 2, hpBarY - 4);
+    ctx.restore();
+  };
+
+  // ===== STAR LAYER PRE-RENDER HELPER =====
+  const buildStarLayerCanvases = (stars: Star[]) => {
+    starLayerStarsRef.current = stars;
+    for (let layer = 0; layer < 3; layer++) {
+      const oc = new OffscreenCanvas(CANVAS_WIDTH, CANVAS_HEIGHT);
+      const octx = oc.getContext("2d")!;
+      octx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+      for (const star of stars) {
+        if (star.layer !== layer) continue;
+        octx.fillStyle = `rgba(200, 220, 255, ${star.brightness})`;
+        octx.beginPath();
+        octx.arc(star.x, star.y, star.size, 0, Math.PI * 2);
+        octx.fill();
+      }
+      starLayerCanvasesRef.current[layer] = oc;
+    }
+  };
+
+  // ===== AMIGA BALL PRE-RENDER HELPER =====
+  const renderAmigaBall = (radius: number, rotAngle: number, hitFlash: boolean): OffscreenCanvas => {
+    const size = radius * 2 + 4;
+    const oc = new OffscreenCanvas(size, size);
+    const octx = oc.getContext("2d")!;
+    const lx = -0.5, ly = -0.7, lz = 0.5;
+    const llen = Math.hypot(lx, ly, lz);
+    const ldx = lx / llen, ldy = ly / llen, ldz = lz / llen;
+    const step = 3;
+    const cx = radius + 2, cy = radius + 2;
+    for (let py = -radius; py < radius; py += step) {
+      const xRange = Math.sqrt(radius * radius - py * py);
+      for (let px = -xRange; px < xRange; px += step) {
+        const nz = Math.sqrt(Math.max(0, radius * radius - px * px - py * py)) / radius;
+        const nx = px / radius;
+        const ny = py / radius;
+        const theta = Math.atan2(ny, nx);
+        const phi = Math.asin(Math.min(1, Math.max(-1, nz)));
+        const u = (((theta + rotAngle) / Math.PI) * 4 + 100) % 1;
+        const v = (((phi + Math.PI / 2) / Math.PI) * 4 + 100) % 1;
+        const isRed = (Math.floor(u * 2) + Math.floor(v * 2)) % 2 === 0;
+        const dot = nx * ldx + ny * ldy + nz * ldz;
+        const diffuse = Math.max(0.15, dot);
+        const reflZ = 2 * dot * nz - ldz;
+        const spec = Math.pow(Math.max(0, reflZ), 20) * 0.6;
+        let r: number, g: number, b: number;
+        if (hitFlash) {
+          r = g = b = 255;
+        } else if (isRed) {
+          r = Math.min(255, Math.floor(204 * diffuse + spec * 255));
+          g = Math.min(255, Math.floor(spec * 255));
+          b = Math.min(255, Math.floor(spec * 255));
+        } else {
+          r = Math.min(255, Math.floor(255 * diffuse + spec * 255));
+          g = Math.min(255, Math.floor(255 * diffuse + spec * 255));
+          b = Math.min(255, Math.floor(255 * diffuse + spec * 255));
+        }
+        octx.fillStyle = `rgb(${r},${g},${b})`;
+        octx.fillRect(cx + px - step / 2, cy + py - step / 2, step, step);
+      }
+    }
+    return oc;
+  };
+
+  const getAmigaBallCanvas = (radius: number, rotAngle: number, hitFlash: boolean): OffscreenCanvas => {
+    const cache = amigaBallCacheRef.current;
+    const ROT_THRESHOLD = (2 * Math.PI) / 180; // 2 degrees
+    if (
+      cache &&
+      Math.abs(cache.lastRotAngle - rotAngle) < ROT_THRESHOLD &&
+      cache.lastHitFlash === hitFlash
+    ) {
+      return cache.canvas;
+    }
+    const canvas = renderAmigaBall(radius, rotAngle, hitFlash);
+    amigaBallCacheRef.current = { canvas, lastRotAngle: rotAngle, lastHitFlash: hitFlash };
+    return canvas;
+  };
+
   // ===== DRAW SHIP HELPER =====
   const drawShip = (ctx: CanvasRenderingContext2D, ship: Ship, color: string, label?: string) => {
     ctx.save();
     ctx.translate(ship.pos.x, ship.pos.y);
     ctx.rotate(ship.rotation);
-    if (!ship.invulnerable || Math.floor(Date.now() / 100) % 2 === 0) {
+    if (!ship.invulnerable || Math.floor(drawTimestampRef.current / 100) % 2 === 0) {
       ctx.strokeStyle = color;
       ctx.lineWidth = 2;
       ctx.shadowBlur = 8;
@@ -3486,18 +3705,23 @@ const Game = () => {
     ctx.fillStyle = bgColor;
     ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
-    // Parallax starfield
-    const time = Date.now() * 0.001;
-    stars.forEach((star) => {
-      const parallaxSpeed = [0.1, 0.3, 0.6][star.layer];
-      const offsetX = (time * parallaxSpeed * 10) % CANVAS_WIDTH;
-      const drawX = (((star.x - offsetX) % CANVAS_WIDTH) + CANVAS_WIDTH) % CANVAS_WIDTH;
-      const twinkle = 0.7 + Math.sin(time * 2 + star.x * 0.1) * 0.3;
-      ctx.fillStyle = `rgba(200, 220, 255, ${star.brightness * twinkle})`;
-      ctx.beginPath();
-      ctx.arc(drawX, star.y, star.size, 0, Math.PI * 2);
-      ctx.fill();
-    });
+    // Parallax starfield (using pre-rendered layer canvases for performance)
+    const time = drawTimestampRef.current * 0.001;
+    if (starLayerStarsRef.current !== stars) {
+      buildStarLayerCanvases(stars);
+    }
+    const PARALLAX_SPEEDS = [0.1, 0.3, 0.6];
+    for (let layer = 0; layer < 3; layer++) {
+      const layerCanvas = starLayerCanvasesRef.current[layer];
+      if (!layerCanvas) continue;
+      const offsetX = Math.round((time * PARALLAX_SPEEDS[layer] * 10) % CANVAS_WIDTH);
+      // Composite twice to handle wrap-around
+      ctx.save();
+      ctx.globalAlpha = 0.85 + 0.15 * Math.sin(time * 2 * (layer + 1));
+      ctx.drawImage(layerCanvas, -offsetX, 0);
+      if (offsetX > 0) ctx.drawImage(layerCanvas, CANVAS_WIDTH - offsetX, 0);
+      ctx.restore();
+    }
 
     // Particles (no shadow for performance)
     particles.forEach((p) => {
@@ -3761,10 +3985,14 @@ const Game = () => {
     });
   };
 
-  const draw = useCallback(() => {
+  const draw = useCallback((rafTimestamp: number) => {
+    drawTimestampRef.current = rafTimestamp;
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext("2d");
+    if (!ctx2dRef.current) {
+      ctx2dRef.current = canvas.getContext("2d");
+    }
+    const ctx = ctx2dRef.current;
     if (!ctx) return;
     ensureCachedOverlays(ctx);
 
@@ -3884,7 +4112,7 @@ const Game = () => {
         ctx.beginPath();
         ctx.ellipse(0, -radius / 4, radius / 2, radius / 3, 0, 0, Math.PI, true);
         ctx.stroke();
-        const pulse = 0.3 + Math.sin(Date.now() * 0.005) * 0.2;
+        const pulse = 0.3 + Math.sin(drawTimestampRef.current * 0.005) * 0.2;
         ctx.globalAlpha = pulse;
         ctx.fillStyle = ufoColor;
         ctx.beginPath();
@@ -3894,230 +4122,9 @@ const Game = () => {
         ctx.restore();
       });
 
-      // Draw boss (same rendering as solo mode)
+      // Draw boss using shared helper
       if (cs.boss) {
-        const boss = cs.boss;
-        ctx.save();
-        ctx.translate(boss.pos.x, boss.pos.y);
-
-        if (boss.bossType === "tentacle") {
-          const bossColor = boss.hitFlash > 0 ? "#FFFFFF" : "#FF44CC";
-          const tentCount = boss.tentacles;
-          for (let i = 0; i < tentCount; i++) {
-            const baseAngle = (i / tentCount) * Math.PI * 2;
-            ctx.strokeStyle = boss.hitFlash > 0 ? "#FFFFFF" : "#CC44AA";
-            ctx.lineWidth = 3;
-            ctx.beginPath();
-            ctx.moveTo(0, 0);
-            const segments = 5;
-            for (let s = 1; s <= segments; s++) {
-              const d = s * 18;
-              const w = Math.sin(boss.phase * 2 + i + s * 0.8) * 15;
-              const tx = Math.cos(baseAngle) * d + Math.cos(baseAngle + Math.PI / 2) * w;
-              const ty = Math.sin(baseAngle) * d + Math.sin(baseAngle + Math.PI / 2) * w;
-              ctx.lineTo(tx, ty);
-            }
-            ctx.stroke();
-          }
-          const pulse = 1 + Math.sin(boss.phase * 3) * 0.05;
-          const bodyR = 45 * pulse;
-          ctx.fillStyle = boss.hitFlash > 0 ? "#FFFFFF" : "#331133";
-          ctx.strokeStyle = bossColor;
-          ctx.lineWidth = 3;
-          ctx.beginPath();
-          ctx.arc(0, 0, bodyR, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.stroke();
-          ctx.fillStyle = bossColor;
-          ctx.beginPath();
-          ctx.arc(0, -5, 12, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.fillStyle = "#000000";
-          ctx.beginPath();
-          ctx.arc(0, -5, 6, 0, Math.PI * 2);
-          ctx.fill();
-        } else if (boss.bossType === "amigaBall") {
-          const radius = 50;
-          const rotAngle = boss.rotAngle ?? 0;
-          const lightDir = { x: -0.5, y: -0.7, z: 0.5 };
-          const lightLen = Math.hypot(lightDir.x, lightDir.y, lightDir.z);
-          lightDir.x /= lightLen;
-          lightDir.y /= lightLen;
-          lightDir.z /= lightLen;
-          const step = 3;
-          for (let py = -radius; py < radius; py += step) {
-            const xRange = Math.sqrt(radius * radius - py * py);
-            for (let px = -xRange; px < xRange; px += step) {
-              const nz = Math.sqrt(Math.max(0, radius * radius - px * px - py * py)) / radius;
-              const nx = px / radius;
-              const ny = py / radius;
-              const theta = Math.atan2(ny, nx);
-              const phi = Math.asin(Math.min(1, Math.max(-1, nz)));
-              const u = (((theta + rotAngle) / Math.PI) * 4 + 100) % 1;
-              const v = (((phi + Math.PI / 2) / Math.PI) * 4 + 100) % 1;
-              const checkerU = Math.floor(u * 2) % 2;
-              const checkerV = Math.floor(v * 2) % 2;
-              const isRed = (checkerU + checkerV) % 2 === 0;
-              const dot = nx * lightDir.x + ny * lightDir.y + nz * lightDir.z;
-              const diffuse = Math.max(0.15, dot);
-              const reflX = 2 * dot * nx - lightDir.x;
-              const reflY = 2 * dot * ny - lightDir.y;
-              const reflZ = 2 * dot * nz - lightDir.z;
-              const spec = Math.pow(Math.max(0, reflZ), 20) * 0.6;
-              let r, g, b: number;
-              if (isRed) {
-                r = Math.min(255, Math.floor(204 * diffuse + spec * 255));
-                g = Math.min(255, Math.floor(spec * 255));
-                b = Math.min(255, Math.floor(spec * 255));
-              } else {
-                r = Math.min(255, Math.floor(255 * diffuse + spec * 255));
-                g = Math.min(255, Math.floor(255 * diffuse + spec * 255));
-                b = Math.min(255, Math.floor(255 * diffuse + spec * 255));
-              }
-              if (boss.hitFlash > 0) {
-                r = 255;
-                g = 255;
-                b = 255;
-              }
-              ctx.fillStyle = `rgb(${r},${g},${b})`;
-              ctx.fillRect(px - step / 2, py - step / 2, step, step);
-            }
-          }
-        } else if (boss.bossType === "flyingSaucer") {
-          const flash = boss.hitFlash > 0;
-          ctx.fillStyle = flash ? "#FFFFFF" : "#446688";
-          ctx.strokeStyle = flash ? "#FFFFFF" : "#88AACC";
-          ctx.lineWidth = 2;
-          ctx.beginPath();
-          ctx.ellipse(0, -12, 25, 18, 0, Math.PI, 0);
-          ctx.fill();
-          ctx.stroke();
-          ctx.fillStyle = flash ? "#FFFFFF" : "#334455";
-          ctx.strokeStyle = flash ? "#FFFFFF" : "#667788";
-          ctx.beginPath();
-          ctx.ellipse(0, 0, 55, 14, 0, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.stroke();
-          const lightCount = 8;
-          for (let i = 0; i < lightCount; i++) {
-            const lAngle = (i / lightCount) * Math.PI * 2 + boss.phase * 2;
-            const lx = Math.cos(lAngle) * 45;
-            const ly = Math.sin(lAngle) * 10;
-            const brightness = (Math.sin(boss.phase * 3 + i) + 1) / 2;
-            ctx.fillStyle = `rgba(${flash ? 255 : 255}, ${flash ? 255 : Math.floor(200 * brightness)}, ${flash ? 255 : 0}, ${0.5 + brightness * 0.5})`;
-            ctx.beginPath();
-            ctx.arc(lx, ly, 3, 0, Math.PI * 2);
-            ctx.fill();
-          }
-          if (boss.tractorBeamActive) {
-            ctx.save();
-            ctx.globalAlpha = 0.15 + Math.sin(boss.phase * 5) * 0.1;
-            const grad = ctx.createLinearGradient(0, 14, 0, 200);
-            grad.addColorStop(0, "#00FF88");
-            grad.addColorStop(1, "rgba(0,255,136,0)");
-            ctx.fillStyle = grad;
-            ctx.beginPath();
-            ctx.moveTo(-20, 14);
-            ctx.lineTo(20, 14);
-            ctx.lineTo(60, 200);
-            ctx.lineTo(-60, 200);
-            ctx.closePath();
-            ctx.fill();
-            ctx.restore();
-          }
-        } else if (boss.bossType === "borgCube") {
-          const flash = boss.hitFlash > 0;
-          const cubeSize = 45;
-          const rotX = boss.cubeRotX ?? 0;
-          const rotY = boss.cubeRotY ?? 0;
-          const verts = [
-            [-1, -1, -1],
-            [1, -1, -1],
-            [1, 1, -1],
-            [-1, 1, -1],
-            [-1, -1, 1],
-            [1, -1, 1],
-            [1, 1, 1],
-            [-1, 1, 1],
-          ].map(([x, y, z]) => {
-            const x2 = x * Math.cos(rotY) - z * Math.sin(rotY);
-            const z2 = x * Math.sin(rotY) + z * Math.cos(rotY);
-            const y2 = y * Math.cos(rotX) - z2 * Math.sin(rotX);
-            const z3 = y * Math.sin(rotX) + z2 * Math.cos(rotX);
-            const scale = 150 / (150 + z3 * cubeSize * 0.3);
-            return { x: x2 * cubeSize * scale, y: y2 * cubeSize * scale };
-          });
-          const edges = [
-            [0, 1],
-            [1, 2],
-            [2, 3],
-            [3, 0],
-            [4, 5],
-            [5, 6],
-            [6, 7],
-            [7, 4],
-            [0, 4],
-            [1, 5],
-            [2, 6],
-            [3, 7],
-          ];
-          ctx.save();
-          ctx.globalAlpha = 0.2;
-          ctx.fillStyle = "#00FF44";
-          ctx.beginPath();
-          ctx.arc(0, 0, cubeSize * 1.5, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.restore();
-          ctx.strokeStyle = flash ? "#FFFFFF" : "#00FF44";
-          ctx.lineWidth = 2;
-          edges.forEach(([a, b]) => {
-            ctx.beginPath();
-            ctx.moveTo(verts[a].x, verts[a].y);
-            ctx.lineTo(verts[b].x, verts[b].y);
-            ctx.stroke();
-          });
-          ctx.fillStyle = flash ? "#FFFFFF" : "#88FF88";
-          verts.forEach((v) => {
-            ctx.beginPath();
-            ctx.arc(v.x, v.y, 3, 0, Math.PI * 2);
-            ctx.fill();
-          });
-        }
-
-        ctx.restore();
-
-        // Boss HP bar
-        const barW = 200,
-          barH = 8;
-        const barX = (CANVAS_WIDTH - barW) / 2;
-        const barY = CANVAS_HEIGHT - 48;
-        const hpFrac = boss.hp / boss.maxHp;
-        ctx.save();
-        ctx.globalAlpha = 0.7;
-        const bossBarColors: Record<string, string> = {
-          tentacle: "#FF44CC",
-          amigaBall: "#CC0000",
-          flyingSaucer: "#00FF88",
-          borgCube: "#00FF44",
-        };
-        const barColor = bossBarColors[boss.bossType] || "#FF44CC";
-        ctx.strokeStyle = barColor;
-        ctx.lineWidth = 1;
-        ctx.strokeRect(barX, barY, barW, barH);
-        ctx.fillStyle = hpFrac > 0.3 ? barColor : "#FF0000";
-        ctx.fillRect(barX, barY, barW * hpFrac, barH);
-        ctx.globalAlpha = 0.9;
-        ctx.font = "8px 'Press Start 2P', monospace";
-        ctx.fillStyle = "#FFFFFF";
-        ctx.textAlign = "center";
-        const bossNames: Record<string, string> = {
-          tentacle: "BOSS",
-          amigaBall: "AMIGA BALL",
-          flyingSaucer: "FLYING SAUCER",
-          borgCube: "BORG CUBE",
-        };
-        ctx.fillText(bossNames[boss.bossType] || "BOSS", CANVAS_WIDTH / 2, barY - 4);
-        ctx.restore();
+        drawBossOnCanvas(ctx, cs.boss, CANVAS_HEIGHT - 48);
       }
 
       // Power-up active HUD bars (for my own ship in online, all in local)
@@ -4248,7 +4255,7 @@ const Game = () => {
         ctx.beginPath();
         ctx.ellipse(0, -radius / 4, radius / 2, radius / 3, 0, 0, Math.PI, true);
         ctx.stroke();
-        const pulse = 0.3 + Math.sin(Date.now() * 0.005) * 0.2;
+        const pulse = 0.3 + Math.sin(drawTimestampRef.current * 0.005) * 0.2;
         ctx.globalAlpha = pulse;
         ctx.fillStyle = ufoColor;
         ctx.beginPath();
@@ -4260,353 +4267,7 @@ const Game = () => {
 
       // Boss
       if (state.boss) {
-        const boss = state.boss;
-        ctx.save();
-        ctx.translate(boss.pos.x, boss.pos.y);
-
-        if (boss.bossType === "tentacle") {
-          // Original tentacle boss drawing
-          const bossColor = boss.hitFlash > 0 ? "#FFFFFF" : "#FF44CC";
-          const tentCount = boss.tentacles;
-          for (let i = 0; i < tentCount; i++) {
-            const baseAngle = (i / tentCount) * Math.PI * 2;
-            ctx.strokeStyle = boss.hitFlash > 0 ? "#FFFFFF" : "#CC44AA";
-            ctx.lineWidth = 3;
-            ctx.beginPath();
-            ctx.moveTo(0, 0);
-            const segments = 5;
-            for (let s = 1; s <= segments; s++) {
-              const dist = s * 18;
-              const wave = Math.sin(boss.phase * 2 + i + s * 0.8) * 15;
-              const tx = Math.cos(baseAngle) * dist + Math.cos(baseAngle + Math.PI / 2) * wave;
-              const ty = Math.sin(baseAngle) * dist + Math.sin(baseAngle + Math.PI / 2) * wave;
-              ctx.lineTo(tx, ty);
-            }
-            ctx.stroke();
-          }
-          const pulse = 1 + Math.sin(boss.phase * 3) * 0.05;
-          const bodyR = 45 * pulse;
-          ctx.fillStyle = boss.hitFlash > 0 ? "#FFFFFF" : "#331133";
-          ctx.strokeStyle = bossColor;
-          ctx.lineWidth = 3;
-          ctx.beginPath();
-          ctx.arc(0, 0, bodyR, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.stroke();
-          ctx.fillStyle = bossColor;
-          ctx.beginPath();
-          ctx.arc(0, -5, 12, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.fillStyle = "#000000";
-          ctx.beginPath();
-          ctx.arc(0, -5, 6, 0, Math.PI * 2);
-          ctx.fill();
-        } else if (boss.bossType === "amigaBall") {
-          // Procedural Amiga checkered bouncing ball
-          const radius = 50;
-          const rotAngle = boss.rotAngle ?? 0;
-          const lightDir = { x: -0.5, y: -0.7, z: 0.5 }; // upper-left light
-          const lightLen = Math.hypot(lightDir.x, lightDir.y, lightDir.z);
-          lightDir.x /= lightLen;
-          lightDir.y /= lightLen;
-          lightDir.z /= lightLen;
-
-          // Draw sphere scanline by scanline using checkerboard + lighting
-          const step = 3; // pixel step for performance
-          for (let py = -radius; py < radius; py += step) {
-            const xRange = Math.sqrt(radius * radius - py * py);
-            for (let px = -xRange; px < xRange; px += step) {
-              // Compute sphere normal
-              const nz = Math.sqrt(Math.max(0, radius * radius - px * px - py * py)) / radius;
-              const nx = px / radius;
-              const ny = py / radius;
-
-              // UV mapping for checkerboard
-              const theta = Math.atan2(ny, nx); // longitude
-              const phi = Math.asin(Math.min(1, Math.max(-1, nz))); // latitude
-
-              // Apply rotation offset
-              const u = (((theta + rotAngle) / Math.PI) * 4 + 100) % 1;
-              const v = (((phi + Math.PI / 2) / Math.PI) * 4 + 100) % 1;
-
-              // Checkerboard
-              const checkerU = Math.floor(u * 2) % 2;
-              const checkerV = Math.floor(v * 2) % 2;
-              const isRed = (checkerU + checkerV) % 2 === 0;
-
-              // Lighting: dot product with light direction
-              const dot = nx * lightDir.x + ny * lightDir.y + nz * lightDir.z;
-              const diffuse = Math.max(0.15, dot);
-
-              // Specular highlight
-              const reflX = 2 * dot * nx - lightDir.x;
-              const reflY = 2 * dot * ny - lightDir.y;
-              const reflZ = 2 * dot * nz - lightDir.z;
-              const spec = Math.pow(Math.max(0, reflZ), 20) * 0.6;
-
-              let r: number, g: number, b: number;
-              if (isRed) {
-                r = Math.min(255, Math.floor(204 * diffuse + spec * 255));
-                g = Math.min(255, Math.floor(0 * diffuse + spec * 255));
-                b = Math.min(255, Math.floor(0 * diffuse + spec * 255));
-              } else {
-                r = Math.min(255, Math.floor(255 * diffuse + spec * 255));
-                g = Math.min(255, Math.floor(255 * diffuse + spec * 255));
-                b = Math.min(255, Math.floor(255 * diffuse + spec * 255));
-              }
-
-              if (boss.hitFlash > 0) {
-                r = 255;
-                g = 255;
-                b = 255;
-              }
-
-              ctx.fillStyle = `rgb(${r},${g},${b})`;
-              ctx.fillRect(px - step / 2, py - step / 2, step, step);
-            }
-          }
-
-          // Shadow beneath ball
-          ctx.save();
-          ctx.translate(0, radius + 10);
-          ctx.scale(1, 0.3);
-          ctx.fillStyle = "rgba(0,0,0,0.3)";
-          ctx.beginPath();
-          ctx.arc(0, 0, radius * 0.8, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.restore();
-        } else if (boss.bossType === "flyingSaucer") {
-          // Flying saucer
-          const flash = boss.hitFlash > 0;
-          // Dome
-          ctx.fillStyle = flash ? "#FFFFFF" : "#446688";
-          ctx.strokeStyle = flash ? "#FFFFFF" : "#88AACC";
-          ctx.lineWidth = 2;
-          ctx.beginPath();
-          ctx.ellipse(0, -12, 25, 18, 0, Math.PI, 0);
-          ctx.fill();
-          ctx.stroke();
-          // Body disc
-          ctx.fillStyle = flash ? "#FFFFFF" : "#334455";
-          ctx.strokeStyle = flash ? "#FFFFFF" : "#667788";
-          ctx.lineWidth = 2;
-          ctx.beginPath();
-          ctx.ellipse(0, 0, 55, 14, 0, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.stroke();
-          // Rotating lights
-          const lightCount = 8;
-          for (let i = 0; i < lightCount; i++) {
-            const lAngle = (i / lightCount) * Math.PI * 2 + boss.phase * 2;
-            const lx = Math.cos(lAngle) * 45;
-            const ly = Math.sin(lAngle) * 10;
-            const brightness = (Math.sin(boss.phase * 3 + i) + 1) / 2;
-            ctx.fillStyle = `rgba(${flash ? 255 : 255}, ${flash ? 255 : Math.floor(200 * brightness)}, ${flash ? 255 : 0}, ${0.5 + brightness * 0.5})`;
-            ctx.beginPath();
-            ctx.arc(lx, ly, 3, 0, Math.PI * 2);
-            ctx.fill();
-          }
-          // Tractor beam
-          if (boss.tractorBeamActive) {
-            ctx.save();
-            ctx.globalAlpha = 0.15 + Math.sin(boss.phase * 5) * 0.1;
-            const grad = ctx.createLinearGradient(0, 14, 0, 200);
-            grad.addColorStop(0, "#00FF88");
-            grad.addColorStop(1, "rgba(0,255,136,0)");
-            ctx.fillStyle = grad;
-            ctx.beginPath();
-            ctx.moveTo(-20, 14);
-            ctx.lineTo(20, 14);
-            ctx.lineTo(60, 200);
-            ctx.lineTo(-60, 200);
-            ctx.closePath();
-            ctx.fill();
-            ctx.restore();
-          }
-
-          // Draw mini-saucers
-          if (boss.miniSaucers) {
-            boss.miniSaucers.forEach((ms) => {
-              ctx.save();
-              ctx.translate(ms.pos.x - boss.pos.x, ms.pos.y - boss.pos.y);
-              ctx.fillStyle = "#556677";
-              ctx.strokeStyle = "#88FFAA";
-              ctx.lineWidth = 1;
-              ctx.beginPath();
-              ctx.ellipse(0, 0, 12, 4, 0, 0, Math.PI * 2);
-              ctx.fill();
-              ctx.stroke();
-              ctx.fillStyle = "#88FFAA";
-              ctx.beginPath();
-              ctx.ellipse(0, -3, 6, 4, 0, Math.PI, 0);
-              ctx.fill();
-              ctx.restore();
-            });
-          }
-        } else if (boss.bossType === "borgCube") {
-          // 3D wireframe rotating cube
-          const flash = boss.hitFlash > 0;
-          const cubeSize = 45;
-          const rotX = boss.cubeRotX ?? 0;
-          const rotY = boss.cubeRotY ?? 0;
-
-          // Define cube vertices
-          const verts = [
-            [-1, -1, -1],
-            [1, -1, -1],
-            [1, 1, -1],
-            [-1, 1, -1],
-            [-1, -1, 1],
-            [1, -1, 1],
-            [1, 1, 1],
-            [-1, 1, 1],
-          ].map(([x, y, z]) => {
-            // Rotate around Y
-            const x2 = x * Math.cos(rotY) - z * Math.sin(rotY);
-            const z2 = x * Math.sin(rotY) + z * Math.cos(rotY);
-            // Rotate around X
-            const y2 = y * Math.cos(rotX) - z2 * Math.sin(rotX);
-            const z3 = y * Math.sin(rotX) + z2 * Math.cos(rotX);
-            // Project
-            const scale = 150 / (150 + z3 * cubeSize * 0.3);
-            return { x: x2 * cubeSize * scale, y: y2 * cubeSize * scale };
-          });
-
-          const edges = [
-            [0, 1],
-            [1, 2],
-            [2, 3],
-            [3, 0],
-            [4, 5],
-            [5, 6],
-            [6, 7],
-            [7, 4],
-            [0, 4],
-            [1, 5],
-            [2, 6],
-            [3, 7],
-          ];
-          const cubeColor = flash ? "#FFFFFF" : "#00FF44";
-
-          // Glow effect
-          ctx.save();
-          ctx.globalAlpha = 0.2;
-          ctx.fillStyle = "#00FF44";
-          ctx.beginPath();
-          ctx.arc(0, 0, cubeSize * 1.5, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.restore();
-
-          // Draw edges
-          ctx.strokeStyle = cubeColor;
-          ctx.lineWidth = 2;
-          edges.forEach(([a, b]) => {
-            ctx.beginPath();
-            ctx.moveTo(verts[a].x, verts[a].y);
-            ctx.lineTo(verts[b].x, verts[b].y);
-            ctx.stroke();
-          });
-
-          // Draw vertices as bright dots
-          ctx.fillStyle = flash ? "#FFFFFF" : "#88FF88";
-          verts.forEach((v) => {
-            ctx.beginPath();
-            ctx.arc(v.x, v.y, 3, 0, Math.PI * 2);
-            ctx.fill();
-          });
-
-          // Inner grid lines for Borg look
-          ctx.strokeStyle = flash ? "#FFFFFF" : "rgba(0,255,68,0.3)";
-          ctx.lineWidth = 1;
-          // Draw grid on front face
-          for (let i = 1; i < 3; i++) {
-            const t = i / 3;
-            const x1 = verts[0].x + (verts[1].x - verts[0].x) * t;
-            const y1 = verts[0].y + (verts[1].y - verts[0].y) * t;
-            const x2 = verts[3].x + (verts[2].x - verts[3].x) * t;
-            const y2 = verts[3].y + (verts[2].y - verts[3].y) * t;
-            ctx.beginPath();
-            ctx.moveTo(x1, y1);
-            ctx.lineTo(x2, y2);
-            ctx.stroke();
-            const x3 = verts[0].x + (verts[3].x - verts[0].x) * t;
-            const y3 = verts[0].y + (verts[3].y - verts[0].y) * t;
-            const x4 = verts[1].x + (verts[2].x - verts[1].x) * t;
-            const y4 = verts[1].y + (verts[2].y - verts[1].y) * t;
-            ctx.beginPath();
-            ctx.moveTo(x3, y3);
-            ctx.lineTo(x4, y4);
-            ctx.stroke();
-          }
-
-          // "REGEN" indicator glow
-          if ((boss.regenTimer ?? 0) > 150) {
-            ctx.save();
-            ctx.globalAlpha = 0.3 + Math.sin(boss.phase * 10) * 0.2;
-            ctx.fillStyle = "#00FF44";
-            ctx.beginPath();
-            ctx.arc(0, 0, cubeSize * 0.6, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.restore();
-          }
-
-          // Draw mini cubes
-          if (boss.miniCubes) {
-            boss.miniCubes.forEach((mc) => {
-              ctx.save();
-              ctx.translate(mc.pos.x - boss.pos.x, mc.pos.y - boss.pos.y);
-              ctx.rotate(mc.rotAngle);
-              ctx.strokeStyle = "#00FF44";
-              ctx.lineWidth = 1;
-              const s = 8;
-              ctx.strokeRect(-s / 2, -s / 2, s, s);
-              // Inner cross
-              ctx.strokeStyle = "rgba(0,255,68,0.4)";
-              ctx.beginPath();
-              ctx.moveTo(-s / 2, 0);
-              ctx.lineTo(s / 2, 0);
-              ctx.moveTo(0, -s / 2);
-              ctx.lineTo(0, s / 2);
-              ctx.stroke();
-              ctx.restore();
-            });
-          }
-        }
-
-        ctx.restore();
-
-        // HP Bar (shared by all bosses)
-        ctx.save();
-        const barW = 200;
-        const barH = 8;
-        const barX = (CANVAS_WIDTH - barW) / 2;
-        const barY = CANVAS_HEIGHT - 30;
-        const hpFrac = boss.hp / boss.maxHp;
-        ctx.globalAlpha = 0.7;
-        const bossBarColors: Record<string, string> = {
-          tentacle: "#FF44CC",
-          amigaBall: "#CC0000",
-          flyingSaucer: "#00FF88",
-          borgCube: "#00FF44",
-        };
-        const barColor = bossBarColors[boss.bossType] || "#FF44CC";
-        ctx.strokeStyle = barColor;
-        ctx.lineWidth = 1;
-        ctx.strokeRect(barX, barY, barW, barH);
-        ctx.fillStyle = hpFrac > 0.3 ? barColor : "#FF0000";
-        ctx.fillRect(barX, barY, barW * hpFrac, barH);
-        ctx.globalAlpha = 0.9;
-        ctx.font = "8px 'Press Start 2P', monospace";
-        ctx.fillStyle = "#FFFFFF";
-        ctx.textAlign = "center";
-        const bossNames: Record<string, string> = {
-          tentacle: "BOSS",
-          amigaBall: "AMIGA BALL",
-          flyingSaucer: "FLYING SAUCER",
-          borgCube: "BORG CUBE",
-        };
-        ctx.fillText(bossNames[boss.bossType] || "BOSS", CANVAS_WIDTH / 2, barY - 4);
-        ctx.restore();
+        drawBossOnCanvas(ctx, state.boss, CANVAS_HEIGHT - 30);
       }
 
       // Power-ups
@@ -4749,27 +4410,33 @@ const Game = () => {
       const gifTokens = [":necta:", ":nectawall:", "d^^b", ":D", ":he-man:"];
       const gifHeight = 14;
 
-      // Calculate total width
-      let totalWidth = 0;
-      let remaining = olText;
-      while (remaining.length > 0) {
-        let earliestIdx = remaining.length;
-        let earliestToken = "";
-        for (const token of gifTokens) {
-          const idx = remaining.indexOf(token);
-          if (idx !== -1 && idx < earliestIdx) {
-            earliestIdx = idx;
-            earliestToken = token;
+      // Calculate total width (cached — only recompute when olText changes)
+      let totalWidth: number;
+      if (olTextCacheRef.current?.text === olText) {
+        totalWidth = olTextCacheRef.current.totalWidth;
+      } else {
+        totalWidth = 0;
+        let remaining = olText;
+        while (remaining.length > 0) {
+          let earliestIdx = remaining.length;
+          let earliestToken = "";
+          for (const token of gifTokens) {
+            const idx = remaining.indexOf(token);
+            if (idx !== -1 && idx < earliestIdx) {
+              earliestIdx = idx;
+              earliestToken = token;
+            }
+          }
+          if (earliestToken) {
+            totalWidth += ctx.measureText(remaining.substring(0, earliestIdx)).width;
+            totalWidth += gifHeight; // GIF width = height (square)
+            remaining = remaining.substring(earliestIdx + earliestToken.length);
+          } else {
+            totalWidth += ctx.measureText(remaining).width;
+            remaining = "";
           }
         }
-        if (earliestToken) {
-          totalWidth += ctx.measureText(remaining.substring(0, earliestIdx)).width;
-          totalWidth += gifHeight; // GIF width = height (square)
-          remaining = remaining.substring(earliestIdx + earliestToken.length);
-        } else {
-          totalWidth += ctx.measureText(remaining).width;
-          remaining = "";
-        }
+        olTextCacheRef.current = { text: olText, totalWidth };
       }
 
       // Advance marquee position
@@ -4792,7 +4459,7 @@ const Game = () => {
       ctx.textAlign = "left";
 
       let drawX = onelinerMarqueeXRef.current;
-      remaining = olText;
+      let remaining = olText;
       while (remaining.length > 0) {
         let earliestIdx = remaining.length;
         let earliestToken = "";
@@ -4909,7 +4576,7 @@ const Game = () => {
           // Apply inputs locally to the predicted ship for zero-feel latency
           const pred = guestPredictedShipRef.current;
           if (pred) {
-            const turnSpeed = controlBindingsRef.current.turnSpeed || 0.05;
+            const turnSpeed = controlBindingsRef.current.turnSpeed || DEFAULT_TURN_SPEED;
             if (localInput.left) pred.rotation -= turnSpeed;
             if (localInput.right) pred.rotation += turnSpeed;
             pred.isThrusting = localInput.up;
@@ -5008,7 +4675,7 @@ const Game = () => {
         }
       }
 
-      draw();
+      draw(currentTime);
 
       // FPS tracking for overlay – writes to module-level counters (no setState)
       _fps.frames++;
