@@ -4,6 +4,11 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version, x-admin-key',
 };
+const ALLOWED_ORIGINS = [
+  'https://asteroids-demoscene.lovable.app',
+  'https://id-preview--b6edd2f4-8993-4a05-a257-466f1a773f73.lovable.app',
+  'https://b6edd2f4-8993-4a05-a257-466f1a773f73.lovableproject.com',
+];
 
 function getAllowedOrigin(req: Request): string | null {
   const origin = req.headers.get('origin') || '';
@@ -89,11 +94,6 @@ function getMinCheckpoints(score: number): number {
   return 0;
 }
 
-const ALLOWED_ORIGINS = [
-  'https://asteroids-demoscene.lovable.app',
-  'https://id-preview--b6edd2f4-8993-4a05-a257-466f1a773f73.lovable.app',
-  'https://b6edd2f4-8993-4a05-a257-466f1a773f73.lovableproject.com',
-];
 
 function validateOrigin(req: Request): boolean {
   const origin = req.headers.get('origin') || '';

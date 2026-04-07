@@ -6,8 +6,7 @@
  */
 import { useRef, useCallback } from "react";
 import type { MutableRefObject } from "react";
-
-const HIGH_SCORES_ENABLED = false; // mirrors Game.tsx constant
+import { HIGH_SCORES_ENABLED } from "@/constants/gameConstants";
 
 type GameStateRef = MutableRefObject<{ score: number; wave: number; gameOver: boolean } | null>;
 

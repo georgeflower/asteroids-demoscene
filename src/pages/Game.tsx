@@ -15,7 +15,7 @@ import ControlSettings from "@/components/ControlSettings";
 import { loadBindings, displayKeyName, type ControlBindings } from "@/hooks/useControlSettings";
 import type { DuelNetState, CoopNetState, SessionMode } from "@/types/multiplayer";
 import { DEBUG_ENABLED, DEBUG_CATEGORIES, type DebugCategory, type DebugLogEntry } from "@/constants/debug";
-import { SPAWN_INVULNERABILITY_FRAMES, SHIELD_DURATION, RAPID_FIRE_DURATION, MULTIPLIER_DURATION, POWERUP_DROP_RATE_SOLO, DEFAULT_TURN_SPEED, BULLET_LIFETIME, BOSS_TYPES, BOSS_NAMES } from "@/constants/gameConstants";
+import { SPAWN_INVULNERABILITY_FRAMES, SHIELD_DURATION, RAPID_FIRE_DURATION, MULTIPLIER_DURATION, POWERUP_DROP_RATE_SOLO, DEFAULT_TURN_SPEED, BULLET_LIFETIME, BOSS_TYPES, BOSS_NAMES, HIGH_SCORES_ENABLED } from "@/constants/gameConstants";
 import { readGamepad as readGamepadUtil } from "@/hooks/useInput";
 
 interface Vector {
@@ -301,7 +301,8 @@ interface LocalScore {
 }
 
 // Set to true to re-enable the server high scores system.
-const HIGH_SCORES_ENABLED = false;
+// Set to true to re-enable the server high scores system (also in gameConstants.ts).
+// const HIGH_SCORES_ENABLED = false; // imported from gameConstants
 
 const SHIP_SIZE = 10;
 const BULLET_SPEED = 7;
@@ -993,11 +994,11 @@ const Game = () => {
     pos: { x: x ?? CANVAS_WIDTH / 2, y: y ?? CANVAS_HEIGHT / 2 },
     vel: { x: 0, y: 0 },
     rotation: -Math.PI / 2,
-    rotationSpeed: controlBindingsRef.current.turnSpeed || DEFAULT_TURN_SPEED5,
+    rotationSpeed: controlBindingsRef.current.turnSpeed || DEFAULT_TURN_SPEED,
     thrust: 0.08,
     isThrusting: false,
     invulnerable: true,
-    invulnerableTime: 120,
+    invulnerableTime: SPAWN_INVULNERABILITY_FRAMES,
     hyperspaceCooldown: 0,
   });
 
@@ -3116,7 +3117,7 @@ const Game = () => {
             state.powerUpActive.shield = SHIELD_DURATION;
             state.ship.invulnerable = true;
             // Preserve existing spawn invulnerability; only clear if shield duration is longer
-            if (state.ship.invulnerableTime < SHIELD_DURATION) state.ship.invulnerableTime = SHIELD_DURATION;
+            state.ship.invulnerableTime = Math.max(state.ship.invulnerableTime, SHIELD_DURATION);
             break;
           case "rapidFire":
             state.powerUpActive.rapidFire = RAPID_FIRE_DURATION;
