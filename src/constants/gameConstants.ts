@@ -1,7 +1,7 @@
 // Shared game constants — single source of truth for all magic numbers.
 
 /** Set to true to re-enable the server high scores / anti-cheat system. */
-export const HIGH_SCORES_ENABLED = false;
+export const HIGH_SCORES_ENABLED = true;
 
 /** Frames of invulnerability after respawn / hyperspace (120 = 2 seconds at 60 Hz). */
 export const SPAWN_INVULNERABILITY_FRAMES = 120;
