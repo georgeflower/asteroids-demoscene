@@ -16,6 +16,7 @@ import { loadBindings, displayKeyName, type ControlBindings } from "@/hooks/useC
 import type { DuelNetState, CoopNetState, SessionMode } from "@/types/multiplayer";
 import { DEBUG_ENABLED, DEBUG_CATEGORIES, type DebugCategory, type DebugLogEntry } from "@/constants/debug";
 import { SPAWN_INVULNERABILITY_FRAMES, SHIELD_DURATION, RAPID_FIRE_DURATION, MULTIPLIER_DURATION, POWERUP_DROP_RATE_SOLO, DEFAULT_TURN_SPEED, BULLET_LIFETIME, BOSS_TYPES, BOSS_NAMES } from "@/constants/gameConstants";
+import { readGamepad as readGamepadUtil } from "@/hooks/useInput";
 
 interface Vector {
   x: number;
@@ -1177,28 +1178,7 @@ const Game = () => {
   const readGamepad = (
     index: number,
   ): { left: boolean; right: boolean; up: boolean; fire: boolean; hyperspace: boolean } => {
-    const result = { left: false, right: false, up: false, fire: false, hyperspace: false };
-    try {
-      const gamepads = navigator.getGamepads();
-      const gp = gamepads[index];
-      if (!gp) return result;
-      // Axes
-      if (gp.axes[0] < -GAMEPAD_DEADZONE) result.left = true;
-      if (gp.axes[0] > GAMEPAD_DEADZONE) result.right = true;
-      if (gp.axes[1] < -GAMEPAD_DEADZONE) result.up = true;
-      // D-pad (buttons 12-15 on standard layout)
-      if (gp.buttons[14]?.pressed) result.left = true;
-      if (gp.buttons[15]?.pressed) result.right = true;
-      if (gp.buttons[12]?.pressed) result.up = true;
-      // Fire, Hyperspace, Thrust (alt) - use gamepad bindings
-      const gb = controlBindingsRef.current.gamepad;
-      if (gp.buttons[gb.fire]?.pressed) result.fire = true;
-      if (gp.buttons[gb.hyperspace]?.pressed) result.hyperspace = true;
-      if (gp.buttons[gb.thrust]?.pressed) result.up = true;
-    } catch {
-      /* no gamepad API */
-    }
-    return result;
+    return readGamepadUtil(index, controlBindingsRef.current);
   };
 
   const checkVersion = useCallback(() => {
