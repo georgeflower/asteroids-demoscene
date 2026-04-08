@@ -5629,7 +5629,6 @@ const Game = () => {
           </div>
         )}
 
-        )}
 
         {/* High scores disabled message */}
         {!HIGH_SCORES_ENABLED && localHighScores.length === 0 && (
