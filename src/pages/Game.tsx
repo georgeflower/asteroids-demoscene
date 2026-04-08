@@ -6199,7 +6199,7 @@ const Game = () => {
                       setInitials(newInitials);
                       setInitialsError("");
                     }}
-                    onKeyDown={(e) => {
+                    onKeyDown={async (e) => {
                       if (e.key === "Enter" && initials.length > 0) {
                         const updated = [
                           ...localHighScores,
@@ -6209,6 +6209,10 @@ const Game = () => {
                           .slice(0, 10);
                         localStorage.setItem(LOCAL_SCORES_KEY, JSON.stringify(updated));
                         setLocalHighScores(updated);
+                        if (HIGH_SCORES_ENABLED) {
+                          const ok = await saveToLeaderboard(initials, displayScore);
+                          if (!ok) return; // keep form open on error
+                        }
                         setEnteringInitials(false);
                       }
                       e.stopPropagation();
