@@ -2499,9 +2499,11 @@ const Game = () => {
       state.ship.isThrusting = false;
     }
 
-    // Gamepad fire
-    if (gp0.fire) shootBullet();
-    if (gp0.hyperspace) hyperspace();
+    // Keyboard + Gamepad fire (polled every frame; shootBullet has its own rate-limit)
+    const p1Fire = keysRef.current[b.p1.fire] || gp0.fire;
+    const p1Hyper = keysRef.current[b.p1.hyperspace] || keysRef.current["h"] || keysRef.current["H"] || gp0.hyperspace;
+    if (p1Fire) shootBullet();
+    if (p1Hyper) hyperspace();
 
     const maxSpeed = 8;
     const speed = Math.hypot(state.ship.vel.x, state.ship.vel.y);
