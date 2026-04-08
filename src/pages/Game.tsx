@@ -385,7 +385,7 @@ const Game = () => {
   const [initials, setInitials] = useState("");
   const [initialsError, setInitialsError] = useState("");
   const [leaderboard, setLeaderboard] = useState<{ initials: string; score: number; date: string }[]>([]);
-  const [hallOfFame, setHallOfFame] = useState<{ initials: string; score: number; date: string; rank: number }[]>([]);
+  
   const [oldLeaderboard, setOldLeaderboard] = useState<{ initials: string; score: number; date: string }[]>([]);
   const [showOldLeaderboard, setShowOldLeaderboard] = useState(false);
   const [showChangelog, setShowChangelog] = useState(false);
@@ -610,42 +610,6 @@ const Game = () => {
     return [];
   }, []);
 
-  const loadHallOfFame = useCallback(async () => {
-    // Fetch server-side deduplicated top-3 via RPC (avoids fetching 1000+ rows client-side)
-    const { data, error } = await supabase.rpc("get_hall_of_fame" as any);
-    if (error || !data) {
-      // Fallback to client-side merge on RPC failure
-      const [oldRes, currentRes] = await Promise.all([
-        supabase
-          .from("high_scores")
-          .select("initials, score, created_at")
-          .order("score", { ascending: false })
-          .limit(100),
-        supabase
-          .from("current_high_scores")
-          .select("initials, score, created_at")
-          .order("score", { ascending: false })
-          .limit(100),
-      ]);
-      const allRows = [...(oldRes.data || []), ...(currentRes.data || [])].sort((a, b) => b.score - a.score);
-      const seen = new Set<string>();
-      const unique: { initials: string; score: number; date: string; rank: number }[] = [];
-      allRows.forEach((row, idx) => {
-        const key = row.initials.toUpperCase();
-        if (!seen.has(key)) {
-          seen.add(key);
-          unique.push({ initials: row.initials, score: row.score, date: new Date(row.created_at).toLocaleDateString(), rank: idx + 1 });
-        }
-      });
-      return unique.slice(0, 3);
-    }
-    return (data as { initials: string; score: number; created_at: string }[]).map((row, idx) => ({
-      initials: row.initials,
-      score: row.score,
-      date: new Date(row.created_at).toLocaleDateString(),
-      rank: idx + 1,
-    }));
-  }, []);
 
   const loadOldLeaderboard = useCallback(async () => {
     const { data, error } = await supabase
@@ -910,8 +874,7 @@ const Game = () => {
 
   useEffect(() => {
     loadLeaderboard().then(setLeaderboard);
-    loadHallOfFame().then(setHallOfFame);
-  }, [loadLeaderboard, loadHallOfFame]);
+  }, [loadLeaderboard]);
 
   const createStars = (): Star[] => {
     const stars: Star[] = [];
@@ -5666,39 +5629,6 @@ const Game = () => {
           </div>
         )}
 
-        {/* Hall of Fame (top 3 from old/archive high_scores) */}
-        {HIGH_SCORES_ENABLED && hallOfFame.length > 0 && (
-          <div className="mb-8 w-72">
-            <div
-              className="text-sm font-mono text-[#FFD700] text-center mb-2 tracking-wider cursor-help"
-              style={{ textShadow: "0 0 10px #FFD700" }}
-              title="These are the top 3 individuals that have the highest score based on both old highscore list and new highscore list combined"
-            >
-              ★ HALL OF FAME ★
-            </div>
-            <div className="border border-[#FFD700]/30 p-2">
-              {hallOfFame.slice(0, 3).map((entry, i) => {
-                const initialsDisplay = entry.initials.padEnd(3, " ");
-                return (
-                  <div
-                    key={i}
-                    className="flex justify-between font-mono text-sm py-0.5 text-[hsl(var(--game-foreground))]"
-                  >
-                    <span
-                      className={i === 0 ? "text-[#FFD700]" : i === 1 ? "text-[#C0C0C0]" : "text-[#CD7F32]"}
-                      style={{ whiteSpace: "pre" }}
-                    >
-                      {entry.rank.toString().padStart(2, " ")}. {initialsDisplay}
-                    </span>
-                    <span className={i === 0 ? "text-[#FFD700]" : i === 1 ? "text-[#C0C0C0]" : "text-[#CD7F32]"}>
-                      {entry.score.toString().padStart(8, "0")}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
 
         {/* High scores disabled message */}
         {!HIGH_SCORES_ENABLED && localHighScores.length === 0 && (
