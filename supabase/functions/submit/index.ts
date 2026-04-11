@@ -581,7 +581,8 @@ async function handleSubmit(req: Request, supabaseAdmin: any) {
       submittedAsteroids, submittedBullets, seqForHmac, submission.hmac
     );
     if (!valid) {
-      console.log(`HMAC verification failed for submit: token=${sessionToken}, seq=${seqForHmac}, submitted_seq=${submission.seq}, last_seq=${session.last_seq}`);
+      const debugMsg = `${sessionToken}|${submission.score}|${submission.level ?? 1}|${submittedAsteroids}|${submittedBullets}|${seqForHmac}`;
+      console.log(`HMAC verification failed for submit: msg="${debugMsg}", hmac="${submission.hmac}", nonce="${session.session_nonce}", score_type=${typeof submission.score}, level_type=${typeof submission.level}, seq_type=${typeof submission.seq}`);
       return errorResponse('Invalid signature', 403);
     }
   }
