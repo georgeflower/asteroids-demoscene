@@ -5453,7 +5453,7 @@ const Game = () => {
               setShowLifeLost(false);
             }
           } else if (showGameOver) {
-            if (!enteringInitialsRef.current) {
+            if (!enteringInitialsRef.current && !submittingScore) {
               if (justUp || justDown) {
                 setGameOverSelection((s) => (s === 0 ? 1 : 0));
               }
@@ -6282,24 +6282,28 @@ const Game = () => {
             <div className="flex gap-4">
               <Button
                 onClick={initGame}
+                disabled={enteringInitials || submittingScore}
                 className={`text-xl px-8 py-4 font-mono transition-all ${
+                  enteringInitials || submittingScore ? "opacity-30 cursor-not-allowed" :
                   gameOverSelection === 0
                     ? "bg-[hsl(var(--game-foreground))] text-[hsl(var(--game-background))] shadow-[0_0_15px_hsl(var(--game-foreground))]"
                     : "bg-[hsl(var(--game-foreground))]/20 text-[hsl(var(--game-foreground))] border border-[hsl(var(--game-foreground))]/40"
                 }`}
               >
-                {gameOverSelection === 0 ? "▸ " : ""}PLAY AGAIN
+                {gameOverSelection === 0 && !enteringInitials && !submittingScore ? "▸ " : ""}PLAY AGAIN
               </Button>
               <Button
                 onClick={quitToMenu}
+                disabled={enteringInitials || submittingScore}
                 variant="outline"
                 className={`font-mono transition-all ${
+                  enteringInitials || submittingScore ? "opacity-30 cursor-not-allowed" :
                   gameOverSelection === 1
                     ? "border-[hsl(var(--game-foreground))] text-[hsl(var(--game-foreground))] bg-[hsl(var(--game-foreground))]/20 shadow-[0_0_15px_hsl(var(--game-foreground))]"
                     : "border-[hsl(var(--game-foreground))]/40 text-[hsl(var(--game-foreground))]/60"
                 }`}
               >
-                {gameOverSelection === 1 ? "▸ " : ""}MENU
+                {gameOverSelection === 1 && !enteringInitials && !submittingScore ? "▸ " : ""}MENU
               </Button>
             </div>
           </div>
