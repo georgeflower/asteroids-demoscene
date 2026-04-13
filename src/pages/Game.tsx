@@ -6222,6 +6222,7 @@ const Game = () => {
                       e.stopPropagation();
                     }}
                     autoFocus
+                    disabled={submittingScore}
                     className="w-20 text-center text-2xl font-mono bg-transparent border-2 border-[hsl(var(--game-foreground))] text-[hsl(var(--game-foreground))] p-1 uppercase tracking-widest"
                     placeholder="___"
                   />
