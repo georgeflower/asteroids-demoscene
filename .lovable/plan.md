@@ -1,43 +1,58 @@
 
 
-# Fix: High Score Submission Failure + Clear Bullets on New Wave
+# Plan: Insert MBD Score + Add Submission Loading State + Improve Error Message
 
-## Problem 1: "Failed to save high score"
-The edge function logs show: `High-score mismatch: submitted=81360, lastHB=72020`. 
+## 1. Manually insert MBD's score (81,360)
 
-The submit endpoint (line 633) has a hard rule: for scores above 50,000, the submitted score must be within 5,000 of the last heartbeat score. But heartbeats are sent every 30 seconds, and a player can easily earn 9,000+ points in that window. The time-based check on line 625 already correctly validates this (allowing `dtSinceLastHeartbeat * 1000` pts/sec), making the hard 5,000 cap redundant and too restrictive.
+Use the database insert tool to add the score directly to `current_high_scores`, then add a corresponding `score_audit_log` entry marked as `manual`.
 
-**Fix**: Increase the tolerance from 5,000 to a time-aware value. Replace the hard cap with: allow `lastScore + max(10000, dtSinceLastHeartbeat * MAX_SCORE_JUMP_PER_SECOND)`. This keeps anti-cheat protection while accommodating legitimate play between heartbeats.
+```sql
+INSERT INTO current_high_scores (initials, score, level, time_played_seconds, source, session_token)
+VALUES ('MBD', 81360, 1, 0, 'manual', NULL);
 
-**File**: `supabase/functions/submit/index.ts` (lines 632-636)
+INSERT INTO score_audit_log (score_id, session_token, submission_method)
+VALUES ((SELECT id FROM current_high_scores WHERE initials = 'MBD' AND score = 81360 ORDER BY created_at DESC LIMIT 1), NULL, 'manual');
+```
 
-## Problem 2: Bullets persist into new wave
-When a wave ends and `nextWave()` is called, asteroids and aliens are cleared but `state.bullets` is not. This means leftover player/enemy bullets from the previous wave can hit newly spawned asteroids.
+## 2. Add loading state during score submission
 
-**Fix**: Add `state.bullets = [];` at the start of the `nextWave` function, for both boss and regular waves.
+Add a `submittingScore` state variable. Set it `true` before calling `saveToLeaderboard`, `false` after. While submitting:
+- Disable the input and OK button
+- Show "SUBMITTING..." text replacing or beside the OK button
 
-**File**: `src/pages/Game.tsx` — in the `nextWave` callback (~line 1876, after `state.wave++`)
+**File**: `src/pages/Game.tsx`
+- Add `const [submittingScore, setSubmittingScore] = useState(false);`
+- Wrap both submission paths (Enter key + OK button) with `setSubmittingScore(true)` / `setSubmittingScore(false)`
+- Show a spinner/text when `submittingScore` is true
+- Disable input + button when `submittingScore` is true
+
+## 3. Improve error messages
+
+Replace the generic "Failed to save score. Please try again." with "An error has been logged to the developer." for server errors (non-400, non-409). Keep the inappropriate initials message as-is.
+
+**File**: `src/pages/Game.tsx` (line 851)
 
 ## Technical Details
 
-### Edge function change (submit/index.ts)
+### State addition
 ```typescript
-// Replace lines 632-636:
-// Old: hard 5000pt cap
-// New: time-aware tolerance
-const timeTolerance = Math.max(10000, dtSinceLastHeartbeat * MAX_SCORE_JUMP_PER_SECOND);
-if (submission.score > 50000 && submission.score > lastScore + timeTolerance) {
-  console.log(`High-score mismatch: submitted=${submission.score}, lastHB=${lastScore}, tolerance=${timeTolerance.toFixed(0)}, token=${submission.gameSessionToken}`);
-  return errorResponse('Final score anomaly', 403);
-}
+const [submittingScore, setSubmittingScore] = useState(false);
 ```
 
-### Game.tsx change (nextWave)
+### Submission wrapper (both Enter key and OK button handlers)
 ```typescript
-// After state.wave++ (line 1876), add:
-state.bullets = [];
+setSubmittingScore(true);
+const ok = await saveToLeaderboard(initials, displayScore);
+setSubmittingScore(false);
+if (!ok) return;
 ```
 
-### Deployment
-- Redeploy the `submit` edge function after editing
+### Error message change (line 851)
+```typescript
+setInitialsError("Error logged — the developer has been notified.");
+```
+
+### UI changes in the initials form
+- Add `disabled={submittingScore}` to input and button
+- Show "SUBMITTING..." text when `submittingScore` is true
 
