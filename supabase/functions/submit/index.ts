@@ -629,9 +629,10 @@ async function handleSubmit(req: Request, supabaseAdmin: any) {
     return errorResponse('Final score anomaly', 403);
   }
 
-  // For high scores (>50k), require exact match with last heartbeat score
-  if (submission.score > 50000 && submission.score > lastScore + 5000) {
-    console.log(`High-score mismatch: submitted=${submission.score}, lastHB=${lastScore}, token=${submission.gameSessionToken}`);
+  // For high scores (>50k), use time-aware tolerance instead of hard 5k cap
+  const timeTolerance = Math.max(10000, dtSinceLastHeartbeat * MAX_SCORE_JUMP_PER_SECOND);
+  if (submission.score > 50000 && submission.score > lastScore + timeTolerance) {
+    console.log(`High-score mismatch: submitted=${submission.score}, lastHB=${lastScore}, tolerance=${timeTolerance.toFixed(0)}, token=${submission.gameSessionToken}`);
     return errorResponse('Final score anomaly', 403);
   }
 
