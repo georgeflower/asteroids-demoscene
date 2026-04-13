@@ -291,7 +291,7 @@ const ONLINE_INPUT_SEND_INTERVAL_MS = 50;
 /** Coop state is broadcast every Nth worker tick; at 60 Hz this gives ~20 Hz. */
 const ONLINE_STATE_BROADCAST_TICK_INTERVAL = 3;
 
-const GAME_VERSION = "0.2.1";
+const GAME_VERSION = "0.3.1";
 
 const LOCAL_SCORES_KEY = "asteroids_local_highscores";
 interface LocalScore {
