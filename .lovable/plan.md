@@ -1,44 +1,52 @@
 
 
-# Fix: PLAY AGAIN button bypasses score submission
+# Plan: Show Both Leaderboards on Menu + Nerf Green Enemy
 
-## Root Cause
+## 1. Show both local and cloud high scores on main menu
 
-The "PLAY AGAIN" and "MENU" buttons (lines 6282-6304) are always visible on the game-over screen, even while the initials entry form is open. A player can type their initials, see the form, but accidentally (or intentionally) click "PLAY AGAIN" — which calls `initGame()` and resets all state including `setEnteringInitials(false)`, completely skipping the cloud leaderboard submission.
+Currently, the menu shows either cloud leaderboard (when `HIGH_SCORES_ENABLED`) or local high scores — never both. Change this so both are displayed side-by-side when cloud is enabled and local scores exist.
 
-This is exactly what happened: the session `c617c92f` has `submission_count: 0` and `expired: false` — no `/submit` call was ever made, even though heartbeats were correctly recorded (last_score: 54,890, level 7).
+**File**: `src/pages/Game.tsx`
 
-## Fix
+- Keep the existing cloud "★ TOP SCORES ★" block (lines 5608-5649) as-is
+- Remove the `!HIGH_SCORES_ENABLED &&` condition from the local high scores block (line 5672), so it renders whenever `localHighScores.length > 0`
+- Rename the local block header to "★ LOCAL HIGH SCORES ★" (already is)
+- Both blocks will stack vertically: cloud on top, local below
 
-Disable the "PLAY AGAIN" and "MENU" buttons while `enteringInitials` is true OR `submittingScore` is true. This forces the player to complete the initials submission flow before restarting.
+## 2. Increase green enemy spawn interval
 
-**File**: `src/pages/Game.tsx` (lines 6282-6304)
+Currently all alien types share one spawn timer (line 2643): `Math.max(180, 500 - wave * 20) + random * 200`. After spawning a greenMan, add an extra cooldown so they appear less frequently.
 
+**File**: `src/pages/Game.tsx` (line 2629-2632)
+
+Add a separate longer cooldown after greenMan spawn:
 ```typescript
-// Add disabled prop and styling to both buttons
-<Button
-  onClick={initGame}
-  disabled={enteringInitials || submittingScore}
-  className={`text-xl px-8 py-4 font-mono transition-all ${
-    enteringInitials || submittingScore ? "opacity-30 cursor-not-allowed" : ""
-  } ${gameOverSelection === 0 ? "..." : "..."}`}
->
-  ...PLAY AGAIN
-</Button>
-<Button
-  onClick={quitToMenu}
-  disabled={enteringInitials || submittingScore}
-  className={`font-mono transition-all ${
-    enteringInitials || submittingScore ? "opacity-30 cursor-not-allowed" : ""
-  } ${gameOverSelection === 1 ? "..." : "..."}`}
->
-  ...MENU
-</Button>
+if (state.wave >= 6 && state.aliens.filter((a) => a.type === "greenMan").length < 2) {
+  state.aliens.push(createAlien("greenMan", state.wave));
+  // Extra cooldown for green enemy spawns
+  state.alienSpawnTimer += 300;
+}
 ```
 
-Also gate the gamepad "A" button restart (line 5460) with the same check — already gated by `!enteringInitialsRef.current`, but add `submittingScore` guard too.
+## 3. Reduce green enemy aim accuracy by 10%
 
-## Also: Insert QUM's score manually
+Currently (line 2679), the greenMan shoots directly at the player with perfect aim:
+```typescript
+const angle = Math.atan2(state.ship.pos.y - alien.pos.y, state.ship.pos.x - alien.pos.x);
+```
 
-The session shows last_score of 54,890. Insert this score for initials "QUM" into `current_high_scores` with a corresponding audit log entry marked as `manual`.
+Add angular spread to reduce accuracy:
+```typescript
+const baseAngle = Math.atan2(state.ship.pos.y - alien.pos.y, state.ship.pos.x - alien.pos.x);
+const angle = baseAngle + (Math.random() - 0.5) * 0.35; // ~10% less accurate (~20° spread)
+```
+
+## Technical Details
+
+### Files changed
+- `src/pages/Game.tsx` — 3 small edits:
+  1. Line 5672: remove `!HIGH_SCORES_ENABLED &&` condition
+  2. Line 5708: remove `!HIGH_SCORES_ENABLED &&` condition for the overlay too
+  3. Lines 2629-2632: add `state.alienSpawnTimer += 300` after greenMan spawn
+  4. Line 2679: add angular spread to greenMan aim
 
