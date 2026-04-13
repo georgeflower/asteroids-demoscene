@@ -2,6 +2,25 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.1] - 2026-04-13
+
+### Added
+
+- **Submission Loading State**: "SUBMITTING..." indicator shown while score is being saved to the cloud leaderboard
+- **Dual Leaderboard Display**: Main menu now shows both cloud leaderboard and local high scores simultaneously when cloud is enabled
+- **Cloud Qualification Check**: Initials prompt now triggers for top-10 cloud leaderboard eligibility, not just local high scores
+
+### Changed
+
+- **Green Enemy Spawn Cooldown**: Green enemies now have an additional 300-tick cooldown between spawns, making them appear less frequently
+- **Green Enemy Aim Accuracy**: Green enemy projectiles now have ~20° angular spread, reducing perfect-aim difficulty by ~10%
+- **Error Messaging**: Score submission errors now display "Error logged — the developer has been notified" instead of generic messages
+
+### Fixed
+
+- **Score Submission Bypass**: PLAY AGAIN and MENU buttons (and gamepad restart) are now disabled while entering initials or submitting a score, preventing accidental bypass of cloud leaderboard submission
+- **Missing Scores Restored**: Manually inserted scores for QUM (54,890) and MBD (81,360) that were lost due to the submission bypass bug
+
 ## [0.3.0] - 2026-03-31
 
 ### Added
