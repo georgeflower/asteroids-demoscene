@@ -1,58 +1,44 @@
 
 
-# Plan: Insert MBD Score + Add Submission Loading State + Improve Error Message
+# Fix: PLAY AGAIN button bypasses score submission
 
-## 1. Manually insert MBD's score (81,360)
+## Root Cause
 
-Use the database insert tool to add the score directly to `current_high_scores`, then add a corresponding `score_audit_log` entry marked as `manual`.
+The "PLAY AGAIN" and "MENU" buttons (lines 6282-6304) are always visible on the game-over screen, even while the initials entry form is open. A player can type their initials, see the form, but accidentally (or intentionally) click "PLAY AGAIN" — which calls `initGame()` and resets all state including `setEnteringInitials(false)`, completely skipping the cloud leaderboard submission.
 
-```sql
-INSERT INTO current_high_scores (initials, score, level, time_played_seconds, source, session_token)
-VALUES ('MBD', 81360, 1, 0, 'manual', NULL);
+This is exactly what happened: the session `c617c92f` has `submission_count: 0` and `expired: false` — no `/submit` call was ever made, even though heartbeats were correctly recorded (last_score: 54,890, level 7).
 
-INSERT INTO score_audit_log (score_id, session_token, submission_method)
-VALUES ((SELECT id FROM current_high_scores WHERE initials = 'MBD' AND score = 81360 ORDER BY created_at DESC LIMIT 1), NULL, 'manual');
-```
+## Fix
 
-## 2. Add loading state during score submission
+Disable the "PLAY AGAIN" and "MENU" buttons while `enteringInitials` is true OR `submittingScore` is true. This forces the player to complete the initials submission flow before restarting.
 
-Add a `submittingScore` state variable. Set it `true` before calling `saveToLeaderboard`, `false` after. While submitting:
-- Disable the input and OK button
-- Show "SUBMITTING..." text replacing or beside the OK button
+**File**: `src/pages/Game.tsx` (lines 6282-6304)
 
-**File**: `src/pages/Game.tsx`
-- Add `const [submittingScore, setSubmittingScore] = useState(false);`
-- Wrap both submission paths (Enter key + OK button) with `setSubmittingScore(true)` / `setSubmittingScore(false)`
-- Show a spinner/text when `submittingScore` is true
-- Disable input + button when `submittingScore` is true
-
-## 3. Improve error messages
-
-Replace the generic "Failed to save score. Please try again." with "An error has been logged to the developer." for server errors (non-400, non-409). Keep the inappropriate initials message as-is.
-
-**File**: `src/pages/Game.tsx` (line 851)
-
-## Technical Details
-
-### State addition
 ```typescript
-const [submittingScore, setSubmittingScore] = useState(false);
+// Add disabled prop and styling to both buttons
+<Button
+  onClick={initGame}
+  disabled={enteringInitials || submittingScore}
+  className={`text-xl px-8 py-4 font-mono transition-all ${
+    enteringInitials || submittingScore ? "opacity-30 cursor-not-allowed" : ""
+  } ${gameOverSelection === 0 ? "..." : "..."}`}
+>
+  ...PLAY AGAIN
+</Button>
+<Button
+  onClick={quitToMenu}
+  disabled={enteringInitials || submittingScore}
+  className={`font-mono transition-all ${
+    enteringInitials || submittingScore ? "opacity-30 cursor-not-allowed" : ""
+  } ${gameOverSelection === 1 ? "..." : "..."}`}
+>
+  ...MENU
+</Button>
 ```
 
-### Submission wrapper (both Enter key and OK button handlers)
-```typescript
-setSubmittingScore(true);
-const ok = await saveToLeaderboard(initials, displayScore);
-setSubmittingScore(false);
-if (!ok) return;
-```
+Also gate the gamepad "A" button restart (line 5460) with the same check — already gated by `!enteringInitialsRef.current`, but add `submittingScore` guard too.
 
-### Error message change (line 851)
-```typescript
-setInitialsError("Error logged — the developer has been notified.");
-```
+## Also: Insert QUM's score manually
 
-### UI changes in the initials form
-- Add `disabled={submittingScore}` to input and button
-- Show "SUBMITTING..." text when `submittingScore` is true
+The session shows last_score of 54,890. Insert this score for initials "QUM" into `current_high_scores` with a corresponding audit log entry marked as `manual`.
 
