@@ -5910,7 +5910,27 @@ const Game = () => {
                 📋 CHANGELOG
               </div>
               <pre className="font-mono text-[11px] text-[hsl(var(--game-foreground))] whitespace-pre-wrap leading-relaxed opacity-90">
-                {`[0.3.0] - 2026-03-31
+                {`[0.3.1] - 2026-04-13
+
+  Added
+  - Submission loading state: "SUBMITTING..." indicator
+    during cloud score submission
+  - Dual leaderboard: both cloud and local high scores
+    shown on main menu and game-over screen
+  - Cloud qualification check for top-10 eligibility
+
+  Changed
+  - Green enemy nerf: +300-tick spawn cooldown and
+    ~20° aim spread for reduced accuracy
+  - Error messaging: clearer feedback on submission
+    failures
+
+  Fixed
+  - PLAY AGAIN / MENU buttons locked during initials
+    entry and score submission
+  - Manual score restoration for missing entries
+
+[0.3.0] - 2026-03-31
 
   Added
   - Online Co-op Mode: play cooperatively with
