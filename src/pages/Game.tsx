@@ -865,12 +865,26 @@ const Game = () => {
     [loadLeaderboard, computeHMAC],
   );
 
-  const isHighScore = useCallback(
+  const isLocalHighScore = useCallback(
     (score: number) => {
       if (DEBUG_ENABLED) return true;
       return localHighScores.length < 10 || score > (localHighScores[localHighScores.length - 1]?.score ?? 0);
     },
     [localHighScores],
+  );
+
+  const isCloudHighScore = useCallback(
+    (score: number) => {
+      if (!HIGH_SCORES_ENABLED) return false;
+      if (leaderboard.length === 0) return true;
+      return leaderboard.length < 10 || score > (leaderboard[leaderboard.length - 1]?.score ?? 0);
+    },
+    [leaderboard],
+  );
+
+  const shouldPromptForInitials = useCallback(
+    (score: number) => isLocalHighScore(score) || isCloudHighScore(score),
+    [isLocalHighScore, isCloudHighScore],
   );
 
   useEffect(() => {
@@ -2004,8 +2018,10 @@ const Game = () => {
         state.gameOver = true;
         stopHeartbeatInterval();
         setShowGameOver(true);
-        // Offer local high score entry (skip in trainer mode)
-        if (!(DEBUG_ENABLED && trainerModeRef.current) && isHighScore(state.score)) setEnteringInitials(true);
+        // Offer initials entry for either local or cloud leaderboard qualification (skip in trainer mode)
+        if (!(DEBUG_ENABLED && trainerModeRef.current) && shouldPromptForInitials(state.score)) {
+          setEnteringInitials(true);
+        }
         // Also refresh server leaderboard if enabled
         if (HIGH_SCORES_ENABLED) loadLeaderboard().then(setLeaderboard);
         // Game over
@@ -2015,7 +2031,7 @@ const Game = () => {
         setShowLifeLost(true);
       }
     },
-    [isHighScore, loadLeaderboard, addDebugLog, stopHeartbeatInterval],
+    [shouldPromptForInitials, loadLeaderboard, addDebugLog, stopHeartbeatInterval],
   );
 
   const shootBullet = useCallback(() => {
@@ -6184,10 +6200,10 @@ const Game = () => {
               FINAL SCORE: {displayScore.toString().padStart(8, "0")}
             </div>
 
-            {/* Local high score entry */}
+            {/* High score entry */}
             {enteringInitials && (
               <div className="mb-4 flex flex-col items-center gap-2">
-                <div className="text-lg font-mono text-[hsl(var(--game-glow))]">NEW HIGH SCORE! ENTER INITIALS:</div>
+                <div className="text-lg font-mono text-[hsl(var(--game-glow))]">ENTER INITIALS TO SAVE YOUR SCORE:</div>
                 {initialsError && (
                   <div className="text-sm font-mono text-[hsl(var(--game-danger))] animate-pulse">{initialsError}</div>
                 )}
