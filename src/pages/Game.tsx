@@ -1874,6 +1874,7 @@ const Game = () => {
     const state = gameStateRef.current;
 
     state.wave++;
+    state.bullets = [];
 
     addDebugLog("wave", `Wave ${state.wave} started`);
     const isBossWave = state.wave % 5 === 0;
