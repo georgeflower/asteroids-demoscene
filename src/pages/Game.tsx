@@ -2628,6 +2628,7 @@ const Game = () => {
         }
         if (state.wave >= 6 && state.aliens.filter((a) => a.type === "greenMan").length < 2) {
           state.aliens.push(createAlien("greenMan", state.wave));
+          state.alienSpawnTimer += 300; // Extra cooldown for green enemy spawns
           addDebugLog("spawn", `Green man spawned (wave ${state.wave})`);
         }
         // Red Drone removed
@@ -2676,7 +2677,8 @@ const Game = () => {
         alien.shootTimer--;
         if (alien.shootTimer <= 0) {
           alien.shootTimer = Math.max(40, 80 - state.wave * 2) + Math.random() * 40;
-          const angle = Math.atan2(state.ship.pos.y - alien.pos.y, state.ship.pos.x - alien.pos.x);
+          const baseAngle = Math.atan2(state.ship.pos.y - alien.pos.y, state.ship.pos.x - alien.pos.x);
+          const angle = baseAngle + (Math.random() - 0.5) * 0.35; // ~10% less accurate
           state.bullets.push({
             pos: { ...alien.pos },
             vel: { x: Math.cos(angle) * 6, y: Math.sin(angle) * 6 },
@@ -5669,7 +5671,7 @@ const Game = () => {
         )}
 
         {/* Local high scores on main menu */}
-        {!HIGH_SCORES_ENABLED && localHighScores.length > 0 && (
+        {localHighScores.length > 0 && (
           <div className="mb-4 w-72">
             <div
               className="text-sm font-mono text-[hsl(var(--game-glow))] text-center mb-2 tracking-wider"
@@ -5705,7 +5707,7 @@ const Game = () => {
         )}
 
         {/* Full local leaderboard overlay */}
-        {!HIGH_SCORES_ENABLED && showFullLeaderboard && (
+        {showFullLeaderboard && (
           <div
             className="fixed inset-0 z-50 flex items-center justify-center bg-black/85"
             onClick={() => setShowFullLeaderboard(false)}
