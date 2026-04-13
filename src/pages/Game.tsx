@@ -384,6 +384,7 @@ const Game = () => {
   const [enteringInitials, setEnteringInitials] = useState(false);
   const [initials, setInitials] = useState("");
   const [initialsError, setInitialsError] = useState("");
+  const [submittingScore, setSubmittingScore] = useState(false);
   const [leaderboard, setLeaderboard] = useState<{ initials: string; score: number; date: string }[]>([]);
   
   const [oldLeaderboard, setOldLeaderboard] = useState<{ initials: string; score: number; date: string }[]>([]);
@@ -848,7 +849,7 @@ const Game = () => {
             return true;
           }
           // Generic error message for other failures
-          setInitialsError("Failed to save score. Please try again.");
+          setInitialsError("Error logged — the developer has been notified.");
           return false;
         }
 
@@ -857,7 +858,7 @@ const Game = () => {
         return true;
       } catch (error) {
         console.error("Error saving score:", error);
-        setInitialsError("Network error. Please try again.");
+        setInitialsError("Error logged — the developer has been notified.");
         return false;
       }
     },
@@ -6201,7 +6202,7 @@ const Game = () => {
                       setInitialsError("");
                     }}
                     onKeyDown={async (e) => {
-                      if (e.key === "Enter" && initials.length > 0) {
+                      if (e.key === "Enter" && initials.length > 0 && !submittingScore) {
                         const updated = [
                           ...localHighScores,
                           { initials: initials.toUpperCase(), score: displayScore, date: new Date().toISOString() },
@@ -6211,7 +6212,9 @@ const Game = () => {
                         localStorage.setItem(LOCAL_SCORES_KEY, JSON.stringify(updated));
                         setLocalHighScores(updated);
                         if (HIGH_SCORES_ENABLED) {
+                          setSubmittingScore(true);
                           const ok = await saveToLeaderboard(initials, displayScore);
+                          setSubmittingScore(false);
                           if (!ok) return; // keep form open on error
                         }
                         setEnteringInitials(false);
@@ -6224,7 +6227,7 @@ const Game = () => {
                   />
                   <Button
                     onClick={async () => {
-                      if (initials.length > 0) {
+                      if (initials.length > 0 && !submittingScore) {
                         const updated = [
                           ...localHighScores,
                           { initials: initials.toUpperCase(), score: displayScore, date: new Date().toISOString() },
@@ -6234,16 +6237,18 @@ const Game = () => {
                         localStorage.setItem(LOCAL_SCORES_KEY, JSON.stringify(updated));
                         setLocalHighScores(updated);
                         if (HIGH_SCORES_ENABLED) {
+                          setSubmittingScore(true);
                           const ok = await saveToLeaderboard(initials, displayScore);
+                          setSubmittingScore(false);
                           if (!ok) return;
                         }
                         setEnteringInitials(false);
                       }
                     }}
-                    disabled={initials.length === 0 || !!initialsError}
+                    disabled={initials.length === 0 || !!initialsError || submittingScore}
                     className="bg-[hsl(var(--game-foreground))] text-[hsl(var(--game-background))] hover:bg-[hsl(var(--game-glow))] font-mono disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    OK
+                    {submittingScore ? "SUBMITTING..." : "OK"}
                   </Button>
                 </div>
               </div>
