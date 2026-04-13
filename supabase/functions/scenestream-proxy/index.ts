@@ -23,10 +23,16 @@ Deno.serve(async (req) => {
       );
     }
 
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
+
     const response = await fetch(`https://scenestream.net${endpoint}`, {
       method: 'GET',
       headers: { 'Accept': 'application/xml, text/xml, */*' },
+      signal: controller.signal,
     });
+
+    clearTimeout(timeoutId);
 
     const data = await response.text();
 
