@@ -6271,16 +6271,18 @@ const Game = () => {
               </div>
             )}
 
-            {/* Local scores on game over */}
-            {localHighScores.length > 0 && !enteringInitials && (
+            {/* Scoreboard on game over */}
+            {!enteringInitials && (HIGH_SCORES_ENABLED ? leaderboard.length > 0 : localHighScores.length > 0) && (
               <div className="mb-4 w-72">
-                <div className="text-lg font-mono text-[hsl(var(--game-glow))] text-center mb-2">LOCAL HIGH SCORES</div>
+                <div className="text-lg font-mono text-[hsl(var(--game-glow))] text-center mb-2">
+                  {HIGH_SCORES_ENABLED ? "CLOUD LEADERBOARD" : "LOCAL HIGH SCORES"}
+                </div>
                 <div className="border border-[hsl(var(--game-foreground))] p-2">
-                  {localHighScores.map((entry, i) => (
+                  {(HIGH_SCORES_ENABLED ? leaderboard : localHighScores).slice(0, 10).map((entry, i) => (
                     <div
                       key={i}
                       className={`flex justify-between font-mono text-sm py-0.5 ${
-                        entry.score === displayScore && entry.initials === initials
+                        entry.score === displayScore && entry.initials === initials.toUpperCase()
                           ? "text-[hsl(var(--game-glow))]"
                           : "text-[hsl(var(--game-foreground))]"
                       }`}
