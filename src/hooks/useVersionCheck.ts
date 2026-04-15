@@ -1,6 +1,6 @@
 import { useEffect, useCallback } from "react";
 
-const CURRENT_VERSION = "0.3.0";
+const CURRENT_VERSION = "0.3.1";
 const VERSION_CHECK_INTERVAL = 3 * 60 * 1000; // 3 minutes
 
 export function useVersionCheck() {
