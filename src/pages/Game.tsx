@@ -461,6 +461,7 @@ const Game = () => {
   const onelinerRef = useRef<{ author: string; message: string; flag: string }[] | null>(null);
   const lastOnelinerTimeRef = useRef<string>("");
   const olTextCacheRef = useRef<{ text: string; totalWidth: number } | null>(null);
+  const nowPlayingTextCacheRef = useRef<{ text: string; width: number } | null>(null);
   const nowPlayingMarqueeXRef = useRef<number>(CANVAS_WIDTH);
   const onelinerMarqueeXRef = useRef<number>(CANVAS_WIDTH);
 
@@ -4359,7 +4360,16 @@ const Game = () => {
       ctx.save();
       ctx.font = "13px 'Press Start 2P', monospace";
       const npText = `* ${np.artist} -- ${np.title}   `;
-      const npTextWidth = ctx.measureText(npText).width;
+
+      // Measure width only when the text changes
+      let npTextWidth: number;
+      if (nowPlayingTextCacheRef.current?.text === npText) {
+        npTextWidth = nowPlayingTextCacheRef.current.width;
+      } else {
+        npTextWidth = ctx.measureText(npText).width;
+        nowPlayingTextCacheRef.current = { text: npText, width: npTextWidth };
+      }
+
       // Advance marquee position
       nowPlayingMarqueeXRef.current -= MARQUEE_SPEED;
       if (nowPlayingMarqueeXRef.current < -npTextWidth) {
