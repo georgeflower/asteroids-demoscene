@@ -15,7 +15,7 @@ import ControlSettings from "@/components/ControlSettings";
 import { loadBindings, displayKeyName, type ControlBindings } from "@/hooks/useControlSettings";
 import type { DuelNetState, CoopNetState, SessionMode } from "@/types/multiplayer";
 import { DEBUG_ENABLED, DEBUG_CATEGORIES, type DebugCategory, type DebugLogEntry } from "@/constants/debug";
-import { SPAWN_INVULNERABILITY_FRAMES, SHIELD_DURATION, RAPID_FIRE_DURATION, MULTIPLIER_DURATION, POWERUP_DROP_RATE_SOLO, DEFAULT_TURN_SPEED, BULLET_LIFETIME, BOSS_TYPES, BOSS_NAMES, HIGH_SCORES_ENABLED } from "@/constants/gameConstants";
+import { SPAWN_INVULNERABILITY_FRAMES, SHIELD_DURATION, RAPID_FIRE_DURATION, MULTIPLIER_DURATION, POWERUP_DROP_RATE_SOLO, DEFAULT_TURN_SPEED, BULLET_LIFETIME, BOSS_TYPES, BOSS_NAMES, HIGH_SCORES_ENABLED, MIN_SCORE_FOR_INITIALS } from "@/constants/gameConstants";
 import { readGamepad as readGamepadUtil } from "@/hooks/useInput";
 
 interface Vector {
@@ -376,13 +376,21 @@ const Game = () => {
   const lastShotRef = useRef(0);
   const lastShotP2Ref = useRef(0);
   const enteringInitialsRef = useRef(false);
+  const submissionGenerationRef = useRef(0);
   const [displayScore, setDisplayScore] = useState(0);
   const [displayLives, setDisplayLives] = useState(3);
   const [displayWave, setDisplayWave] = useState(1);
   const [showGameOver, setShowGameOver] = useState(false);
   const [showLeaderboard, setShowLeaderboard] = useState(false);
   const [enteringInitials, setEnteringInitials] = useState(false);
-  const [initials, setInitials] = useState("");
+  const [initials, setInitials] = useState(() => {
+    try {
+      const stored = localStorage.getItem("playerInitials");
+      return stored ? stored.toUpperCase().replace(/[^A-Z]/g, "").slice(0, 3) : "";
+    } catch {
+      return "";
+    }
+  });
   const [initialsError, setInitialsError] = useState("");
   const [submittingScore, setSubmittingScore] = useState(false);
   const [leaderboard, setLeaderboard] = useState<{ initials: string; score: number; date: string }[]>([]);
@@ -837,7 +845,6 @@ const Game = () => {
           // Handle inappropriate initials error
           if (response.status === 400 && result.error === "Please choose different initials") {
             setInitialsError(result.error);
-            setEnteringInitials(true); // Keep the initials entry form open
             return false;
           }
           // Log duplicate score detection - UI could be enhanced with toast notification
@@ -869,6 +876,7 @@ const Game = () => {
   const isLocalHighScore = useCallback(
     (score: number) => {
       if (DEBUG_ENABLED) return true;
+      if (score < MIN_SCORE_FOR_INITIALS) return false;
       return localHighScores.length < 10 || score > (localHighScores[localHighScores.length - 1]?.score ?? 0);
     },
     [localHighScores],
@@ -886,6 +894,46 @@ const Game = () => {
   const shouldPromptForInitials = useCallback(
     (score: number) => isLocalHighScore(score) || isCloudHighScore(score),
     [isLocalHighScore, isCloudHighScore],
+  );
+
+  const submitInitials = useCallback(
+    (inits: string, score: number) => {
+      const normalized = inits.toUpperCase().replace(/[^A-Z]/g, "").slice(0, 3);
+      if (normalized.length === 0) return;
+
+      // Persist remembered initials
+      localStorage.setItem("playerInitials", normalized);
+
+      // Update local leaderboard synchronously
+      const updated = [
+        ...localHighScores,
+        { initials: normalized, score, date: new Date().toISOString() },
+      ]
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 10);
+      localStorage.setItem(LOCAL_SCORES_KEY, JSON.stringify(updated));
+      setLocalHighScores(updated);
+
+      // Close form immediately
+      setEnteringInitials(false);
+      enteringInitialsRef.current = false;
+      setInitialsError("");
+
+      if (!HIGH_SCORES_ENABLED) return;
+
+      // Fire-and-forget cloud submission
+      const generation = submissionGenerationRef.current;
+      setSubmittingScore(true);
+      saveToLeaderboard(normalized, score).then((ok) => {
+        // Guard: ignore if a new run has started
+        if (submissionGenerationRef.current !== generation) return;
+        setSubmittingScore(false);
+        if (!ok) {
+          setInitialsError("Score saved locally. Cloud sync failed.");
+        }
+      });
+    },
+    [localHighScores, saveToLeaderboard],
   );
 
   useEffect(() => {
@@ -1208,12 +1256,12 @@ const Game = () => {
     };
 
     duelStateRef.current = null;
+    submissionGenerationRef.current += 1;
     setDisplayScore(0);
     setDisplayLives(3);
     setDisplayWave(1);
     setShowGameOver(false);
     setEnteringInitials(false);
-    setInitials("");
     setInitialsError("");
     setShowLeaderboard(false);
     setShowLifeLost(false);
@@ -5184,6 +5232,32 @@ const Game = () => {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [gameMode]);
 
+  // Global Enter/Space hotkeys for game-over overlay (solo mode, not when initials input focused)
+  useEffect(() => {
+    if (!showGameOver || gameMode !== "solo") return;
+    const handleGameOverKey = (e: KeyboardEvent) => {
+      if (e.key !== "Enter" && e.key !== " ") return;
+      // Do not intercept if the initials text input has focus
+      if (document.activeElement instanceof HTMLInputElement) return;
+      e.preventDefault();
+      setGameOverSelection((s) => {
+        if (s === 0) initGame();
+        else {
+          gameStateRef.current = null;
+          duelStateRef.current = null;
+          setGameMode("menu");
+          setShowGameOver(false);
+          setShowLifeLost(false);
+          showLifeLostRef.current = false;
+          soundEffects.stopThrust();
+        }
+        return s;
+      });
+    };
+    window.addEventListener("keydown", handleGameOverKey);
+    return () => window.removeEventListener("keydown", handleGameOverKey);
+  }, [showGameOver, gameMode, initGame]);
+
   const continueAfterLifeLost = useCallback(() => {
     showLifeLostRef.current = false;
     setShowLifeLost(false);
@@ -5247,7 +5321,8 @@ const Game = () => {
 
   const handleCanvasKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLCanvasElement>) => {
-      if (enteringInitialsRef.current) return;
+      // Do not intercept game controls while the initials input has focus
+      if (document.activeElement instanceof HTMLInputElement) return;
 
       // Debug panel toggle with § key
       if (DEBUG_ENABLED && (e.key === "§" || e.key === "Dead")) {
@@ -5510,25 +5585,23 @@ const Game = () => {
               setShowLifeLost(false);
             }
           } else if (showGameOver) {
-            if (!enteringInitialsRef.current && !submittingScore) {
-              if (justUp || justDown) {
-                setGameOverSelection((s) => (s === 0 ? 1 : 0));
-              }
-              if (justA) {
-                setGameOverSelection((s) => {
-                  if (s === 0) initGame();
-                  else {
-                    gameStateRef.current = null;
-                    duelStateRef.current = null;
-                    setGameMode("menu");
-                    setShowGameOver(false);
-                    setShowLifeLost(false);
-                    showLifeLostRef.current = false;
-                    soundEffects.stopThrust();
-                  }
-                  return s;
-                });
-              }
+            if (justUp || justDown) {
+              setGameOverSelection((s) => (s === 0 ? 1 : 0));
+            }
+            if (justA) {
+              setGameOverSelection((s) => {
+                if (s === 0) initGame();
+                else {
+                  gameStateRef.current = null;
+                  duelStateRef.current = null;
+                  setGameMode("menu");
+                  setShowGameOver(false);
+                  setShowLifeLost(false);
+                  showLifeLostRef.current = false;
+                  soundEffects.stopThrust();
+                }
+                return s;
+              });
             }
           } else if (isMultiplayerMode(gameModeRef.current)) {
             if (justB) {
@@ -6278,55 +6351,26 @@ const Game = () => {
                       setInitials(newInitials);
                       setInitialsError("");
                     }}
-                    onKeyDown={async (e) => {
-                      if (e.key === "Enter" && initials.length > 0 && !submittingScore) {
-                        const updated = [
-                          ...localHighScores,
-                          { initials: initials.toUpperCase(), score: displayScore, date: new Date().toISOString() },
-                        ]
-                          .sort((a, b) => b.score - a.score)
-                          .slice(0, 10);
-                        localStorage.setItem(LOCAL_SCORES_KEY, JSON.stringify(updated));
-                        setLocalHighScores(updated);
-                        if (HIGH_SCORES_ENABLED) {
-                          setSubmittingScore(true);
-                          const ok = await saveToLeaderboard(initials, displayScore);
-                          setSubmittingScore(false);
-                          if (!ok) return; // keep form open on error
-                        }
-                        setEnteringInitials(false);
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && initials.length > 0) {
+                        submitInitials(initials, displayScore);
                       }
                       e.stopPropagation();
                     }}
-                    autoFocus
-                    disabled={submittingScore}
+                    {...(initials.length === 0 ? { autoFocus: true } : {})}
                     className="w-20 text-center text-2xl font-mono bg-transparent border-2 border-[hsl(var(--game-foreground))] text-[hsl(var(--game-foreground))] p-1 uppercase tracking-widest"
                     placeholder="___"
                   />
                   <Button
-                    onClick={async () => {
-                      if (initials.length > 0 && !submittingScore) {
-                        const updated = [
-                          ...localHighScores,
-                          { initials: initials.toUpperCase(), score: displayScore, date: new Date().toISOString() },
-                        ]
-                          .sort((a, b) => b.score - a.score)
-                          .slice(0, 10);
-                        localStorage.setItem(LOCAL_SCORES_KEY, JSON.stringify(updated));
-                        setLocalHighScores(updated);
-                        if (HIGH_SCORES_ENABLED) {
-                          setSubmittingScore(true);
-                          const ok = await saveToLeaderboard(initials, displayScore);
-                          setSubmittingScore(false);
-                          if (!ok) return;
-                        }
-                        setEnteringInitials(false);
+                    onClick={() => {
+                      if (initials.length > 0) {
+                        submitInitials(initials, displayScore);
                       }
                     }}
-                    disabled={initials.length === 0 || !!initialsError || submittingScore}
+                    disabled={initials.length === 0 || !!initialsError}
                     className="bg-[hsl(var(--game-foreground))] text-[hsl(var(--game-background))] hover:bg-[hsl(var(--game-glow))] font-mono disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    {submittingScore ? "SUBMITTING..." : "OK"}
+                    OK
                   </Button>
                 </div>
               </div>
@@ -6361,28 +6405,24 @@ const Game = () => {
             <div className="flex gap-4">
               <Button
                 onClick={initGame}
-                disabled={enteringInitials || submittingScore}
                 className={`text-xl px-8 py-4 font-mono transition-all ${
-                  enteringInitials || submittingScore ? "opacity-30 cursor-not-allowed" :
                   gameOverSelection === 0
                     ? "bg-[hsl(var(--game-foreground))] text-[hsl(var(--game-background))] shadow-[0_0_15px_hsl(var(--game-foreground))]"
                     : "bg-[hsl(var(--game-foreground))]/20 text-[hsl(var(--game-foreground))] border border-[hsl(var(--game-foreground))]/40"
                 }`}
               >
-                {gameOverSelection === 0 && !enteringInitials && !submittingScore ? "▸ " : ""}PLAY AGAIN
+                {gameOverSelection === 0 ? "▸ " : ""}PLAY AGAIN
               </Button>
               <Button
                 onClick={quitToMenu}
-                disabled={enteringInitials || submittingScore}
                 variant="outline"
                 className={`font-mono transition-all ${
-                  enteringInitials || submittingScore ? "opacity-30 cursor-not-allowed" :
                   gameOverSelection === 1
                     ? "border-[hsl(var(--game-foreground))] text-[hsl(var(--game-foreground))] bg-[hsl(var(--game-foreground))]/20 shadow-[0_0_15px_hsl(var(--game-foreground))]"
                     : "border-[hsl(var(--game-foreground))]/40 text-[hsl(var(--game-foreground))]/60"
                 }`}
               >
-                {gameOverSelection === 1 && !enteringInitials && !submittingScore ? "▸ " : ""}MENU
+                {gameOverSelection === 1 ? "▸ " : ""}MENU
               </Button>
             </div>
           </div>

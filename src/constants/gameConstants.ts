@@ -30,6 +30,9 @@ export const DEFAULT_TURN_SPEED = 0.05;
 /** Boss types in wave-cycle order (wave 5 → index 0, wave 10 → index 1, etc.). */
 export const BOSS_TYPES = ["amigaBall", "flyingSaucer", "tentacle", "borgCube"] as const;
 
+/** Minimum score required to qualify for the local high-score prompt. */
+export const MIN_SCORE_FOR_INITIALS = 1000;
+
 /** Human-readable names for each boss type. */
 export const BOSS_NAMES: Record<string, string> = {
   tentacle: "BOSS",
