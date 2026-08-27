@@ -19,7 +19,17 @@ class SoundEffects {
       }
       this.audioContext = new AudioContextClass();
     }
+    if (this.audioContext.state === "suspended") {
+      void this.audioContext.resume();
+    }
     return this.audioContext;
+  }
+
+  /** Resume an existing suspended context. Does NOT create one. */
+  resumeIfSuspended() {
+    if (this.audioContext && this.audioContext.state === "suspended") {
+      void this.audioContext.resume();
+    }
   }
 
   // Shooting sound - short laser beep

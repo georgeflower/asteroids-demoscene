@@ -5399,6 +5399,35 @@ const Game = () => {
     };
   }, [gameLoop]);
 
+  // Blur / visibility handling: clear held keys, stop thrust audio, auto-pause local modes
+  useEffect(() => {
+    const handleBlurOrHide = () => {
+      keysRef.current = {};
+      soundEffects.stopThrust();
+      prevCoopThrustRef.current = false;
+      prevCoopFireRef.current = false;
+      prevCoopHyperspaceRef.current = false;
+      const m = gameModeRef.current;
+      if (m === "solo" || m === "duel" || m === "coop") {
+        isPausedRef.current = true;
+        setIsPaused(true);
+      }
+    };
+    const handleVisibility = () => {
+      if (document.hidden) {
+        handleBlurOrHide();
+      } else {
+        soundEffects.resumeIfSuspended();
+      }
+    };
+    window.addEventListener("blur", handleBlurOrHide);
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => {
+      window.removeEventListener("blur", handleBlurOrHide);
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
+  }, []);
+
   // Gamepad polling for menus and overlays
   useEffect(() => {
     let rafId: number;
@@ -6809,7 +6838,7 @@ const Game = () => {
         )}
       </div>
 
-      {isTouchDevice && (gameMode === "solo" || gameMode === "online_coop") && (
+      {isTouchDevice && (gameMode === "solo" || gameMode === "online_coop" || gameMode === "online") && (
         <div
           className="mt-4 w-full max-w-[800px] select-none"
           style={{ touchAction: "none", userSelect: "none", WebkitUserSelect: "none" }}
