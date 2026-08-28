@@ -3316,9 +3316,12 @@ const Game = () => {
           alien.hp--;
           if (alien.hp <= 0) {
             killedAliens.add(alien);
+            bumpChain(state);
             const ptsMap: Record<string, number> = { brown: 300, greenMan: 500, blueSentinel: 600, purpleSwarm: 100 };
-            const pts = (ptsMap[alien.type] ?? 300) * multiplier;
+            const pts = Math.round((ptsMap[alien.type] ?? 300) * multiplier);
+            const prevScore = state.score;
             state.score += pts;
+            awardExtraLives(state, prevScore);
             setDisplayScore(state.score);
             soundEffects.explode();
             const colorMap: Record<string, string> = { brown: "#AA6633", greenMan: "#44FF44", blueSentinel: "#4488FF", purpleSwarm: "#AA44FF" };
