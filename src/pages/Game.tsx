@@ -2059,6 +2059,27 @@ const Game = () => {
     return dx * dx + dy * dy < r * r;
   };
 
+  // Award one extra life per EXTRA_LIFE_INTERVAL threshold crossed (solo only)
+  const awardExtraLives = useCallback((state: GameState, prevScore: number) => {
+    let threshold = (Math.floor(prevScore / EXTRA_LIFE_INTERVAL) + 1) * EXTRA_LIFE_INTERVAL;
+    while (state.score >= threshold) {
+      state.lives++;
+      setDisplayLives(state.lives);
+      spawnFloatingText(state.ship.pos, "EXTRA LIFE!", "#CC66FF", 22);
+      soundEffects.powerUp();
+      threshold += EXTRA_LIFE_INTERVAL;
+    }
+  }, []);
+
+  // Register a scoring kill on the chain combo (solo only)
+  const bumpChain = useCallback((state: GameState) => {
+    state.chain++;
+    state.chainTimer = CHAIN_WINDOW;
+    state.bestChain = Math.max(state.bestChain, state.chain);
+  }, []);
+
+
+
   const loseLife = useCallback(
     (state: GameState) => {
       // Trainer mode: prevent death
