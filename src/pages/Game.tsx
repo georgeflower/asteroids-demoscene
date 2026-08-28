@@ -3250,7 +3250,9 @@ const Game = () => {
     const killedAsteroids = new Set<Asteroid>();
     const killedUFOs = new Set<typeof state.ufos[number]>();
     const killedAliens = new Set<Alien>();
-    const multiplier = state.powerUpActive.multiplier > 0 ? 2 : 1;
+    const powerUpMult = state.powerUpActive.multiplier > 0 ? 2 : 1;
+    const chainMult = Math.min(1 + state.chain * CHAIN_STEP, CHAIN_MAX);
+    const multiplier = powerUpMult * chainMult;
 
     state.bullets = state.bullets.filter((bullet) => {
       if (bullet.isUFO || bullet.isAlien) return true;
