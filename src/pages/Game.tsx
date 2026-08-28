@@ -3261,18 +3261,16 @@ const Game = () => {
         const radius = asteroid.size === "large" ? 40 : asteroid.size === "medium" ? 25 : 12;
         if (checkCollision(bullet.pos, 2, asteroid.pos, radius)) {
           killedAsteroids.add(asteroid);
-          const pts = ASTEROID_POINTS[asteroid.size] * multiplier;
+          bumpChain(state);
+          const pts = Math.round(ASTEROID_POINTS[asteroid.size] * multiplier);
+          const prevScore = state.score;
           state.score += pts;
+          awardExtraLives(state, prevScore);
           setDisplayScore(state.score);
           gameStatsRef.current.asteroidsDestroyed++;
           const aColor = theme.asteroids[asteroid.size === "large" ? 0 : asteroid.size === "medium" ? 1 : 2];
           spawnFloatingText(asteroid.pos, `+${pts}`, aColor, 14);
           spawnExplosion(asteroid.pos, aColor, asteroid.size === "large" ? 15 : asteroid.size === "medium" ? 10 : 6);
-          if (Math.floor((state.score - pts) / 10000) < Math.floor(state.score / 10000)) {
-            state.lives++;
-            setDisplayLives(state.lives);
-            spawnFloatingText(state.ship.pos, "EXTRA LIFE!", "#CC66FF", 22);
-          }
           if (asteroid.size === "large") {
             newAsteroids.push(createAsteroid(asteroid.pos.x, asteroid.pos.y, "medium", state.wave));
             newAsteroids.push(createAsteroid(asteroid.pos.x, asteroid.pos.y, "medium", state.wave));
