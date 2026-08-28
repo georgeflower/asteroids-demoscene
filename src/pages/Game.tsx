@@ -3155,8 +3155,15 @@ const Game = () => {
             alive = false;
             ms.hp--;
             if (ms.hp <= 0) {
-              const pts = 200 * (state.powerUpActive.multiplier > 0 ? 2 : 1);
+              bumpChain(state);
+              const pts = Math.round(
+                200 *
+                  (state.powerUpActive.multiplier > 0 ? 2 : 1) *
+                  Math.min(1 + state.chain * CHAIN_STEP, CHAIN_MAX),
+              );
+              const prevScore = state.score;
               state.score += pts;
+              awardExtraLives(state, prevScore);
               setDisplayScore(state.score);
               spawnFloatingText(ms.pos, `+${pts}`, "#88FFAA", 14);
               spawnExplosion(ms.pos, "#88FFAA", 8);
