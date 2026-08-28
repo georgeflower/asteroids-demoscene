@@ -2098,6 +2098,8 @@ const Game = () => {
       );
       spawnExplosion(state.ship.pos, "#FFFFFF", 20);
       state.lives--;
+      state.chain = 0;
+      state.chainTimer = 0;
       setDisplayLives(state.lives);
       state.ship = createShip();
       soundEffects.explode();
@@ -2107,6 +2109,7 @@ const Game = () => {
       if (state.lives <= 0) {
         state.gameOver = true;
         stopHeartbeatInterval();
+        buildRunSummary(state);
         setShowGameOver(true);
         // Offer initials entry for either local or cloud leaderboard qualification (skip in trainer mode)
         if (!(DEBUG_ENABLED && trainerModeRef.current) && shouldPromptForInitials(state.score)) {
