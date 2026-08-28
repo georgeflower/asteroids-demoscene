@@ -5610,22 +5610,22 @@ const Game = () => {
             }
           } else if (showGameOver) {
             if (justUp || justDown) {
-              setGameOverSelection((s) => (s === 0 ? 1 : 0));
+              const next = gameOverSelectionRef.current === 0 ? 1 : 0;
+              gameOverSelectionRef.current = next;
+              setGameOverSelection(next);
             }
             if (justA) {
-              setGameOverSelection((s) => {
-                if (s === 0) initGame();
-                else {
-                  gameStateRef.current = null;
-                  duelStateRef.current = null;
-                  setGameMode("menu");
-                  setShowGameOver(false);
-                  setShowLifeLost(false);
-                  showLifeLostRef.current = false;
-                  soundEffects.stopThrust();
-                }
-                return s;
-              });
+              if (gameOverSelectionRef.current === 0) {
+                initGame();
+              } else {
+                gameStateRef.current = null;
+                duelStateRef.current = null;
+                setGameMode("menu");
+                setShowGameOver(false);
+                setShowLifeLost(false);
+                showLifeLostRef.current = false;
+                soundEffects.stopThrust();
+              }
             }
           } else if (isMultiplayerMode(gameModeRef.current)) {
             if (justB) {
