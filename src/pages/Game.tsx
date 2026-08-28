@@ -1256,7 +1256,12 @@ const Game = () => {
       alienSpawnTimer: 600,
       bossDefeated: false,
       pendingNextWave: false,
+      chain: 0,
+      chainTimer: 0,
+      bestChain: 0,
     };
+    runStartTimeRef.current = Date.now();
+    setRunSummary(null);
 
     duelStateRef.current = null;
     submissionGenerationRef.current += 1;
