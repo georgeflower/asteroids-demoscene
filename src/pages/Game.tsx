@@ -2079,6 +2079,46 @@ const Game = () => {
   }, []);
 
 
+  // Build the post-run summary + personal-best comparison (solo only)
+  const buildRunSummary = useCallback((state: GameState) => {
+    if (gameModeRef.current !== "solo") return;
+    const fired = gameStatsRef.current.bulletsFired;
+    const accuracy = fired > 0 ? (gameStatsRef.current.asteroidsDestroyed / fired) * 100 : null;
+    const timeSurvived = Math.max(0, Math.floor((Date.now() - runStartTimeRef.current) / 1000));
+    let prevBest: {
+      score: number;
+      wave: number;
+      timeSurvived: number;
+      accuracy: number | null;
+    } | null = null;
+    try {
+      const raw = localStorage.getItem("personalBest");
+      if (raw) prevBest = JSON.parse(raw);
+    } catch {
+      prevBest = null;
+    }
+    setRunSummary({
+      score: state.score,
+      wave: state.wave,
+      timeSurvived,
+      accuracy,
+      asteroids: gameStatsRef.current.asteroidsDestroyed,
+      bestChain: state.bestChain,
+      prevBest,
+    });
+    // Update the stored PB after capturing the comparison snapshot
+    if (!prevBest || state.score > prevBest.score) {
+      try {
+        localStorage.setItem(
+          "personalBest",
+          JSON.stringify({ score: state.score, wave: state.wave, timeSurvived, accuracy }),
+        );
+      } catch {
+        /* ignore quota errors */
+      }
+    }
+  }, []);
+
 
   const loseLife = useCallback(
     (state: GameState) => {
