@@ -3227,6 +3227,12 @@ const Game = () => {
       return powerUp.lifetime > 0;
     });
 
+    // Chain combo decay
+    if (state.chainTimer > 0) {
+      state.chainTimer--;
+      if (state.chainTimer === 0) state.chain = 0;
+    }
+
     // Update power-up timers
     Object.keys(state.powerUpActive).forEach((key) => {
       const k = key as keyof typeof state.powerUpActive;
