@@ -3346,8 +3346,11 @@ const Game = () => {
           spawnExplosion(bullet.pos, "#FF88FF", 5);
           spawnFloatingText(bullet.pos, "HIT!", "#FF88FF", 14);
           if (state.boss.hp <= 0) {
-            const pts = (2000 + state.wave * 200) * multiplier;
+            bumpChain(state);
+            const pts = Math.round((2000 + state.wave * 200) * multiplier);
+            const prevScore = state.score;
             state.score += pts;
+            awardExtraLives(state, prevScore);
             setDisplayScore(state.score);
             spawnFloatingText(state.boss.pos, `+${pts}`, "#FFFF00", 24);
             spawnExplosion(state.boss.pos, "#FF44FF", 30);
