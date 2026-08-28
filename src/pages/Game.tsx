@@ -218,6 +218,9 @@ interface GameState {
   alienSpawnTimer: number;
   bossDefeated: boolean;
   pendingNextWave: boolean;
+  chain: number;
+  chainTimer: number;
+  bestChain: number;
 }
 
 interface DuelState {
