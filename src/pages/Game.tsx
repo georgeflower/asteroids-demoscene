@@ -446,6 +446,18 @@ const Game = () => {
   const coopGenerationRef = useRef(0);
   const [menuSelection, setMenuSelection] = useState(0); // 0=solo, 1=duel, 2=coop, 3=online, 4=settings
   const [gameOverSelection, setGameOverSelection] = useState(0); // 0=play again, 1=menu
+  const gameOverSelectionRef = useRef(0);
+  const runStartTimeRef = useRef<number>(Date.now());
+  const chainTextCacheRef = useRef<{ text: string; width: number } | null>(null);
+  const [runSummary, setRunSummary] = useState<{
+    score: number;
+    wave: number;
+    timeSurvived: number;
+    accuracy: number | null;
+    asteroids: number;
+    bestChain: number;
+    prevBest: { score: number; wave: number; timeSurvived: number; accuracy: number | null } | null;
+  } | null>(null);
   const [isPaused, setIsPaused] = useState(false);
   const isPausedRef = useRef(false);
   const [pauseSelection, setPauseSelection] = useState(0); // 0=resume, 1=quit
