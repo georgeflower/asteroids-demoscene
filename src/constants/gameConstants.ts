@@ -40,3 +40,15 @@ export const BOSS_NAMES: Record<string, string> = {
   flyingSaucer: "FLYING SAUCER",
   borgCube: "BORG CUBE",
 };
+
+/** Chain combo window in frames (~2s at 60 Hz). */
+export const CHAIN_WINDOW = 120;
+
+/** Score bonus added per chain link (+10%). */
+export const CHAIN_STEP = 0.1;
+
+/** Maximum chain multiplier factor. */
+export const CHAIN_MAX = 5;
+
+/** Score interval that awards an extra life. */
+export const EXTRA_LIFE_INTERVAL = 10000;

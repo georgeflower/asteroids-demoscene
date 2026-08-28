@@ -15,7 +15,7 @@ import ControlSettings from "@/components/ControlSettings";
 import { loadBindings, displayKeyName, type ControlBindings } from "@/hooks/useControlSettings";
 import type { DuelNetState, CoopNetState, SessionMode } from "@/types/multiplayer";
 import { DEBUG_ENABLED, DEBUG_CATEGORIES, type DebugCategory, type DebugLogEntry } from "@/constants/debug";
-import { SPAWN_INVULNERABILITY_FRAMES, SHIELD_DURATION, RAPID_FIRE_DURATION, MULTIPLIER_DURATION, POWERUP_DROP_RATE_SOLO, DEFAULT_TURN_SPEED, BULLET_LIFETIME, BOSS_TYPES, BOSS_NAMES, HIGH_SCORES_ENABLED, MIN_SCORE_FOR_INITIALS } from "@/constants/gameConstants";
+import { SPAWN_INVULNERABILITY_FRAMES, SHIELD_DURATION, RAPID_FIRE_DURATION, MULTIPLIER_DURATION, POWERUP_DROP_RATE_SOLO, DEFAULT_TURN_SPEED, BULLET_LIFETIME, BOSS_TYPES, BOSS_NAMES, HIGH_SCORES_ENABLED, MIN_SCORE_FOR_INITIALS, CHAIN_WINDOW, CHAIN_STEP, CHAIN_MAX, EXTRA_LIFE_INTERVAL } from "@/constants/gameConstants";
 import { readGamepad as readGamepadUtil } from "@/hooks/useInput";
 
 interface Vector {
@@ -218,6 +218,9 @@ interface GameState {
   alienSpawnTimer: number;
   bossDefeated: boolean;
   pendingNextWave: boolean;
+  chain: number;
+  chainTimer: number;
+  bestChain: number;
 }
 
 interface DuelState {
@@ -443,6 +446,18 @@ const Game = () => {
   const coopGenerationRef = useRef(0);
   const [menuSelection, setMenuSelection] = useState(0); // 0=solo, 1=duel, 2=coop, 3=online, 4=settings
   const [gameOverSelection, setGameOverSelection] = useState(0); // 0=play again, 1=menu
+  const gameOverSelectionRef = useRef(0);
+  const runStartTimeRef = useRef<number>(Date.now());
+  const chainTextCacheRef = useRef<{ text: string; width: number } | null>(null);
+  const [runSummary, setRunSummary] = useState<{
+    score: number;
+    wave: number;
+    timeSurvived: number;
+    accuracy: number | null;
+    asteroids: number;
+    bestChain: number;
+    prevBest: { score: number; wave: number; timeSurvived: number; accuracy: number | null } | null;
+  } | null>(null);
   const [isPaused, setIsPaused] = useState(false);
   const isPausedRef = useRef(false);
   const [pauseSelection, setPauseSelection] = useState(0); // 0=resume, 1=quit
@@ -1253,7 +1268,12 @@ const Game = () => {
       alienSpawnTimer: 600,
       bossDefeated: false,
       pendingNextWave: false,
+      chain: 0,
+      chainTimer: 0,
+      bestChain: 0,
     };
+    runStartTimeRef.current = Date.now();
+    setRunSummary(null);
 
     duelStateRef.current = null;
     submissionGenerationRef.current += 1;
@@ -2039,6 +2059,67 @@ const Game = () => {
     return dx * dx + dy * dy < r * r;
   };
 
+  // Award one extra life per EXTRA_LIFE_INTERVAL threshold crossed (solo only)
+  const awardExtraLives = useCallback((state: GameState, prevScore: number) => {
+    let threshold = (Math.floor(prevScore / EXTRA_LIFE_INTERVAL) + 1) * EXTRA_LIFE_INTERVAL;
+    while (state.score >= threshold) {
+      state.lives++;
+      setDisplayLives(state.lives);
+      spawnFloatingText(state.ship.pos, "EXTRA LIFE!", "#CC66FF", 22);
+      soundEffects.powerUp();
+      threshold += EXTRA_LIFE_INTERVAL;
+    }
+  }, []);
+
+  // Register a scoring kill on the chain combo (solo only)
+  const bumpChain = useCallback((state: GameState) => {
+    state.chain++;
+    state.chainTimer = CHAIN_WINDOW;
+    state.bestChain = Math.max(state.bestChain, state.chain);
+  }, []);
+
+
+  // Build the post-run summary + personal-best comparison (solo only)
+  const buildRunSummary = useCallback((state: GameState) => {
+    if (gameModeRef.current !== "solo") return;
+    const fired = gameStatsRef.current.bulletsFired;
+    const accuracy = fired > 0 ? (gameStatsRef.current.asteroidsDestroyed / fired) * 100 : null;
+    const timeSurvived = Math.max(0, Math.floor((Date.now() - runStartTimeRef.current) / 1000));
+    let prevBest: {
+      score: number;
+      wave: number;
+      timeSurvived: number;
+      accuracy: number | null;
+    } | null = null;
+    try {
+      const raw = localStorage.getItem("personalBest");
+      if (raw) prevBest = JSON.parse(raw);
+    } catch {
+      prevBest = null;
+    }
+    setRunSummary({
+      score: state.score,
+      wave: state.wave,
+      timeSurvived,
+      accuracy,
+      asteroids: gameStatsRef.current.asteroidsDestroyed,
+      bestChain: state.bestChain,
+      prevBest,
+    });
+    // Update the stored PB after capturing the comparison snapshot
+    if (!prevBest || state.score > prevBest.score) {
+      try {
+        localStorage.setItem(
+          "personalBest",
+          JSON.stringify({ score: state.score, wave: state.wave, timeSurvived, accuracy }),
+        );
+      } catch {
+        /* ignore quota errors */
+      }
+    }
+  }, []);
+
+
   const loseLife = useCallback(
     (state: GameState) => {
       // Trainer mode: prevent death
@@ -2057,6 +2138,8 @@ const Game = () => {
       );
       spawnExplosion(state.ship.pos, "#FFFFFF", 20);
       state.lives--;
+      state.chain = 0;
+      state.chainTimer = 0;
       setDisplayLives(state.lives);
       state.ship = createShip();
       soundEffects.explode();
@@ -2066,6 +2149,7 @@ const Game = () => {
       if (state.lives <= 0) {
         state.gameOver = true;
         stopHeartbeatInterval();
+        buildRunSummary(state);
         setShowGameOver(true);
         // Offer initials entry for either local or cloud leaderboard qualification (skip in trainer mode)
         if (!(DEBUG_ENABLED && trainerModeRef.current) && shouldPromptForInitials(state.score)) {
@@ -2080,7 +2164,7 @@ const Game = () => {
         setShowLifeLost(true);
       }
     },
-    [shouldPromptForInitials, loadLeaderboard, addDebugLog, stopHeartbeatInterval],
+    [shouldPromptForInitials, loadLeaderboard, addDebugLog, stopHeartbeatInterval, buildRunSummary],
   );
 
   const shootBullet = useCallback(() => {
@@ -3087,7 +3171,11 @@ const Game = () => {
           if (hitIdx >= 0) {
             state.bullets.splice(hitIdx, 1);
             spawnExplosion(mc.pos, "#00FF44", 4);
-            state.score += 25;
+            bumpChain(state);
+            const pts = Math.round(25 * Math.min(1 + state.chain * CHAIN_STEP, CHAIN_MAX));
+            const prevScore = state.score;
+            state.score += pts;
+            awardExtraLives(state, prevScore);
             return false;
           }
           return true;
@@ -3114,8 +3202,15 @@ const Game = () => {
             alive = false;
             ms.hp--;
             if (ms.hp <= 0) {
-              const pts = 200 * (state.powerUpActive.multiplier > 0 ? 2 : 1);
+              bumpChain(state);
+              const pts = Math.round(
+                200 *
+                  (state.powerUpActive.multiplier > 0 ? 2 : 1) *
+                  Math.min(1 + state.chain * CHAIN_STEP, CHAIN_MAX),
+              );
+              const prevScore = state.score;
               state.score += pts;
+              awardExtraLives(state, prevScore);
               setDisplayScore(state.score);
               spawnFloatingText(ms.pos, `+${pts}`, "#88FFAA", 14);
               spawnExplosion(ms.pos, "#88FFAA", 8);
@@ -3175,6 +3270,12 @@ const Game = () => {
       return powerUp.lifetime > 0;
     });
 
+    // Chain combo decay
+    if (state.chainTimer > 0) {
+      state.chainTimer--;
+      if (state.chainTimer === 0) state.chain = 0;
+    }
+
     // Update power-up timers
     Object.keys(state.powerUpActive).forEach((key) => {
       const k = key as keyof typeof state.powerUpActive;
@@ -3209,7 +3310,9 @@ const Game = () => {
     const killedAsteroids = new Set<Asteroid>();
     const killedUFOs = new Set<typeof state.ufos[number]>();
     const killedAliens = new Set<Alien>();
-    const multiplier = state.powerUpActive.multiplier > 0 ? 2 : 1;
+    const powerUpMult = state.powerUpActive.multiplier > 0 ? 2 : 1;
+    const chainMult = Math.min(1 + state.chain * CHAIN_STEP, CHAIN_MAX);
+    const multiplier = powerUpMult * chainMult;
 
     state.bullets = state.bullets.filter((bullet) => {
       if (bullet.isUFO || bullet.isAlien) return true;
@@ -3220,18 +3323,16 @@ const Game = () => {
         const radius = asteroid.size === "large" ? 40 : asteroid.size === "medium" ? 25 : 12;
         if (checkCollision(bullet.pos, 2, asteroid.pos, radius)) {
           killedAsteroids.add(asteroid);
-          const pts = ASTEROID_POINTS[asteroid.size] * multiplier;
+          bumpChain(state);
+          const pts = Math.round(ASTEROID_POINTS[asteroid.size] * multiplier);
+          const prevScore = state.score;
           state.score += pts;
+          awardExtraLives(state, prevScore);
           setDisplayScore(state.score);
           gameStatsRef.current.asteroidsDestroyed++;
           const aColor = theme.asteroids[asteroid.size === "large" ? 0 : asteroid.size === "medium" ? 1 : 2];
           spawnFloatingText(asteroid.pos, `+${pts}`, aColor, 14);
           spawnExplosion(asteroid.pos, aColor, asteroid.size === "large" ? 15 : asteroid.size === "medium" ? 10 : 6);
-          if (Math.floor((state.score - pts) / 10000) < Math.floor(state.score / 10000)) {
-            state.lives++;
-            setDisplayLives(state.lives);
-            spawnFloatingText(state.ship.pos, "EXTRA LIFE!", "#CC66FF", 22);
-          }
           if (asteroid.size === "large") {
             newAsteroids.push(createAsteroid(asteroid.pos.x, asteroid.pos.y, "medium", state.wave));
             newAsteroids.push(createAsteroid(asteroid.pos.x, asteroid.pos.y, "medium", state.wave));
@@ -3255,8 +3356,11 @@ const Game = () => {
         const radius = ufo.size === "large" ? 20 : 10;
         if (checkCollision(bullet.pos, 2, ufo.pos, radius)) {
           killedUFOs.add(ufo);
-          const pts = UFO_POINTS[ufo.size] * multiplier;
+          bumpChain(state);
+          const pts = Math.round(UFO_POINTS[ufo.size] * multiplier);
+          const prevScore = state.score;
           state.score += pts;
+          awardExtraLives(state, prevScore);
           setDisplayScore(state.score);
           soundEffects.explode();
           spawnFloatingText(ufo.pos, `+${pts}`, "#FFFF66", 18);
@@ -3275,9 +3379,12 @@ const Game = () => {
           alien.hp--;
           if (alien.hp <= 0) {
             killedAliens.add(alien);
+            bumpChain(state);
             const ptsMap: Record<string, number> = { brown: 300, greenMan: 500, blueSentinel: 600, purpleSwarm: 100 };
-            const pts = (ptsMap[alien.type] ?? 300) * multiplier;
+            const pts = Math.round((ptsMap[alien.type] ?? 300) * multiplier);
+            const prevScore = state.score;
             state.score += pts;
+            awardExtraLives(state, prevScore);
             setDisplayScore(state.score);
             soundEffects.explode();
             const colorMap: Record<string, string> = { brown: "#AA6633", greenMan: "#44FF44", blueSentinel: "#4488FF", purpleSwarm: "#AA44FF" };
@@ -3305,8 +3412,11 @@ const Game = () => {
           spawnExplosion(bullet.pos, "#FF88FF", 5);
           spawnFloatingText(bullet.pos, "HIT!", "#FF88FF", 14);
           if (state.boss.hp <= 0) {
-            const pts = (2000 + state.wave * 200) * multiplier;
+            bumpChain(state);
+            const pts = Math.round((2000 + state.wave * 200) * multiplier);
+            const prevScore = state.score;
             state.score += pts;
+            awardExtraLives(state, prevScore);
             setDisplayScore(state.score);
             spawnFloatingText(state.boss.pos, `+${pts}`, "#FFFF00", 24);
             spawnExplosion(state.boss.pos, "#FF44FF", 30);
@@ -5232,27 +5342,31 @@ const Game = () => {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [gameMode]);
 
-  // Global Enter/Space hotkeys for game-over overlay (solo mode, not when initials input focused)
+  // Keep the game-over selection ref in sync with state (for side-effect-free reads)
   useEffect(() => {
-    if (!showGameOver || gameMode !== "solo") return;
+    gameOverSelectionRef.current = gameOverSelection;
+  }, [gameOverSelection]);
+
+  // Global Enter/Space hotkeys for game-over overlay (local modes, not when initials input focused)
+  useEffect(() => {
+    if (!showGameOver) return;
+    if (gameMode === "online" || gameMode === "online_coop") return;
     const handleGameOverKey = (e: KeyboardEvent) => {
       if (e.key !== "Enter" && e.key !== " ") return;
       // Do not intercept if the initials text input has focus
       if (document.activeElement instanceof HTMLInputElement) return;
       e.preventDefault();
-      setGameOverSelection((s) => {
-        if (s === 0) initGame();
-        else {
-          gameStateRef.current = null;
-          duelStateRef.current = null;
-          setGameMode("menu");
-          setShowGameOver(false);
-          setShowLifeLost(false);
-          showLifeLostRef.current = false;
-          soundEffects.stopThrust();
-        }
-        return s;
-      });
+      if (gameOverSelectionRef.current === 0) {
+        initGame();
+      } else {
+        gameStateRef.current = null;
+        duelStateRef.current = null;
+        setGameMode("menu");
+        setShowGameOver(false);
+        setShowLifeLost(false);
+        showLifeLostRef.current = false;
+        soundEffects.stopThrust();
+      }
     };
     window.addEventListener("keydown", handleGameOverKey);
     return () => window.removeEventListener("keydown", handleGameOverKey);
@@ -5586,22 +5700,22 @@ const Game = () => {
             }
           } else if (showGameOver) {
             if (justUp || justDown) {
-              setGameOverSelection((s) => (s === 0 ? 1 : 0));
+              const next = gameOverSelectionRef.current === 0 ? 1 : 0;
+              gameOverSelectionRef.current = next;
+              setGameOverSelection(next);
             }
             if (justA) {
-              setGameOverSelection((s) => {
-                if (s === 0) initGame();
-                else {
-                  gameStateRef.current = null;
-                  duelStateRef.current = null;
-                  setGameMode("menu");
-                  setShowGameOver(false);
-                  setShowLifeLost(false);
-                  showLifeLostRef.current = false;
-                  soundEffects.stopThrust();
-                }
-                return s;
-              });
+              if (gameOverSelectionRef.current === 0) {
+                initGame();
+              } else {
+                gameStateRef.current = null;
+                duelStateRef.current = null;
+                setGameMode("menu");
+                setShowGameOver(false);
+                setShowLifeLost(false);
+                showLifeLostRef.current = false;
+                soundEffects.stopThrust();
+              }
             }
           } else if (isMultiplayerMode(gameModeRef.current)) {
             if (justB) {
