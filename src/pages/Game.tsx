@@ -2164,7 +2164,7 @@ const Game = () => {
         setShowLifeLost(true);
       }
     },
-    [shouldPromptForInitials, loadLeaderboard, addDebugLog, stopHeartbeatInterval],
+    [shouldPromptForInitials, loadLeaderboard, addDebugLog, stopHeartbeatInterval, buildRunSummary],
   );
 
   const shootBullet = useCallback(() => {
