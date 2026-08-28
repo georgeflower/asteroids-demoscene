@@ -15,7 +15,7 @@ import ControlSettings from "@/components/ControlSettings";
 import { loadBindings, displayKeyName, type ControlBindings } from "@/hooks/useControlSettings";
 import type { DuelNetState, CoopNetState, SessionMode } from "@/types/multiplayer";
 import { DEBUG_ENABLED, DEBUG_CATEGORIES, type DebugCategory, type DebugLogEntry } from "@/constants/debug";
-import { SPAWN_INVULNERABILITY_FRAMES, SHIELD_DURATION, RAPID_FIRE_DURATION, MULTIPLIER_DURATION, POWERUP_DROP_RATE_SOLO, DEFAULT_TURN_SPEED, BULLET_LIFETIME, BOSS_TYPES, BOSS_NAMES, HIGH_SCORES_ENABLED, MIN_SCORE_FOR_INITIALS } from "@/constants/gameConstants";
+import { SPAWN_INVULNERABILITY_FRAMES, SHIELD_DURATION, RAPID_FIRE_DURATION, MULTIPLIER_DURATION, POWERUP_DROP_RATE_SOLO, DEFAULT_TURN_SPEED, BULLET_LIFETIME, BOSS_TYPES, BOSS_NAMES, HIGH_SCORES_ENABLED, MIN_SCORE_FOR_INITIALS, CHAIN_WINDOW, CHAIN_STEP, CHAIN_MAX, EXTRA_LIFE_INTERVAL } from "@/constants/gameConstants";
 import { readGamepad as readGamepadUtil } from "@/hooks/useInput";
 
 interface Vector {
