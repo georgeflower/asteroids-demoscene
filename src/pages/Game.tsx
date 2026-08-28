@@ -5252,27 +5252,31 @@ const Game = () => {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [gameMode]);
 
-  // Global Enter/Space hotkeys for game-over overlay (solo mode, not when initials input focused)
+  // Keep the game-over selection ref in sync with state (for side-effect-free reads)
   useEffect(() => {
-    if (!showGameOver || gameMode !== "solo") return;
+    gameOverSelectionRef.current = gameOverSelection;
+  }, [gameOverSelection]);
+
+  // Global Enter/Space hotkeys for game-over overlay (local modes, not when initials input focused)
+  useEffect(() => {
+    if (!showGameOver) return;
+    if (gameMode === "online" || gameMode === "online_coop") return;
     const handleGameOverKey = (e: KeyboardEvent) => {
       if (e.key !== "Enter" && e.key !== " ") return;
       // Do not intercept if the initials text input has focus
       if (document.activeElement instanceof HTMLInputElement) return;
       e.preventDefault();
-      setGameOverSelection((s) => {
-        if (s === 0) initGame();
-        else {
-          gameStateRef.current = null;
-          duelStateRef.current = null;
-          setGameMode("menu");
-          setShowGameOver(false);
-          setShowLifeLost(false);
-          showLifeLostRef.current = false;
-          soundEffects.stopThrust();
-        }
-        return s;
-      });
+      if (gameOverSelectionRef.current === 0) {
+        initGame();
+      } else {
+        gameStateRef.current = null;
+        duelStateRef.current = null;
+        setGameMode("menu");
+        setShowGameOver(false);
+        setShowLifeLost(false);
+        showLifeLostRef.current = false;
+        soundEffects.stopThrust();
+      }
     };
     window.addEventListener("keydown", handleGameOverKey);
     return () => window.removeEventListener("keydown", handleGameOverKey);
