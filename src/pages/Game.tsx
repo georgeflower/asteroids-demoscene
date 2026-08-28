@@ -3296,8 +3296,11 @@ const Game = () => {
         const radius = ufo.size === "large" ? 20 : 10;
         if (checkCollision(bullet.pos, 2, ufo.pos, radius)) {
           killedUFOs.add(ufo);
-          const pts = UFO_POINTS[ufo.size] * multiplier;
+          bumpChain(state);
+          const pts = Math.round(UFO_POINTS[ufo.size] * multiplier);
+          const prevScore = state.score;
           state.score += pts;
+          awardExtraLives(state, prevScore);
           setDisplayScore(state.score);
           soundEffects.explode();
           spawnFloatingText(ufo.pos, `+${pts}`, "#FFFF66", 18);
