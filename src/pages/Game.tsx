@@ -3128,7 +3128,11 @@ const Game = () => {
           if (hitIdx >= 0) {
             state.bullets.splice(hitIdx, 1);
             spawnExplosion(mc.pos, "#00FF44", 4);
-            state.score += 25;
+            bumpChain(state);
+            const pts = Math.round(25 * Math.min(1 + state.chain * CHAIN_STEP, CHAIN_MAX));
+            const prevScore = state.score;
+            state.score += pts;
+            awardExtraLives(state, prevScore);
             return false;
           }
           return true;
