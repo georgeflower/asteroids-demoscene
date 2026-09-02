@@ -4508,6 +4508,34 @@ const Game = () => {
         ctx.fillText(`TOP: ${topScoreSource[0].score.toString().padStart(8, "0")}`, CANVAS_WIDTH - 10, 38);
         ctx.restore();
       }
+
+      // Chain combo indicator (solo only)
+      if (state.chain >= 2) {
+        const chainMult = Math.min(1 + state.chain * CHAIN_STEP, CHAIN_MAX);
+        const chainText = `x${chainMult.toFixed(1)} CHAIN`;
+        ctx.save();
+        // Pulse when the chain was just extended, grow subtly with chain size
+        const pulse = state.chainTimer > CHAIN_WINDOW - 10 ? 0.2 : 0;
+        const scale = 1 + Math.min(state.chain, 30) * 0.02 + pulse;
+        ctx.font = `${Math.round(10 * scale)}px 'Press Start 2P', monospace`;
+        // Measure only when the text changes (cached like the marquees)
+        let chainWidth: number;
+        if (chainTextCacheRef.current?.text === chainText) {
+          chainWidth = chainTextCacheRef.current.width;
+        } else {
+          chainWidth = ctx.measureText(chainText).width;
+          chainTextCacheRef.current = { text: chainText, width: chainWidth };
+        }
+        const chainY = 10 + activePowerUps.length * 18 + 16;
+        ctx.globalAlpha = 0.9;
+        ctx.fillStyle = "#FFAA33";
+        ctx.textAlign = "left";
+        ctx.fillText(chainText, 10, chainY);
+        // Decay bar showing remaining chain time
+        ctx.globalAlpha = 0.6;
+        ctx.fillRect(10, chainY + 5, Math.max(0, chainWidth * (state.chainTimer / CHAIN_WINDOW)), 3);
+        ctx.restore();
+      }
     } // end of else (solo mode drawing)
 
     // Version number removed from canvas (moved to HUD)
@@ -6312,7 +6340,12 @@ const Game = () => {
           style={{ fontFamily: "'Press Start 2P', monospace", textShadow: "0 0 10px hsl(var(--game-foreground))" }}
         >
           <div>SCORE: {displayScore.toString().padStart(8, "0")}</div>
-          <div>LIVES: {displayLives}</div>
+          <div>
+            LIVES: {displayLives}{" "}
+            <span className="opacity-60 text-[7px] sm:text-[9px]">
+              NEXT 1UP: {(EXTRA_LIFE_INTERVAL - (displayScore % EXTRA_LIFE_INTERVAL)).toLocaleString()}
+            </span>
+          </div>
           <div className="flex items-center gap-2">
             <span>WAVE: {displayWave}</span>
             <span className="text-[#888888] text-[7px]" style={{ textShadow: "none" }}>
