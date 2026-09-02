@@ -4508,6 +4508,34 @@ const Game = () => {
         ctx.fillText(`TOP: ${topScoreSource[0].score.toString().padStart(8, "0")}`, CANVAS_WIDTH - 10, 38);
         ctx.restore();
       }
+
+      // Chain combo indicator (solo only)
+      if (state.chain >= 2) {
+        const chainMult = Math.min(1 + state.chain * CHAIN_STEP, CHAIN_MAX);
+        const chainText = `x${chainMult.toFixed(1)} CHAIN`;
+        ctx.save();
+        // Pulse when the chain was just extended, grow subtly with chain size
+        const pulse = state.chainTimer > CHAIN_WINDOW - 10 ? 0.2 : 0;
+        const scale = 1 + Math.min(state.chain, 30) * 0.02 + pulse;
+        ctx.font = `${Math.round(10 * scale)}px 'Press Start 2P', monospace`;
+        // Measure only when the text changes (cached like the marquees)
+        let chainWidth: number;
+        if (chainTextCacheRef.current?.text === chainText) {
+          chainWidth = chainTextCacheRef.current.width;
+        } else {
+          chainWidth = ctx.measureText(chainText).width;
+          chainTextCacheRef.current = { text: chainText, width: chainWidth };
+        }
+        const chainY = 10 + activePowerUps.length * 18 + 16;
+        ctx.globalAlpha = 0.9;
+        ctx.fillStyle = "#FFAA33";
+        ctx.textAlign = "left";
+        ctx.fillText(chainText, 10, chainY);
+        // Decay bar showing remaining chain time
+        ctx.globalAlpha = 0.6;
+        ctx.fillRect(10, chainY + 5, Math.max(0, chainWidth * (state.chainTimer / CHAIN_WINDOW)), 3);
+        ctx.restore();
+      }
     } // end of else (solo mode drawing)
 
     // Version number removed from canvas (moved to HUD)
@@ -6312,7 +6340,12 @@ const Game = () => {
           style={{ fontFamily: "'Press Start 2P', monospace", textShadow: "0 0 10px hsl(var(--game-foreground))" }}
         >
           <div>SCORE: {displayScore.toString().padStart(8, "0")}</div>
-          <div>LIVES: {displayLives}</div>
+          <div>
+            LIVES: {displayLives}{" "}
+            <span className="opacity-60 text-[7px] sm:text-[9px]">
+              NEXT 1UP: {(EXTRA_LIFE_INTERVAL - (displayScore % EXTRA_LIFE_INTERVAL)).toLocaleString()}
+            </span>
+          </div>
           <div className="flex items-center gap-2">
             <span>WAVE: {displayWave}</span>
             <span className="text-[#888888] text-[7px]" style={{ textShadow: "none" }}>
@@ -6447,6 +6480,50 @@ const Game = () => {
             <div className="text-base sm:text-2xl font-mono text-[hsl(var(--game-foreground))] mb-3 sm:mb-4">
               FINAL SCORE: {displayScore.toString().padStart(8, "0")}
             </div>
+
+            {/* Run summary (solo) */}
+            {runSummary && (
+              <div className="mb-3 font-mono text-[9px] sm:text-[10px] text-[hsl(var(--game-foreground))] border border-[hsl(var(--game-foreground))]/40 px-3 py-2 grid grid-cols-2 gap-x-6 gap-y-1">
+                <span className="opacity-70">TIME</span>
+                <span className="text-right">
+                  {Math.floor(runSummary.timeSurvived / 60)}:{(runSummary.timeSurvived % 60).toString().padStart(2, "0")}
+                </span>
+                <span className="opacity-70">WAVE</span>
+                <span className="text-right">{runSummary.wave}</span>
+                <span className="opacity-70">ACCURACY</span>
+                <span className="text-right">
+                  {runSummary.accuracy === null ? "—" : `${runSummary.accuracy.toFixed(1)}%`}
+                </span>
+                <span className="opacity-70">ASTEROIDS</span>
+                <span className="text-right">{runSummary.asteroids}</span>
+                <span className="opacity-70">BEST CHAIN</span>
+                <span className="text-right">
+                  {runSummary.bestChain > 0 ? `x${Math.min(1 + runSummary.bestChain * CHAIN_STEP, CHAIN_MAX).toFixed(1)}` : "—"}
+                </span>
+                {runSummary.prevBest && (
+                  <>
+                    <span className="opacity-70">PB</span>
+                    <span
+                      className={`text-right ${
+                        runSummary.score > runSummary.prevBest.score
+                          ? "text-[hsl(var(--game-glow))] animate-pulse"
+                          : "opacity-70"
+                      }`}
+                    >
+                      {runSummary.score > runSummary.prevBest.score
+                        ? `NEW! +${(runSummary.score - runSummary.prevBest.score).toLocaleString()}`
+                        : runSummary.prevBest.score.toLocaleString()}
+                    </span>
+                  </>
+                )}
+                {!runSummary.prevBest && (
+                  <>
+                    <span className="opacity-70">PB</span>
+                    <span className="text-right text-[hsl(var(--game-glow))] animate-pulse">FIRST RUN!</span>
+                  </>
+                )}
+              </div>
+            )}
 
             {/* High score entry */}
             {enteringInitials && (
