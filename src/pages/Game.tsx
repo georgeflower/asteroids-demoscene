@@ -6481,6 +6481,50 @@ const Game = () => {
               FINAL SCORE: {displayScore.toString().padStart(8, "0")}
             </div>
 
+            {/* Run summary (solo) */}
+            {runSummary && (
+              <div className="mb-3 font-mono text-[9px] sm:text-[10px] text-[hsl(var(--game-foreground))] border border-[hsl(var(--game-foreground))]/40 px-3 py-2 grid grid-cols-2 gap-x-6 gap-y-1">
+                <span className="opacity-70">TIME</span>
+                <span className="text-right">
+                  {Math.floor(runSummary.timeSurvived / 60)}:{(runSummary.timeSurvived % 60).toString().padStart(2, "0")}
+                </span>
+                <span className="opacity-70">WAVE</span>
+                <span className="text-right">{runSummary.wave}</span>
+                <span className="opacity-70">ACCURACY</span>
+                <span className="text-right">
+                  {runSummary.accuracy === null ? "—" : `${runSummary.accuracy.toFixed(1)}%`}
+                </span>
+                <span className="opacity-70">ASTEROIDS</span>
+                <span className="text-right">{runSummary.asteroids}</span>
+                <span className="opacity-70">BEST CHAIN</span>
+                <span className="text-right">
+                  {runSummary.bestChain > 0 ? `x${Math.min(1 + runSummary.bestChain * CHAIN_STEP, CHAIN_MAX).toFixed(1)}` : "—"}
+                </span>
+                {runSummary.prevBest && (
+                  <>
+                    <span className="opacity-70">PB</span>
+                    <span
+                      className={`text-right ${
+                        runSummary.score > runSummary.prevBest.score
+                          ? "text-[hsl(var(--game-glow))] animate-pulse"
+                          : "opacity-70"
+                      }`}
+                    >
+                      {runSummary.score > runSummary.prevBest.score
+                        ? `NEW! +${(runSummary.score - runSummary.prevBest.score).toLocaleString()}`
+                        : runSummary.prevBest.score.toLocaleString()}
+                    </span>
+                  </>
+                )}
+                {!runSummary.prevBest && (
+                  <>
+                    <span className="opacity-70">PB</span>
+                    <span className="text-right text-[hsl(var(--game-glow))] animate-pulse">FIRST RUN!</span>
+                  </>
+                )}
+              </div>
+            )}
+
             {/* High score entry */}
             {enteringInitials && (
               <div className="mb-4 flex flex-col items-center gap-2">
