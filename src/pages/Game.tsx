@@ -382,6 +382,7 @@ const Game = () => {
   const submissionGenerationRef = useRef(0);
   const [displayScore, setDisplayScore] = useState(0);
   const [displayLives, setDisplayLives] = useState(3);
+  const [displayChain, setDisplayChain] = useState(0);
   const [displayWave, setDisplayWave] = useState(1);
   const [showGameOver, setShowGameOver] = useState(false);
   const [showLeaderboard, setShowLeaderboard] = useState(false);
@@ -448,7 +449,6 @@ const Game = () => {
   const [gameOverSelection, setGameOverSelection] = useState(0); // 0=play again, 1=menu
   const gameOverSelectionRef = useRef(0);
   const runStartTimeRef = useRef<number>(Date.now());
-  const chainTextCacheRef = useRef<{ text: string; width: number } | null>(null);
   const [runSummary, setRunSummary] = useState<{
     score: number;
     wave: number;
@@ -1279,6 +1279,7 @@ const Game = () => {
     submissionGenerationRef.current += 1;
     setDisplayScore(0);
     setDisplayLives(3);
+    setDisplayChain(0);
     setDisplayWave(1);
     setShowGameOver(false);
     setEnteringInitials(false);
@@ -2076,6 +2077,12 @@ const Game = () => {
     state.chain++;
     state.chainTimer = CHAIN_WINDOW;
     state.bestChain = Math.max(state.bestChain, state.chain);
+    setDisplayChain(state.chain);
+  }, []);
+
+  const killMultiplier = useCallback((state: GameState) => {
+    const powerUpMult = state.powerUpActive.multiplier > 0 ? 2 : 1;
+    return powerUpMult * Math.min(1 + state.chain * CHAIN_STEP, CHAIN_MAX);
   }, []);
 
 
@@ -2140,6 +2147,7 @@ const Game = () => {
       state.lives--;
       state.chain = 0;
       state.chainTimer = 0;
+      setDisplayChain(0);
       setDisplayLives(state.lives);
       state.ship = createShip();
       soundEffects.explode();
@@ -3172,7 +3180,7 @@ const Game = () => {
             state.bullets.splice(hitIdx, 1);
             spawnExplosion(mc.pos, "#00FF44", 4);
             bumpChain(state);
-            const pts = Math.round(25 * Math.min(1 + state.chain * CHAIN_STEP, CHAIN_MAX));
+            const pts = Math.round(25 * killMultiplier(state));
             const prevScore = state.score;
             state.score += pts;
             awardExtraLives(state, prevScore);
@@ -3203,11 +3211,7 @@ const Game = () => {
             ms.hp--;
             if (ms.hp <= 0) {
               bumpChain(state);
-              const pts = Math.round(
-                200 *
-                  (state.powerUpActive.multiplier > 0 ? 2 : 1) *
-                  Math.min(1 + state.chain * CHAIN_STEP, CHAIN_MAX),
-              );
+              const pts = Math.round(200 * killMultiplier(state));
               const prevScore = state.score;
               state.score += pts;
               awardExtraLives(state, prevScore);
@@ -3273,7 +3277,10 @@ const Game = () => {
     // Chain combo decay
     if (state.chainTimer > 0) {
       state.chainTimer--;
-      if (state.chainTimer === 0) state.chain = 0;
+      if (state.chainTimer === 0) {
+        state.chain = 0;
+        setDisplayChain(0);
+      }
     }
 
     // Update power-up timers
@@ -3310,9 +3317,6 @@ const Game = () => {
     const killedAsteroids = new Set<Asteroid>();
     const killedUFOs = new Set<typeof state.ufos[number]>();
     const killedAliens = new Set<Alien>();
-    const powerUpMult = state.powerUpActive.multiplier > 0 ? 2 : 1;
-    const chainMult = Math.min(1 + state.chain * CHAIN_STEP, CHAIN_MAX);
-    const multiplier = powerUpMult * chainMult;
 
     state.bullets = state.bullets.filter((bullet) => {
       if (bullet.isUFO || bullet.isAlien) return true;
@@ -3324,7 +3328,7 @@ const Game = () => {
         if (checkCollision(bullet.pos, 2, asteroid.pos, radius)) {
           killedAsteroids.add(asteroid);
           bumpChain(state);
-          const pts = Math.round(ASTEROID_POINTS[asteroid.size] * multiplier);
+          const pts = Math.round(ASTEROID_POINTS[asteroid.size] * killMultiplier(state));
           const prevScore = state.score;
           state.score += pts;
           awardExtraLives(state, prevScore);
@@ -3357,7 +3361,7 @@ const Game = () => {
         if (checkCollision(bullet.pos, 2, ufo.pos, radius)) {
           killedUFOs.add(ufo);
           bumpChain(state);
-          const pts = Math.round(UFO_POINTS[ufo.size] * multiplier);
+          const pts = Math.round(UFO_POINTS[ufo.size] * killMultiplier(state));
           const prevScore = state.score;
           state.score += pts;
           awardExtraLives(state, prevScore);
@@ -3381,7 +3385,7 @@ const Game = () => {
             killedAliens.add(alien);
             bumpChain(state);
             const ptsMap: Record<string, number> = { brown: 300, greenMan: 500, blueSentinel: 600, purpleSwarm: 100 };
-            const pts = Math.round((ptsMap[alien.type] ?? 300) * multiplier);
+            const pts = Math.round((ptsMap[alien.type] ?? 300) * killMultiplier(state));
             const prevScore = state.score;
             state.score += pts;
             awardExtraLives(state, prevScore);
@@ -3413,7 +3417,7 @@ const Game = () => {
           spawnFloatingText(bullet.pos, "HIT!", "#FF88FF", 14);
           if (state.boss.hp <= 0) {
             bumpChain(state);
-            const pts = Math.round((2000 + state.wave * 200) * multiplier);
+            const pts = Math.round((2000 + state.wave * 200) * killMultiplier(state));
             const prevScore = state.score;
             state.score += pts;
             awardExtraLives(state, prevScore);
@@ -4509,33 +4513,6 @@ const Game = () => {
         ctx.restore();
       }
 
-      // Chain combo indicator (solo only)
-      if (state.chain >= 2) {
-        const chainMult = Math.min(1 + state.chain * CHAIN_STEP, CHAIN_MAX);
-        const chainText = `x${chainMult.toFixed(1)} CHAIN`;
-        ctx.save();
-        // Pulse when the chain was just extended, grow subtly with chain size
-        const pulse = state.chainTimer > CHAIN_WINDOW - 10 ? 0.2 : 0;
-        const scale = 1 + Math.min(state.chain, 30) * 0.02 + pulse;
-        ctx.font = `${Math.round(10 * scale)}px 'Press Start 2P', monospace`;
-        // Measure only when the text changes (cached like the marquees)
-        let chainWidth: number;
-        if (chainTextCacheRef.current?.text === chainText) {
-          chainWidth = chainTextCacheRef.current.width;
-        } else {
-          chainWidth = ctx.measureText(chainText).width;
-          chainTextCacheRef.current = { text: chainText, width: chainWidth };
-        }
-        const chainY = 10 + activePowerUps.length * 18 + 16;
-        ctx.globalAlpha = 0.9;
-        ctx.fillStyle = "#FFAA33";
-        ctx.textAlign = "left";
-        ctx.fillText(chainText, 10, chainY);
-        // Decay bar showing remaining chain time
-        ctx.globalAlpha = 0.6;
-        ctx.fillRect(10, chainY + 5, Math.max(0, chainWidth * (state.chainTimer / CHAIN_WINDOW)), 3);
-        ctx.restore();
-      }
     } // end of else (solo mode drawing)
 
     // Version number removed from canvas (moved to HUD)
@@ -6339,10 +6316,20 @@ const Game = () => {
           className="mb-2 sm:mb-4 flex flex-wrap gap-2 sm:gap-8 items-center text-[hsl(var(--game-foreground))] text-[8px] sm:text-xs tracking-wide justify-center"
           style={{ fontFamily: "'Press Start 2P', monospace", textShadow: "0 0 10px hsl(var(--game-foreground))" }}
         >
-          <div>SCORE: {displayScore.toString().padStart(8, "0")}</div>
-          <div>
-            LIVES: {displayLives}{" "}
-            <span className="opacity-60 text-[7px] sm:text-[9px]">
+          <div className="flex items-center gap-2">
+            <span>SCORE: {displayScore.toString().padStart(8, "0")}</span>
+            {displayChain >= 2 && (
+              <span
+                className="pointer-events-none text-[7px] sm:text-[9px] text-[hsl(var(--game-glow))] transition-transform duration-150"
+                style={{ transform: `scale(${1 + Math.min(displayChain, 10) * 0.03})` }}
+              >
+                x{displayChain} CHAIN
+              </span>
+            )}
+          </div>
+          <div className="flex flex-col items-center leading-tight">
+            <span>LIVES: {displayLives}</span>
+            <span className="pointer-events-none opacity-60 text-[7px] sm:text-[9px]">
               NEXT 1UP: {(EXTRA_LIFE_INTERVAL - (displayScore % EXTRA_LIFE_INTERVAL)).toLocaleString()}
             </span>
           </div>
@@ -6483,45 +6470,21 @@ const Game = () => {
 
             {/* Run summary (solo) */}
             {runSummary && (
-              <div className="mb-3 font-mono text-[9px] sm:text-[10px] text-[hsl(var(--game-foreground))] border border-[hsl(var(--game-foreground))]/40 px-3 py-2 grid grid-cols-2 gap-x-6 gap-y-1">
-                <span className="opacity-70">TIME</span>
-                <span className="text-right">
-                  {Math.floor(runSummary.timeSurvived / 60)}:{(runSummary.timeSurvived % 60).toString().padStart(2, "0")}
-                </span>
-                <span className="opacity-70">WAVE</span>
-                <span className="text-right">{runSummary.wave}</span>
-                <span className="opacity-70">ACCURACY</span>
-                <span className="text-right">
-                  {runSummary.accuracy === null ? "—" : `${runSummary.accuracy.toFixed(1)}%`}
-                </span>
-                <span className="opacity-70">ASTEROIDS</span>
-                <span className="text-right">{runSummary.asteroids}</span>
-                <span className="opacity-70">BEST CHAIN</span>
-                <span className="text-right">
-                  {runSummary.bestChain > 0 ? `x${Math.min(1 + runSummary.bestChain * CHAIN_STEP, CHAIN_MAX).toFixed(1)}` : "—"}
-                </span>
-                {runSummary.prevBest && (
-                  <>
-                    <span className="opacity-70">PB</span>
-                    <span
-                      className={`text-right ${
-                        runSummary.score > runSummary.prevBest.score
-                          ? "text-[hsl(var(--game-glow))] animate-pulse"
-                          : "opacity-70"
-                      }`}
-                    >
-                      {runSummary.score > runSummary.prevBest.score
-                        ? `NEW! +${(runSummary.score - runSummary.prevBest.score).toLocaleString()}`
-                        : runSummary.prevBest.score.toLocaleString()}
-                    </span>
-                  </>
-                )}
-                {!runSummary.prevBest && (
-                  <>
-                    <span className="opacity-70">PB</span>
-                    <span className="text-right text-[hsl(var(--game-glow))] animate-pulse">FIRST RUN!</span>
-                  </>
-                )}
+              <div className="mb-2 w-72 font-mono text-[8px] sm:text-[9px] text-[hsl(var(--game-foreground))] border border-[hsl(var(--game-foreground))]/40 px-3 py-2">
+                <div className="grid grid-cols-2 gap-x-5 gap-y-1">
+                  <span><span className="opacity-60">ACCURACY </span>{runSummary.accuracy === null ? "—" : `${runSummary.accuracy.toFixed(0)}%`}</span>
+                  <span><span className="opacity-60">ASTEROIDS </span>{runSummary.asteroids}</span>
+                  <span><span className="opacity-60">BEST CHAIN </span>x{runSummary.bestChain}</span>
+                  <span><span className="opacity-60">TIME </span>{Math.floor(runSummary.timeSurvived / 60)}:{(runSummary.timeSurvived % 60).toString().padStart(2, "0")}</span>
+                  <span><span className="opacity-60">WAVE </span>{runSummary.wave}</span>
+                </div>
+                <div className={`mt-2 text-center text-[9px] sm:text-[10px] ${!runSummary.prevBest || runSummary.score > runSummary.prevBest.score ? "text-[hsl(var(--game-glow))] font-bold" : "opacity-60"}`}>
+                  {!runSummary.prevBest
+                    ? "NEW PERSONAL BEST!"
+                    : runSummary.score > runSummary.prevBest.score
+                      ? `NEW PERSONAL BEST! +${(runSummary.score - runSummary.prevBest.score).toLocaleString()}`
+                      : `BEST: ${runSummary.prevBest.score.toLocaleString()} (-${(runSummary.prevBest.score - runSummary.score).toLocaleString()})`}
+                </div>
               </div>
             )}
 
@@ -6574,7 +6537,7 @@ const Game = () => {
                   {HIGH_SCORES_ENABLED ? "CLOUD LEADERBOARD" : "LOCAL HIGH SCORES"}
                 </div>
                 <div className="border border-[hsl(var(--game-foreground))] p-2">
-                  {(HIGH_SCORES_ENABLED ? leaderboard : localHighScores).slice(0, 10).map((entry, i) => (
+                  {(HIGH_SCORES_ENABLED ? leaderboard : localHighScores).slice(0, 5).map((entry, i) => (
                     <div
                       key={i}
                       className={`flex justify-between font-mono text-sm py-0.5 ${
