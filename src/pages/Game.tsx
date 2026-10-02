@@ -3525,7 +3525,7 @@ const Game = () => {
     if (noEnemies && !state.pendingNextWave) {
       nextWave();
     }
-  }, [nextWave, loseLife, shootBullet, hyperspace, addDebugLog]);
+  }, [nextWave, loseLife, shootBullet, hyperspace, addDebugLog, bumpChain, killMultiplier, awardExtraLives]);
 
   // ===== SHARED BOSS DRAW HELPER =====
   const drawBossOnCanvas = (ctx: CanvasRenderingContext2D, boss: Boss, hpBarY: number) => {
