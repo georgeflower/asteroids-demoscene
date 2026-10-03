@@ -382,7 +382,6 @@ const Game = () => {
   const submissionGenerationRef = useRef(0);
   const [displayScore, setDisplayScore] = useState(0);
   const [displayLives, setDisplayLives] = useState(3);
-  const [displayChain, setDisplayChain] = useState(0);
   const [displayWave, setDisplayWave] = useState(1);
   const [showGameOver, setShowGameOver] = useState(false);
   const [showLeaderboard, setShowLeaderboard] = useState(false);
@@ -485,6 +484,23 @@ const Game = () => {
   const lastOnelinerTimeRef = useRef<string>("");
   const olTextCacheRef = useRef<{ text: string; totalWidth: number } | null>(null);
   const nowPlayingTextCacheRef = useRef<{ text: string; width: number } | null>(null);
+  const chainTextCacheRef = useRef<{ text: string; width: number } | null>(null);
+
+  // Debug-only layout-shift detector
+  useEffect(() => {
+    if (!DEBUG_ENABLED || typeof PerformanceObserver === "undefined") return;
+    interface LayoutShiftEntry extends PerformanceEntry { value: number; hadRecentInput: boolean; sources?: unknown[] }
+    let observer: PerformanceObserver | null = null;
+    try {
+      observer = new PerformanceObserver((list) => {
+        for (const e of list.getEntries() as LayoutShiftEntry[]) {
+          if (!e.hadRecentInput && e.value > 0.001) console.warn("[layout-shift]", e.value.toFixed(4), e.sources);
+        }
+      });
+      observer.observe({ type: "layout-shift", buffered: true });
+    } catch { /* unsupported */ }
+    return () => observer?.disconnect();
+  }, []);
   const nowPlayingMarqueeXRef = useRef<number>(CANVAS_WIDTH);
   const onelinerMarqueeXRef = useRef<number>(CANVAS_WIDTH);
 
@@ -1279,7 +1295,6 @@ const Game = () => {
     submissionGenerationRef.current += 1;
     setDisplayScore(0);
     setDisplayLives(3);
-    setDisplayChain(0);
     setDisplayWave(1);
     setShowGameOver(false);
     setEnteringInitials(false);
@@ -2077,7 +2092,6 @@ const Game = () => {
     state.chain++;
     state.chainTimer = CHAIN_WINDOW;
     state.bestChain = Math.max(state.bestChain, state.chain);
-    setDisplayChain(state.chain);
   }, []);
 
   const killMultiplier = useCallback((state: GameState) => {
@@ -2147,7 +2161,6 @@ const Game = () => {
       state.lives--;
       state.chain = 0;
       state.chainTimer = 0;
-      setDisplayChain(0);
       setDisplayLives(state.lives);
       state.ship = createShip();
       soundEffects.explode();
@@ -3279,7 +3292,6 @@ const Game = () => {
       state.chainTimer--;
       if (state.chainTimer === 0) {
         state.chain = 0;
-        setDisplayChain(0);
       }
     }
 
@@ -4510,6 +4522,31 @@ const Game = () => {
         ctx.fillStyle = "#FFD700";
         ctx.textAlign = "right";
         ctx.fillText(`TOP: ${topScoreSource[0].score.toString().padStart(8, "0")}`, CANVAS_WIDTH - 10, 38);
+        ctx.restore();
+      }
+
+      // Chain combo indicator (solo only)
+      if (state.chain >= 2) {
+        const chainMult = Math.min(1 + state.chain * CHAIN_STEP, CHAIN_MAX);
+        const chainText = `x${chainMult.toFixed(1)} CHAIN`;
+        ctx.save();
+        const pulse = state.chainTimer > CHAIN_WINDOW - 10 ? 0.2 : 0;
+        const scale = 1 + Math.min(state.chain, 30) * 0.02 + pulse;
+        ctx.font = `${Math.round(10 * scale)}px 'Press Start 2P', monospace`;
+        let chainWidth: number;
+        if (chainTextCacheRef.current?.text === chainText) {
+          chainWidth = chainTextCacheRef.current.width;
+        } else {
+          chainWidth = ctx.measureText(chainText).width;
+          chainTextCacheRef.current = { text: chainText, width: chainWidth };
+        }
+        const chainY = 10 + activePowerUps.length * 18 + 16;
+        ctx.globalAlpha = 0.9;
+        ctx.fillStyle = "#FFAA33";
+        ctx.textAlign = "left";
+        ctx.fillText(chainText, 10, chainY);
+        ctx.globalAlpha = 0.6;
+        ctx.fillRect(10, chainY + 5, Math.max(0, chainWidth * (state.chainTimer / CHAIN_WINDOW)), 3);
         ctx.restore();
       }
 
@@ -6313,26 +6350,16 @@ const Game = () => {
       {/* HUD */}
       {gameMode === "solo" && (
         <div
-          className="mb-2 sm:mb-4 flex flex-wrap gap-2 sm:gap-8 items-center text-[hsl(var(--game-foreground))] text-[8px] sm:text-xs tracking-wide justify-center"
+          className="mb-2 sm:mb-4 h-8 shrink-0 overflow-hidden whitespace-nowrap flex flex-nowrap gap-2 sm:gap-8 items-center text-[hsl(var(--game-foreground))] text-[8px] sm:text-xs tracking-wide justify-center"
           style={{ fontFamily: "'Press Start 2P', monospace", textShadow: "0 0 10px hsl(var(--game-foreground))" }}
         >
-          <div className="flex items-center gap-2">
-            <span>SCORE: {displayScore.toString().padStart(8, "0")}</span>
-            {displayChain >= 2 && (
-              <span
-                className="pointer-events-none text-[7px] sm:text-[9px] text-[hsl(var(--game-glow))] transition-transform duration-150"
-                style={{ transform: `scale(${1 + Math.min(displayChain, 10) * 0.03})` }}
-              >
-                x{displayChain} CHAIN
-              </span>
-            )}
-          </div>
-          <div className="flex flex-col items-center leading-tight">
-            <span>LIVES: {displayLives}</span>
+          <span>SCORE: {displayScore.toString().padStart(8, "0")}</span>
+          <span>
+            LIVES: {displayLives}{" "}
             <span className="pointer-events-none opacity-60 text-[7px] sm:text-[9px]">
               NEXT 1UP: {(EXTRA_LIFE_INTERVAL - (displayScore % EXTRA_LIFE_INTERVAL)).toLocaleString()}
             </span>
-          </div>
+          </span>
           <div className="flex items-center gap-2">
             <span>WAVE: {displayWave}</span>
             <span className="text-[#888888] text-[7px]" style={{ textShadow: "none" }}>
