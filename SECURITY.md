@@ -109,16 +109,14 @@ If another heartbeat has already advanced `last_seq` between the read and the wr
 
 ### Layer 7 — Heartbeat Delta Validation
 
-Every heartbeat is checked against the server-authoritative state from the previous heartbeat. All deltas are measured over the real elapsed wall-clock time (`dtSec`):
+Every heartbeat is checked against the server-authoritative state from the previous heartbeat over the real elapsed time (`dtSec`). Hard limits reject; soft limits add a session flag and accept.
 
-| Metric | Rule |
-|---|---|
-| Score | Cannot decrease; delta ≤ 1 000 pts/s |
-| `asteroidsDestroyed` | Cannot decrease; delta ≤ 5/s |
-| `bulletsFired` | Cannot decrease; delta ≤ 10/s |
-| Level (wave) | Cannot decrease; jump ≤ 5 waves per interval |
-
-Any heartbeat that violates these limits is rejected with an appropriate 400/403 response.
+| Metric | Hard reject | Soft flag |
+|---|---|---|
+| Score | Decrease; delta > 10 000 × dtSec + 100 000 | delta > 2 500 × dtSec + 100 000 (`heartbeat_score_rate`) |
+| `asteroidsDestroyed` | Decrease; delta > 12 × dtSec + 20 | — |
+| `bulletsFired` | Decrease; delta > 14 × dtSec + 20 | — |
+| Level (wave) | Decrease; jump > 5 per interval | — |
 
 ---
 
@@ -132,7 +130,7 @@ Any heartbeat that violates these limits is rejected with an appropriate 400/403
 
 ### Layer 9 — Burst / Timing Pattern Detection
 
-After a session accumulates 5 or more checkpoints, the Edge Function analyses inter-checkpoint timing. If the **standard deviation** of gaps is below 500 ms **and** the **mean** gap is below 15 000 ms, the pattern is considered machine-like. The session is immediately expired and the heartbeat is rejected with `403 Suspicious timing pattern`.
+After 5 or more checkpoints, inter-checkpoint timing with standard deviation < 500 ms and mean < 15 000 ms adds a `regular_timing` (low) session flag. It no longer rejects or expires the session.
 
 ---
 
@@ -144,54 +142,45 @@ The `/submit` endpoint requires `game_sessions.last_heartbeat_at` to be non-null
 
 ### Layer 11 — Score Plausibility (time and level)
 
-At submission time the server calculates `serverTimePlayedSeconds` from `started_at` to the moment of the request. The submitted score must satisfy all of:
+`serverTimePlayedSeconds` is measured from `started_at` to the submission.
 
-- `score ≤ serverTimePlayedSeconds × 1 000` (max 1 000 pts/s over session lifetime)
-- `serverTimePlayedSeconds ≥ 10` (absolute minimum play time)
-- If `score ≥ 50 000`: `serverTimePlayedSeconds ≥ 300` (5-minute minimum for significant scores)
-- If `level` is provided: `score ≤ level × 75 000` (score cap per wave reached)
-- If `level == 1`: `score ≤ 15 000`
+| Check | Type |
+|---|---|
+| `serverTimePlayedSeconds < 10` | Hard reject |
+| `score > serverTimePlayedSeconds × 10 000 + 100 000` | Hard reject |
+| `level` outside 1–100 | Hard reject |
+| `score > level × 400 000` | Hard reject |
+| `score > serverTimePlayedSeconds × 2 500 + 100 000` | Flag `high_score_rate` |
+| `score > level × 150 000` | Flag `score_vs_wave` |
+| `score ≥ 50 000` and `serverTimePlayedSeconds < 120` | Flag `short_high_score` |
+| `level == 1` and `score > 40 000` | Flag `level1_high_score` |
 
 ---
 
 ### Layer 12 — Final Score Cross-Check Against Server State
 
-The submitted final score is compared to `last_score` from the most recent heartbeat:
-
-- `score ≤ last_score + (dtSinceLastHeartbeat × 1 000)` — time-based tolerance for score earned between the last heartbeat and game-over.
-- For scores above 50 000: `score ≤ last_score + 5 000` — tight cap to prevent post-heartbeat injection of large amounts.
-
-This makes it very difficult to manipulate the final score after the last heartbeat has been accepted.
+| Check | Type |
+|---|---|
+| `score > last_score + dtSinceLastHeartbeat × 10 000 + 100 000` | Hard reject |
+| `score > last_score + max(60 000, dtSinceLastHeartbeat × 2 500)` | Flag `final_score_jump` |
 
 ---
 
-### Layer 13 — Checkpoint Count Requirements
+### Layer 13 — Checkpoint Requirements
 
-The number of heartbeat checkpoints stored for a session must meet a minimum threshold based on the final score:
-
-| Minimum score | Required checkpoints |
-|---|---|
-| 500 000 | 20 |
-| 200 000 | 10 |
-| 100 000 | 6 |
-| 50 000 | 3 |
-| < 50 000 | 0 |
-
-Scores that do not meet the requirement are rejected with `403 Insufficient gameplay data`.
+At least one heartbeat checkpoint is required (hard reject otherwise). The former score-scaled minimum checkpoint table is removed. Sessions of 180 s or more with fewer than `floor(serverTimePlayedSeconds / 90)` checkpoints get a `sparse_checkpoints` flag.
 
 ---
 
 ### Layer 14 — Checkpoint Progression Analysis
 
-All stored checkpoints are replayed in order and must satisfy:
-
-- **No checkpoint gap** > 90 seconds between consecutive checkpoints.
-- **Level** must not decrease; jump between consecutive checkpoints ≤ 5.
-- **Score** delta between consecutive checkpoints ≤ gap × 1 000 pts/s.
-- `asteroidsDestroyed` must be non-decreasing across all checkpoints.
-- `bulletsFired` must be non-decreasing across all checkpoints.
-
-Any violation causes an immediate rejection.
+| Check | Type |
+|---|---|
+| Gap > 90 s between consecutive checkpoints | Flag `checkpoint_gap` |
+| Level decreases or jumps > 5 | Hard reject |
+| Score delta > gap × 10 000 + 100 000 | Hard reject |
+| Score delta > gap × 2 500 + 100 000 | Flag `checkpoint_score_rate` |
+| `asteroidsDestroyed` / `bulletsFired` decrease | Hard reject |
 
 ---
 
@@ -212,10 +201,14 @@ The following patterns are **not** outright rejections but are recorded as entri
 
 ### Layer 16 — Entropy / Variance Analysis
 
-For sessions with 5 or more checkpoints the Edge Function performs two statistical checks:
+For sessions with 5 or more checkpoints:
 
-1. **Score delta coefficient of variation (CV)**: `stdDev / mean` of all positive inter-checkpoint score deltas must be ≥ 0.15. Perfectly uniform scoring (CV < 0.15) is rejected as bot-like.
-2. **Points-per-asteroid ratio variance**: When at least 4 asteroid-event intervals are available, the standard deviation of `scoreDelta / asteroidDelta` per interval must be ≥ 5. An impossibly constant points-per-asteroid ratio is rejected.
+| Check | Type |
+|---|---|
+| Score delta coefficient of variation < 0.15 | Flag `uniform_score_deltas` |
+| Points-per-asteroid standard deviation < 5 (≥ 4 intervals) | Flag `uniform_points_per_asteroid` |
+
+Cross-session fingerprint matches (Layer 17) remain a hard reject, applied only with ≥ 4 checkpoints and at least one non-zero score.
 
 ---
 

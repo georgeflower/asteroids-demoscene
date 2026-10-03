@@ -60,41 +60,39 @@ const MAX_SUBMISSIONS_PER_SESSION = 1;
 const SESSION_TIMEOUT_MS = 3600000; // 1 hour
 const MIN_SUBMISSION_INTERVAL_MS = 5000;
 const MAX_VALID_SCORE = 9999999;
-const MAX_SCORE_PER_SECOND = 1000;
-const MAX_SCORE_PER_LEVEL = 75000;
-const MAX_LEVEL = 30;
+const MAX_SCORE_PER_SECOND = 10000;        // HARD ceiling (physical max with x10 multiplier)
+const MAX_SCORE_PER_LEVEL = 400000;        // HARD ceiling
+const MAX_LEVEL = 100;
 const MIN_PLAY_TIME_SECONDS = 10;
-const MAX_CHECKPOINT_GAP_SECONDS = 600;
-const MAX_SCORE_BURST = 60000;
-const MAX_SCORE_JUMP_PER_SECOND = 1000;
+const MAX_CHECKPOINT_GAP_SECONDS = 90; // flag only (players pause)
+const MAX_SCORE_JUMP_PER_SECOND = 10000;   // HARD ceiling
 const MAX_LEVEL_JUMP = 5;
-const HIGH_SCORE_MIN_PLAY_SECONDS = 300;
 const HIGH_SCORE_DURATION_THRESHOLD = 50000;
 const MAX_CHECKPOINT_SPAN_RATIO = 0.15;
 const MAX_CHECKPOINT_START_RATIO = 0.10;
 const POW_DIFFICULTY = 18;
 
 // Delta validation thresholds (per second)
-const MAX_ASTEROIDS_PER_SEC = 5;
-const MAX_BULLETS_PER_SEC = 10;
+const MAX_ASTEROIDS_PER_SEC = 12;
+const MAX_BULLETS_PER_SEC = 14;            // rapid fire is exactly 10/s; leave jitter room
 const MIN_HEARTBEAT_GAP_MS = 5000; // Absolute minimum between heartbeats
 const MAX_HEARTBEATS_PER_MINUTE = 6; // Client sends every ~30s
 
-// Scaled checkpoint requirements
-const CHECKPOINT_REQUIREMENTS = [
-  { minScore: 500000, minCheckpoints: 20 },
-  { minScore: 200000, minCheckpoints: 10 },
-  { minScore: 100000, minCheckpoints: 6 },
-  { minScore: 50000, minCheckpoints: 3 },
-];
+// Soft thresholds: flag, never reject
+const SCORE_BURST_ALLOWANCE = 100000;   // one late-wave boss kill is up to 80,000 with x10
+const SOFT_SCORE_PER_SECOND = 2500;     // flag, never reject
+const SOFT_SCORE_PER_LEVEL = 150000;    // flag, never reject
+const SOFT_FINAL_JUMP_MIN = 60000;      // flag, never reject
+const SHORT_HIGH_SCORE_SECONDS = 120;   // flag, never reject
+const MAX_FLAGS_PER_SESSION = 20;
 
-function getMinCheckpoints(score: number): number {
-  for (const req of CHECKPOINT_REQUIREMENTS) {
-    if (score >= req.minScore) return req.minCheckpoints;
-  }
-  return 0;
+type Flag = { flag_type: string; severity: 'low' | 'medium' | 'high'; reasoning: string };
+
+function addFlag(list: Flag[], f: Flag) {
+  if (list.length >= MAX_FLAGS_PER_SESSION) return;
+  if (list.some((x) => x.flag_type === f.flag_type)) return;
+  list.push(f);
 }
-
 
 function validateOrigin(req: Request): boolean {
   const origin = req.headers.get('origin') || '';
@@ -105,11 +103,36 @@ function validateOrigin(req: Request): boolean {
   );
 }
 
-function errorResponse(message: string, status: number) {
+function errorResponse(message: string, status: number, code?: string) {
   return new Response(
-    JSON.stringify({ error: message }),
+    JSON.stringify({ error: message, code }),
     { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
   );
+}
+
+async function reject(
+  supabaseAdmin: any,
+  req: Request,
+  submission: { gameSessionToken?: string; initials?: string; score?: number; level?: number },
+  code: string,
+  message: string,
+  status: number,
+  detail: Record<string, unknown> = {},
+) {
+  try {
+    await supabaseAdmin.from('rejected_submissions').insert({
+      session_token: submission.gameSessionToken ?? null,
+      initials: typeof submission.initials === 'string' ? submission.initials.slice(0, 3) : null,
+      score: Number.isInteger(submission.score) ? submission.score : null,
+      level: Number.isInteger(submission.level) ? submission.level : null,
+      code,
+      message,
+      detail,
+      origin: req.headers.get('origin'),
+      user_agent: req.headers.get('user-agent'),
+    });
+  } catch (_) { /* best effort */ }
+  return errorResponse(message, status, code);
 }
 
 function successResponse(data: Record<string, unknown>) {
@@ -276,6 +299,7 @@ async function handleHeartbeat(req: Request, supabaseAdmin: any) {
   }
 
   const now = Date.now();
+  const sessionFlags: Flag[] = Array.isArray(session.flags) ? [...session.flags] : [];
 
   // --- HMAC verification (with seq, backward-compat) ---
   if (session.session_nonce) {
@@ -347,10 +371,18 @@ async function handleHeartbeat(req: Request, supabaseAdmin: any) {
     }
 
     // Score delta must be plausible for elapsed time
-    const maxScoreDelta = MAX_SCORE_PER_SECOND * dtSec + MAX_SCORE_BURST;
-    if (scoreDelta > maxScoreDelta) {
-      console.log(`Score delta too high: +${scoreDelta} in ${dtSec.toFixed(1)}s (max ${maxScoreDelta.toFixed(0)}), token=${payload.token}`);
+    const hardMax = MAX_SCORE_JUMP_PER_SECOND * dtSec + SCORE_BURST_ALLOWANCE;
+    if (scoreDelta > hardMax) {
+      console.log(`Score delta too high: +${scoreDelta} in ${dtSec.toFixed(1)}s (max ${hardMax.toFixed(0)}), token=${payload.token}`);
       return errorResponse('Score progression anomaly', 403);
+    }
+    const softMax = SOFT_SCORE_PER_SECOND * dtSec + SCORE_BURST_ALLOWANCE;
+    if (scoreDelta > softMax) {
+      addFlag(sessionFlags, {
+        flag_type: 'heartbeat_score_rate',
+        severity: 'medium',
+        reasoning: `Heartbeat score delta +${scoreDelta} in ${dtSec.toFixed(1)}s exceeds soft limit ${softMax.toFixed(0)}`,
+      });
     }
 
     // Asteroids cannot decrease
@@ -358,7 +390,7 @@ async function handleHeartbeat(req: Request, supabaseAdmin: any) {
       return errorResponse('Invalid metric progression', 400);
     }
     // Asteroids delta must be plausible
-    const maxAsteroidsDelta = MAX_ASTEROIDS_PER_SEC * dtSec;
+    const maxAsteroidsDelta = MAX_ASTEROIDS_PER_SEC * dtSec + 20;
     if (asteroidsDelta > maxAsteroidsDelta) {
       console.log(`Asteroids delta too high: +${asteroidsDelta} in ${dtSec.toFixed(1)}s (max ${maxAsteroidsDelta.toFixed(0)}), token=${payload.token}`);
       return errorResponse('Metric progression anomaly', 403);
@@ -369,7 +401,7 @@ async function handleHeartbeat(req: Request, supabaseAdmin: any) {
       return errorResponse('Invalid metric progression', 400);
     }
     // Bullets delta must be plausible
-    const maxBulletsDelta = MAX_BULLETS_PER_SEC * dtSec;
+    const maxBulletsDelta = MAX_BULLETS_PER_SEC * dtSec + 20;
     if (bulletsDelta > maxBulletsDelta) {
       console.log(`Bullets delta too high: +${bulletsDelta} in ${dtSec.toFixed(1)}s (max ${maxBulletsDelta.toFixed(0)}), token=${payload.token}`);
       return errorResponse('Metric progression anomaly', 403);
@@ -396,6 +428,7 @@ async function handleHeartbeat(req: Request, supabaseAdmin: any) {
         last_bullets: payload.bulletsFired,
         heartbeat_count_minute: countThisMinute,
         heartbeat_window_start: newWindowStart ? new Date(newWindowStart).toISOString() : new Date(now).toISOString(),
+        flags: sessionFlags,
       })
       .eq('token', payload.token)
       .eq('last_seq', lastSeq)  // CAS guard
@@ -421,6 +454,7 @@ async function handleHeartbeat(req: Request, supabaseAdmin: any) {
         last_bullets: payload.bulletsFired,
         heartbeat_count_minute: 1,
         heartbeat_window_start: new Date(now).toISOString(),
+        flags: sessionFlags,
       })
       .eq('token', payload.token)
       .eq('last_seq', 0)  // CAS guard for first heartbeat
@@ -469,12 +503,15 @@ async function handleHeartbeat(req: Request, supabaseAdmin: any) {
     const intervalVariance = intervals.reduce((sum, g) => sum + (g - meanInterval) ** 2, 0) / intervals.length;
     const intervalStdDev = Math.sqrt(intervalVariance);
     if (intervalStdDev < 500 && meanInterval < 15000) {
-      console.log(`Burst detection: stdDev=${intervalStdDev.toFixed(0)}ms, mean=${meanInterval.toFixed(0)}ms for token=${payload.token}`);
-      await supabaseAdmin
-        .from('game_sessions')
-        .update({ expired: true })
-        .eq('token', payload.token);
-      return errorResponse('Suspicious timing pattern', 403);
+      const before = sessionFlags.length;
+      addFlag(sessionFlags, {
+        flag_type: 'regular_timing',
+        severity: 'low',
+        reasoning: `Heartbeat intervals unusually regular: stdDev=${intervalStdDev.toFixed(0)}ms, mean=${meanInterval.toFixed(0)}ms`,
+      });
+      if (sessionFlags.length > before) {
+        await supabaseAdmin.from('game_sessions').update({ flags: sessionFlags }).eq('token', payload.token);
+      }
     }
   }
 
@@ -507,6 +544,10 @@ async function handleSubmit(req: Request, supabaseAdmin: any) {
     return errorResponse('Invalid score range', 400);
   }
 
+  if (!Number.isInteger(submission.score)) {
+    return reject(supabaseAdmin, req, submission, 'SCORE_NOT_INTEGER', 'Invalid score range', 400);
+  }
+
   const validSources = ['game_client'];
   const source = submission.source || 'unknown';
   if (!validSources.includes(source)) {
@@ -521,11 +562,11 @@ async function handleSubmit(req: Request, supabaseAdmin: any) {
     .single();
 
   if (sessionError || !session) {
-    return errorResponse('Invalid game session token', 403);
+    return reject(supabaseAdmin, req, submission, 'SESSION_INVALID', 'Invalid game session token', 403);
   }
 
   if (session.expired) {
-    return errorResponse('Game session expired', 403);
+    return reject(supabaseAdmin, req, submission, 'SESSION_EXPIRED', 'Game session expired', 403);
   }
 
   const sessionAge = Date.now() - new Date(session.started_at).getTime();
@@ -534,328 +575,264 @@ async function handleSubmit(req: Request, supabaseAdmin: any) {
       .from('game_sessions')
       .update({ expired: true })
       .eq('id', session.id);
-    return errorResponse('Game session expired', 403);
+    return reject(supabaseAdmin, req, submission, 'SESSION_TIMEOUT', 'Game session expired', 403, { sessionAgeMs: sessionAge });
   }
 
   if (session.submission_count >= MAX_SUBMISSIONS_PER_SESSION) {
-    return errorResponse('Maximum submissions reached for this session', 403);
+    return reject(supabaseAdmin, req, submission, 'MAX_SUBMISSIONS', 'Maximum submissions reached for this session', 403);
   }
 
   if (session.last_submission_at) {
     const timeSinceLast = Date.now() - new Date(session.last_submission_at).getTime();
     if (timeSinceLast < MIN_SUBMISSION_INTERVAL_MS) {
-      return errorResponse('Please wait before submitting another score', 403);
+      return reject(supabaseAdmin, req, submission, 'TOO_SOON', 'Please wait before submitting another score', 403);
     }
   }
 
   // --- Require at least 1 heartbeat ---
   if (!session.last_heartbeat_at) {
-    console.log(`Submit rejected: no heartbeats for token=${submission.gameSessionToken}`);
-    return errorResponse('Insufficient gameplay data', 403);
+    return reject(supabaseAdmin, req, submission, 'NO_HEARTBEAT', 'Insufficient gameplay data', 403);
   }
 
   // --- Proof-of-Work verification ---
   if (session.pow_challenge && session.pow_difficulty) {
     if (submission.powNonce === undefined || submission.powNonce === null) {
-      return errorResponse('Missing proof-of-work solution', 403);
+      return reject(supabaseAdmin, req, submission, 'POW_MISSING', 'Missing proof-of-work solution', 403);
     }
     const powValid = await verifyPoW(session.pow_challenge, submission.powNonce, session.pow_difficulty);
     if (!powValid) {
-      console.log(`PoW verification failed: token=${submission.gameSessionToken}, nonce=${submission.powNonce}`);
-      return errorResponse('Invalid proof-of-work solution', 403);
+      return reject(supabaseAdmin, req, submission, 'POW_INVALID', 'Invalid proof-of-work solution', 403);
     }
   }
 
   // --- HMAC verification (with backward compat) ---
   if (session.session_nonce) {
     if (!submission.hmac) {
-      return errorResponse('Missing signature', 400);
+      return reject(supabaseAdmin, req, submission, 'HMAC_MISSING', 'Missing signature', 400);
     }
-    // Extract asteroids/bullets from submission payload
     const submittedAsteroids = submission.asteroidsDestroyed ?? 0;
     const submittedBullets = submission.bulletsFired ?? 0;
-    // Use submitted seq if provided, otherwise fall back to session.last_seq
     const seqForHmac = submission.seq ?? session.last_seq ?? 0;
-    // Try V2 (with seq) then V1 (without)
     const valid = await verifyHMACCompat(
       session.session_nonce, sessionToken!, submission.score, submission.level ?? 1,
       submittedAsteroids, submittedBullets, seqForHmac, submission.hmac
     );
     if (!valid) {
-      const debugMsg = `${sessionToken}|${submission.score}|${submission.level ?? 1}|${submittedAsteroids}|${submittedBullets}|${seqForHmac}`;
-      console.log(`HMAC verification failed for submit: msg="${debugMsg}", hmac="${submission.hmac}", nonce="${session.session_nonce}", score_type=${typeof submission.score}, level_type=${typeof submission.level}, seq_type=${typeof submission.seq}`);
-      return errorResponse('Invalid signature', 403);
+      console.log(`HMAC verification failed for submit: token=${sessionToken}, score=${submission.score}, level=${submission.level ?? 1}, seq=${seqForHmac}`);
+      return reject(supabaseAdmin, req, submission, 'HMAC', 'Invalid signature', 403);
     }
   }
 
-  // --- Score plausibility ---
+  const suspiciousFlags: Flag[] = [];
+  const level = submission.level ?? 1;
   const serverTimePlayedSeconds = Math.floor(sessionAge / 1000);
+  const lastScore = session.last_score ?? 0;
+  const lastHeartbeatAt = new Date(session.last_heartbeat_at).getTime();
+  const dtSinceLastHeartbeat = Math.max(0, (Date.now() - lastHeartbeatAt) / 1000);
+  const baseDetail = {
+    score: submission.score,
+    level,
+    serverTimePlayedSeconds,
+    lastScore,
+    dtSinceLastHeartbeat: Math.round(dtSinceLastHeartbeat),
+  };
 
+  // --- Plausibility: HARD limits ---
   if (serverTimePlayedSeconds < MIN_PLAY_TIME_SECONDS) {
-    return errorResponse('Game duration too short', 403);
+    return reject(supabaseAdmin, req, submission, 'TOO_SHORT', 'Game duration too short', 403, baseDetail);
   }
 
-  if (submission.score >= HIGH_SCORE_DURATION_THRESHOLD && serverTimePlayedSeconds < HIGH_SCORE_MIN_PLAY_SECONDS) {
-    console.log(`High-score duration fail: score=${submission.score}, time=${serverTimePlayedSeconds}s, min=${HIGH_SCORE_MIN_PLAY_SECONDS}s`);
-    return errorResponse('Insufficient play duration for this score', 403);
+  if (submission.score > serverTimePlayedSeconds * MAX_SCORE_PER_SECOND + SCORE_BURST_ALLOWANCE) {
+    return reject(supabaseAdmin, req, submission, 'TIME_CAP', 'Score too high for game duration', 403, baseDetail);
   }
 
-  const maxScoreForTime = serverTimePlayedSeconds * MAX_SCORE_PER_SECOND;
-  if (submission.score > maxScoreForTime) {
-    console.log(`Plausibility fail: score=${submission.score}, time=${serverTimePlayedSeconds}s, max=${maxScoreForTime}`);
-    return errorResponse('Score too high for game duration', 403);
+  if (!Number.isInteger(level) || level < 1 || level > MAX_LEVEL) {
+    return reject(supabaseAdmin, req, submission, 'LEVEL_RANGE', 'Invalid level value', 403, baseDetail);
+  }
+  if (submission.score > level * MAX_SCORE_PER_LEVEL) {
+    return reject(supabaseAdmin, req, submission, 'LEVEL_CAP', 'Score too high for reported level', 403, baseDetail);
   }
 
-  if (submission.level !== undefined && submission.level !== null) {
-    if (submission.level < 1 || submission.level > MAX_LEVEL) {
-      return errorResponse('Invalid level value', 403);
-    }
-    const maxScoreForLevel = submission.level * MAX_SCORE_PER_LEVEL;
-    if (submission.score > maxScoreForLevel) {
-      console.log(`Plausibility fail: score=${submission.score}, level=${submission.level}, max=${maxScoreForLevel}`);
-      return errorResponse('Score too high for reported level', 403);
-    }
+  // --- Plausibility: SOFT flags ---
+  if (submission.score > serverTimePlayedSeconds * SOFT_SCORE_PER_SECOND + SCORE_BURST_ALLOWANCE) {
+    addFlag(suspiciousFlags, { flag_type: 'high_score_rate', severity: 'medium', reasoning: `Score ${submission.score} in ${serverTimePlayedSeconds}s exceeds soft rate` });
+  }
+  if (submission.score > level * SOFT_SCORE_PER_LEVEL) {
+    addFlag(suspiciousFlags, { flag_type: 'score_vs_wave', severity: 'medium', reasoning: `Score ${submission.score} at wave ${level} exceeds soft per-wave limit` });
+  }
+  if (submission.score >= HIGH_SCORE_DURATION_THRESHOLD && serverTimePlayedSeconds < SHORT_HIGH_SCORE_SECONDS) {
+    addFlag(suspiciousFlags, { flag_type: 'short_high_score', severity: 'medium', reasoning: `Score ${submission.score} after only ${serverTimePlayedSeconds}s` });
+  }
+  if (level === 1 && submission.score > 40000) {
+    addFlag(suspiciousFlags, { flag_type: 'level1_high_score', severity: 'medium', reasoning: `Score ${submission.score} at wave 1` });
   }
 
   // --- Final score vs server-authoritative last_score ---
-  const lastScore = session.last_score ?? 0;
-  const lastHeartbeatAt = session.last_heartbeat_at ? new Date(session.last_heartbeat_at).getTime() : Date.now();
-  const dtSinceLastHeartbeat = (Date.now() - lastHeartbeatAt) / 1000;
-
-  // Allow a small time-based tolerance for score gained between last heartbeat and game over
-  const maxFinalScore = lastScore + (dtSinceLastHeartbeat * MAX_SCORE_JUMP_PER_SECOND) + MAX_SCORE_BURST;
-
-  if (submission.score > maxFinalScore) {
-    console.log(`Final score exceeds server state: submitted=${submission.score}, lastHB=${lastScore}, dt=${dtSinceLastHeartbeat.toFixed(1)}s, max=${maxFinalScore.toFixed(0)}`);
-    return errorResponse('Final score anomaly', 403);
+  if (submission.score > lastScore + dtSinceLastHeartbeat * MAX_SCORE_JUMP_PER_SECOND + SCORE_BURST_ALLOWANCE) {
+    return reject(supabaseAdmin, req, submission, 'FINAL_SCORE', 'Final score anomaly', 403, baseDetail);
+  }
+  if (submission.score > lastScore + Math.max(SOFT_FINAL_JUMP_MIN, dtSinceLastHeartbeat * SOFT_SCORE_PER_SECOND)) {
+    addFlag(suspiciousFlags, { flag_type: 'final_score_jump', severity: 'medium', reasoning: `Final score +${submission.score - lastScore} over last heartbeat after ${dtSinceLastHeartbeat.toFixed(0)}s` });
   }
 
-  // For high scores (>50k), use time-aware tolerance instead of hard 5k cap
-  const timeTolerance = Math.max(10000, dtSinceLastHeartbeat * MAX_SCORE_JUMP_PER_SECOND) + MAX_SCORE_BURST;
-  if (submission.score > 50000 && submission.score > lastScore + timeTolerance) {
-    console.log(`High-score mismatch: submitted=${submission.score}, lastHB=${lastScore}, tolerance=${timeTolerance.toFixed(0)}, token=${submission.gameSessionToken}`);
-    return errorResponse('Final score anomaly', 403);
+  // --- Checkpoint analysis (always loaded) ---
+  const { data: checkpoints, error: cpError } = await supabaseAdmin
+    .from('game_session_checkpoints')
+    .select('*')
+    .eq('session_token', submission.gameSessionToken)
+    .order('reported_at', { ascending: true });
+
+  if (cpError) {
+    console.error('Failed to query checkpoints:', cpError);
+    return errorResponse('Validation error', 500);
+  }
+  const cps: any[] = checkpoints ?? [];
+  const cpDetail = { ...baseDetail, checkpoints: cps.length };
+
+  if (cps.length === 0) {
+    return reject(supabaseAdmin, req, submission, 'NO_HEARTBEAT', 'Insufficient gameplay data', 403, cpDetail);
   }
 
-  // --- Heartbeat checkpoint validation (existing analysis) ---
-  const suspiciousFlags: Array<{ flag_type: string; severity: string; reasoning: string }> = [];
-  const minCheckpoints = getMinCheckpoints(submission.score);
+  let consecutiveDuplicateScores = 0;
+  let consecutiveStagnantAsteroids = 0;
+  let consecutiveStagnantBullets = 0;
 
-  if (minCheckpoints > 0) {
-    const { data: checkpoints, error: cpError } = await supabaseAdmin
+  for (let i = 1; i < cps.length; i++) {
+    const prev = cps[i - 1];
+    const curr = cps[i];
+    const gapSeconds = (new Date(curr.reported_at).getTime() - new Date(prev.reported_at).getTime()) / 1000;
+
+    if (gapSeconds > MAX_CHECKPOINT_GAP_SECONDS) {
+      addFlag(suspiciousFlags, { flag_type: 'checkpoint_gap', severity: 'low', reasoning: `${gapSeconds.toFixed(0)}s gap between checkpoints ${i - 1} and ${i}` });
+    }
+
+    const levelJump = curr.level - prev.level;
+    if (levelJump > MAX_LEVEL_JUMP || levelJump < 0) {
+      return reject(supabaseAdmin, req, submission, 'CHECKPOINT_LEVEL', 'Impossible wave progression detected', 403, { ...cpDetail, index: i, levelJump });
+    }
+
+    const scoreDelta = curr.score - prev.score;
+    if (scoreDelta > gapSeconds * MAX_SCORE_JUMP_PER_SECOND + SCORE_BURST_ALLOWANCE) {
+      return reject(supabaseAdmin, req, submission, 'CHECKPOINT_SCORE', 'Score progression anomaly', 403, { ...cpDetail, index: i, scoreDelta, gapSeconds });
+    }
+    if (scoreDelta > gapSeconds * SOFT_SCORE_PER_SECOND + SCORE_BURST_ALLOWANCE) {
+      addFlag(suspiciousFlags, { flag_type: 'checkpoint_score_rate', severity: 'medium', reasoning: `+${scoreDelta} in ${gapSeconds.toFixed(0)}s between checkpoints ${i - 1} and ${i}` });
+    }
+
+    if (curr.asteroids_destroyed < prev.asteroids_destroyed || curr.bullets_fired < prev.bullets_fired) {
+      return reject(supabaseAdmin, req, submission, 'CHECKPOINT_MONOTONIC', 'Invalid metric progression in checkpoints', 403, { ...cpDetail, index: i });
+    }
+
+    consecutiveDuplicateScores = curr.score === prev.score && curr.score > 0 ? consecutiveDuplicateScores + 1 : 0;
+    consecutiveStagnantAsteroids = curr.asteroids_destroyed === prev.asteroids_destroyed && scoreDelta > 0 ? consecutiveStagnantAsteroids + 1 : 0;
+    consecutiveStagnantBullets = curr.bullets_fired === prev.bullets_fired && scoreDelta > 0 ? consecutiveStagnantBullets + 1 : 0;
+
+    if (consecutiveDuplicateScores >= 3) {
+      addFlag(suspiciousFlags, { flag_type: 'duplicate_score_sequence', severity: 'high', reasoning: `Score ${curr.score} unchanged for ${consecutiveDuplicateScores + 1} consecutive heartbeats` });
+    }
+    if (consecutiveStagnantAsteroids >= 2) {
+      addFlag(suspiciousFlags, { flag_type: 'stagnant_asteroids', severity: 'medium', reasoning: `asteroids_destroyed stuck at ${curr.asteroids_destroyed} for ${consecutiveStagnantAsteroids + 1} heartbeats while score increased` });
+    }
+    if (consecutiveStagnantBullets >= 2) {
+      addFlag(suspiciousFlags, { flag_type: 'stagnant_bullets', severity: 'medium', reasoning: `bullets_fired stuck at ${curr.bullets_fired} for ${consecutiveStagnantBullets + 1} heartbeats while score increased` });
+    }
+  }
+
+  if (serverTimePlayedSeconds >= 180 && cps.length < Math.floor(serverTimePlayedSeconds / 90)) {
+    addFlag(suspiciousFlags, { flag_type: 'sparse_checkpoints', severity: 'medium', reasoning: `Only ${cps.length} checkpoints in ${serverTimePlayedSeconds}s` });
+  }
+
+  // Cross-session fingerprint detection (hard: replay of another session)
+  if (cps.length >= 4 && cps.some((cp) => cp.score > 0)) {
+    const cpFingerprint = cps.map((cp) => cp.score).join(',');
+    const thirtyMinAgo = new Date(Date.now() - 1800000).toISOString();
+    const { data: recentSessions } = await supabaseAdmin
       .from('game_session_checkpoints')
-      .select('*')
-      .eq('session_token', submission.gameSessionToken)
+      .select('session_token, score')
+      .neq('session_token', submission.gameSessionToken)
+      .gte('reported_at', thirtyMinAgo)
       .order('reported_at', { ascending: true });
 
-    if (cpError) {
-      console.error('Failed to query checkpoints:', cpError);
-      return errorResponse('Validation error', 500);
-    }
-
-    if (!checkpoints || checkpoints.length < minCheckpoints) {
-      console.log(`Checkpoint fail: score=${submission.score}, checkpoints=${checkpoints?.length ?? 0}, required=${minCheckpoints}`);
-      return errorResponse('Insufficient gameplay data', 403);
-    }
-
-    // Validate checkpoint progression + detect stagnant/duplicate patterns
-    let consecutiveDuplicateScores = 0;
-    let consecutiveStagnantAsteroids = 0;
-    let consecutiveStagnantBullets = 0;
-
-    for (let i = 1; i < checkpoints.length; i++) {
-      const prev = checkpoints[i - 1];
-      const curr = checkpoints[i];
-      const gapSeconds = (new Date(curr.reported_at).getTime() - new Date(prev.reported_at).getTime()) / 1000;
-
-      if (gapSeconds > MAX_CHECKPOINT_GAP_SECONDS) {
-        console.log(`Checkpoint gap too large: ${gapSeconds}s between checkpoints ${i-1} and ${i}`);
-        return errorResponse('Gameplay data gap detected', 403);
+    if (recentSessions && recentSessions.length > 0) {
+      const sessionMap = new Map<string, number[]>();
+      for (const row of recentSessions) {
+        const arr = sessionMap.get(row.session_token) || [];
+        arr.push(row.score);
+        sessionMap.set(row.session_token, arr);
       }
-
-      const levelJump = curr.level - prev.level;
-      if (levelJump > MAX_LEVEL_JUMP || levelJump < 0) {
-        console.log(`Wave jump invalid: ${levelJump} levels between checkpoints ${i-1} and ${i}`);
-        return errorResponse('Impossible wave progression detected', 403);
-      }
-
-      const scoreDelta = curr.score - prev.score;
-      const maxJump = gapSeconds * MAX_SCORE_JUMP_PER_SECOND + MAX_SCORE_BURST;
-      if (scoreDelta > maxJump) {
-        console.log(`Score jump too large: +${scoreDelta} in ${gapSeconds}s (max ${maxJump})`);
-        return errorResponse('Score progression anomaly', 403);
-      }
-
-      // Validate enriched metrics monotonicity
-      if (curr.asteroids_destroyed < prev.asteroids_destroyed) {
-        return errorResponse('Invalid metric progression in checkpoints', 403);
-      }
-      if (curr.bullets_fired < prev.bullets_fired) {
-        return errorResponse('Invalid metric progression in checkpoints', 403);
-      }
-
-      // Detect duplicate scores
-      if (curr.score === prev.score && curr.score > 0) {
-        consecutiveDuplicateScores++;
-      } else {
-        consecutiveDuplicateScores = 0;
-      }
-
-      if (curr.asteroids_destroyed === prev.asteroids_destroyed && scoreDelta > 0) {
-        consecutiveStagnantAsteroids++;
-      } else {
-        consecutiveStagnantAsteroids = 0;
-      }
-
-      if (curr.bullets_fired === prev.bullets_fired && scoreDelta > 0) {
-        consecutiveStagnantBullets++;
-      } else {
-        consecutiveStagnantBullets = 0;
-      }
-
-      if (consecutiveDuplicateScores >= 3) {
-        suspiciousFlags.push({
-          flag_type: 'duplicate_score_sequence',
-          severity: 'high',
-          reasoning: `Score ${curr.score} unchanged for ${consecutiveDuplicateScores + 1} consecutive heartbeats`,
-        });
-      }
-      if (consecutiveStagnantAsteroids >= 2) {
-        suspiciousFlags.push({
-          flag_type: 'stagnant_asteroids',
-          severity: 'medium',
-          reasoning: `asteroids_destroyed stuck at ${curr.asteroids_destroyed} for ${consecutiveStagnantAsteroids + 1} heartbeats while score increased`,
-        });
-      }
-      if (consecutiveStagnantBullets >= 2) {
-        suspiciousFlags.push({
-          flag_type: 'stagnant_bullets',
-          severity: 'medium',
-          reasoning: `bullets_fired stuck at ${curr.bullets_fired} for ${consecutiveStagnantBullets + 1} heartbeats while score increased`,
-        });
-      }
-    }
-
-    // Cross-session fingerprint detection
-    const cpFingerprint = checkpoints.map((cp: any) => cp.score).join(',');
-    if (checkpoints.length >= 3) {
-      const thirtyMinAgo = new Date(Date.now() - 1800000).toISOString();
-      const { data: recentSessions } = await supabaseAdmin
-        .from('game_session_checkpoints')
-        .select('session_token, score')
-        .neq('session_token', submission.gameSessionToken)
-        .gte('reported_at', thirtyMinAgo)
-        .order('reported_at', { ascending: true });
-
-      if (recentSessions && recentSessions.length > 0) {
-        const sessionMap = new Map<string, number[]>();
-        for (const row of recentSessions) {
-          const arr = sessionMap.get(row.session_token) || [];
-          arr.push(row.score);
-          sessionMap.set(row.session_token, arr);
+      for (const [, scores] of sessionMap) {
+        if (scores.join(',') === cpFingerprint) {
+          return reject(supabaseAdmin, req, submission, 'DUPLICATE_PATTERN', 'Duplicate gameplay pattern detected', 403, cpDetail);
         }
-        for (const [otherToken, scores] of sessionMap) {
-          const otherFingerprint = scores.join(',');
-          if (otherFingerprint === cpFingerprint) {
-            console.log(`Cross-session duplicate detected: ${submission.gameSessionToken} matches ${otherToken}`);
-            return errorResponse('Duplicate gameplay pattern detected', 403);
-          }
+      }
+    }
+  }
+
+  // Entropy analysis (flags only)
+  if (cps.length >= 5) {
+    const positiveDeltas: number[] = [];
+    for (let i = 1; i < cps.length; i++) {
+      const d = cps[i].score - cps[i - 1].score;
+      if (d > 0) positiveDeltas.push(d);
+    }
+    if (positiveDeltas.length >= 4) {
+      const mean = positiveDeltas.reduce((a, b) => a + b, 0) / positiveDeltas.length;
+      if (mean > 0) {
+        const variance = positiveDeltas.reduce((sum, d) => sum + (d - mean) ** 2, 0) / positiveDeltas.length;
+        const cv = Math.sqrt(variance) / mean;
+        if (cv < 0.15) {
+          addFlag(suspiciousFlags, { flag_type: 'uniform_score_deltas', severity: 'medium', reasoning: `Score delta CV=${cv.toFixed(3)} (< 0.15)` });
         }
       }
     }
 
-    // --- Entropy-based validation ---
-    if (checkpoints.length >= 5) {
-      const scoreDeltas: number[] = [];
-      for (let i = 1; i < checkpoints.length; i++) {
-        scoreDeltas.push(checkpoints[i].score - checkpoints[i - 1].score);
-      }
-      const positiveDeltas = scoreDeltas.filter(d => d > 0);
-      if (positiveDeltas.length >= 4) {
-        const mean = positiveDeltas.reduce((a, b) => a + b, 0) / positiveDeltas.length;
-        if (mean > 0) {
-          const variance = positiveDeltas.reduce((sum, d) => sum + (d - mean) ** 2, 0) / positiveDeltas.length;
-          const stdDev = Math.sqrt(variance);
-          const cv = stdDev / mean;
-          if (cv < 0.15) {
-            console.log(`Entropy fail: score delta CV=${cv.toFixed(4)} (min 0.15), deltas=[${positiveDeltas.join(',')}]`);
-            return errorResponse('Score progression anomaly', 403);
-          }
-        }
-      }
-
-      const ratios: number[] = [];
-      for (let i = 1; i < checkpoints.length; i++) {
-        const scoreDelta = checkpoints[i].score - checkpoints[i - 1].score;
-        const asteroidDelta = (checkpoints[i].asteroids_destroyed || 0) - (checkpoints[i - 1].asteroids_destroyed || 0);
-        if (asteroidDelta > 0 && scoreDelta > 0) {
-          ratios.push(scoreDelta / asteroidDelta);
-        }
-      }
-      if (ratios.length >= 4) {
-        const ratioMean = ratios.reduce((a, b) => a + b, 0) / ratios.length;
-        const ratioVariance = ratios.reduce((sum, r) => sum + (r - ratioMean) ** 2, 0) / ratios.length;
-        const ratioStdDev = Math.sqrt(ratioVariance);
-        if (ratioStdDev < 5) {
-          console.log(`Entropy fail: pts/asteroid stdDev=${ratioStdDev.toFixed(2)} (min 5), ratios=[${ratios.map(r => r.toFixed(1)).join(',')}]`);
-          return errorResponse('Score progression anomaly', 403);
-        }
+    const ratios: number[] = [];
+    for (let i = 1; i < cps.length; i++) {
+      const sd = cps[i].score - cps[i - 1].score;
+      const ad = (cps[i].asteroids_destroyed || 0) - (cps[i - 1].asteroids_destroyed || 0);
+      if (ad > 0 && sd > 0) ratios.push(sd / ad);
+    }
+    if (ratios.length >= 4) {
+      const rMean = ratios.reduce((a, b) => a + b, 0) / ratios.length;
+      const rStd = Math.sqrt(ratios.reduce((sum, r) => sum + (r - rMean) ** 2, 0) / ratios.length);
+      if (rStd < 5) {
+        addFlag(suspiciousFlags, { flag_type: 'uniform_points_per_asteroid', severity: 'medium', reasoning: `pts/asteroid stdDev=${rStd.toFixed(2)} (< 5)` });
       }
     }
+  }
 
-    // --- Level-1 score cap ---
-    if (submission.level === 1 && submission.score > 15000) {
-      console.log(`Level-1 cap fail: score=${submission.score} at level 1 (max 15000)`);
-      return errorResponse('Score too high for reported level', 403);
+  // Enriched metric consistency
+  const lastCp = cps[cps.length - 1];
+  const totalAsteroidsDestroyed = lastCp.asteroids_destroyed || 0;
+  if (totalAsteroidsDestroyed > 0 && submission.score > 0) {
+    const avgPointsPerAsteroid = submission.score / totalAsteroidsDestroyed;
+    if (avgPointsPerAsteroid > 2000) {
+      addFlag(suspiciousFlags, { flag_type: 'score_metric_mismatch', severity: 'medium', reasoning: `Score/asteroid ratio ${avgPointsPerAsteroid.toFixed(0)} exceeds 2000` });
     }
+  }
 
-    // Enriched metric consistency
-    const lastCp = checkpoints[checkpoints.length - 1];
-    const totalAsteroidsDestroyed = lastCp.asteroids_destroyed || 0;
-    if (totalAsteroidsDestroyed > 0 && submission.score > 0) {
-      const avgPointsPerAsteroid = submission.score / totalAsteroidsDestroyed;
-      if (avgPointsPerAsteroid > 2000) {
-        suspiciousFlags.push({
-          flag_type: 'score_metric_mismatch',
-          severity: 'medium',
-          reasoning: `Score/asteroid ratio ${avgPointsPerAsteroid.toFixed(0)} exceeds reasonable max of 2000`,
-        });
-      }
+  // Checkpoint clustering
+  if (cps.length >= 2) {
+    const firstCpTime = new Date(cps[0].reported_at).getTime();
+    const lastCpTime = new Date(lastCp.reported_at).getTime();
+    const cpSpanMs = lastCpTime - firstCpTime;
+    const cpStartOffsetMs = firstCpTime - new Date(session.started_at).getTime();
+    if (cpSpanMs < sessionAge * MAX_CHECKPOINT_SPAN_RATIO && cpStartOffsetMs < sessionAge * MAX_CHECKPOINT_START_RATIO) {
+      addFlag(suspiciousFlags, { flag_type: 'checkpoint_clustering', severity: 'medium', reasoning: `All ${cps.length} checkpoints span only ${Math.round(cpSpanMs / 1000)}s at the start of a ${Math.round(sessionAge / 1000)}s session` });
     }
+  }
 
-    // Checkpoint clustering check
-    if (checkpoints.length >= 2) {
-      const firstCpTime = new Date(checkpoints[0].reported_at).getTime();
-      const lastCpTime = new Date(checkpoints[checkpoints.length - 1].reported_at).getTime();
-      const cpSpanMs = lastCpTime - firstCpTime;
-      const cpStartOffsetMs = firstCpTime - new Date(session.started_at).getTime();
-
-      if (cpSpanMs < sessionAge * MAX_CHECKPOINT_SPAN_RATIO && cpStartOffsetMs < sessionAge * MAX_CHECKPOINT_START_RATIO) {
-        suspiciousFlags.push({
-          flag_type: 'checkpoint_clustering',
-          severity: 'medium',
-          reasoning: `All ${checkpoints.length} checkpoints span only ${Math.round(cpSpanMs / 1000)}s at the start of a ${Math.round(sessionAge / 1000)}s session`,
-        });
-      }
-    }
-
-    // Temporal anomaly
-    const fiveMinutesAgo = new Date(Date.now() - 300000).toISOString();
-    const { data: recentSame } = await supabaseAdmin
-      .from('current_high_scores')
-      .select('id')
-      .eq('initials', submission.initials)
-      .eq('score', submission.score)
-      .gte('created_at', fiveMinutesAgo)
-      .limit(1);
-
-    if (recentSame && recentSame.length > 0) {
-      suspiciousFlags.push({
-        flag_type: 'temporal_cluster',
-        severity: 'high',
-        reasoning: `Identical score (${submission.score}) with initials ${submission.initials} submitted within 5 minutes of an existing entry`,
-      });
-    }
+  // Temporal anomaly
+  const fiveMinutesAgo = new Date(Date.now() - 300000).toISOString();
+  const { data: recentSame } = await supabaseAdmin
+    .from('current_high_scores')
+    .select('id')
+    .eq('initials', submission.initials)
+    .eq('score', submission.score)
+    .gte('created_at', fiveMinutesAgo)
+    .limit(1);
+  if (recentSame && recentSame.length > 0) {
+    addFlag(suspiciousFlags, { flag_type: 'temporal_cluster', severity: 'high', reasoning: `Identical score (${submission.score}) with initials ${submission.initials} within 5 minutes` });
   }
 
   // --- Duplicate check ---
@@ -867,27 +844,31 @@ async function handleSubmit(req: Request, supabaseAdmin: any) {
     .eq('score', submission.score)
     .gte('created_at', oneHourAgo)
     .limit(1);
-
   if (dupes && dupes.length > 0) {
-    return errorResponse('Duplicate score detected', 409);
+    return reject(supabaseAdmin, req, submission, 'DUPLICATE_SCORE', 'Duplicate score detected', 409, cpDetail);
   }
 
-  // --- Expire session after single submission ---
-  await supabaseAdmin
+  // --- Claim the session's single submission slot (atomic) ---
+  const { data: claimed, error: claimError } = await supabaseAdmin
     .from('game_sessions')
-    .update({
-      submission_count: session.submission_count + 1,
-      last_submission_at: new Date().toISOString(),
-      expired: true,
-    })
-    .eq('id', session.id);
+    .update({ submission_count: 1 })
+    .eq('id', session.id)
+    .eq('submission_count', 0)
+    .select('id');
+  if (claimError) {
+    console.error('Failed to claim session:', claimError);
+    return errorResponse('Failed to save score', 500);
+  }
+  if (!claimed || claimed.length === 0) {
+    return reject(supabaseAdmin, req, submission, 'MAX_SUBMISSIONS', 'Maximum submissions reached for this session', 403);
+  }
 
   // --- Insert score + audit log ---
   const { data: scoreId, error: insertError } = await supabaseAdmin
     .rpc('insert_score_with_audit', {
       p_initials: submission.initials,
       p_score: submission.score,
-      p_level: submission.level ?? 1,
+      p_level: level,
       p_time_played_seconds: serverTimePlayedSeconds,
       p_source: source,
       p_session_token: submission.gameSessionToken,
@@ -895,10 +876,19 @@ async function handleSubmit(req: Request, supabaseAdmin: any) {
 
   if (insertError) {
     console.error('Database error:', insertError);
-    return errorResponse('Failed to save score', 500);
+    await supabaseAdmin.from('game_sessions').update({ submission_count: 0 }).eq('id', session.id);
+    return reject(supabaseAdmin, req, submission, 'INSERT_FAILED', 'Failed to save score', 500, cpDetail);
   }
 
-  // --- Insert any suspicious flags ---
+  await supabaseAdmin
+    .from('game_sessions')
+    .update({ expired: true, last_submission_at: new Date().toISOString() })
+    .eq('id', session.id);
+
+  // --- Merge session flags and record ---
+  const sessionFlags: Flag[] = Array.isArray(session.flags) ? session.flags : [];
+  for (const f of sessionFlags) addFlag(suspiciousFlags, f);
+
   if (suspiciousFlags.length > 0 && scoreId) {
     for (const flag of suspiciousFlags) {
       const { error: flagError } = await supabaseAdmin
@@ -957,7 +947,17 @@ async function handleAdminData(req: Request, supabaseAdmin: any) {
     return errorResponse('Failed to fetch audit logs', 500);
   }
 
-  return successResponse({ scores, flags, auditLogs });
+  const { data: rejected, error: rejectedError } = await supabaseAdmin
+    .from('rejected_submissions')
+    .select('*')
+    .order('created_at', { ascending: false })
+    .limit(100);
+
+  if (rejectedError) {
+    return errorResponse('Failed to fetch rejected submissions', 500);
+  }
+
+  return successResponse({ scores, flags, auditLogs, rejected });
 }
 
 async function handleAdminDelete(req: Request, supabaseAdmin: any) {
@@ -983,6 +983,52 @@ async function handleAdminDelete(req: Request, supabaseAdmin: any) {
   }
 
   return successResponse({ success: true, message: 'Score removed' });
+}
+
+async function handleAdminApprove(req: Request, supabaseAdmin: any) {
+  const adminKey = req.headers.get('x-admin-key') || '';
+  const expectedKey = Deno.env.get('ADMIN_SECRET_KEY') || '';
+  if (!expectedKey || !timingSafeEqual(adminKey, expectedKey)) {
+    return errorResponse('Unauthorized', 401);
+  }
+
+  const { rejectedId } = await req.json();
+  if (!rejectedId) {
+    return errorResponse('Missing rejectedId', 400);
+  }
+
+  const { data: row, error: rowError } = await supabaseAdmin
+    .from('rejected_submissions')
+    .select('*')
+    .eq('id', rejectedId)
+    .single();
+  if (rowError || !row) {
+    return errorResponse('Rejected submission not found', 404);
+  }
+  if (row.approved) {
+    return errorResponse('Already approved', 409);
+  }
+  if (!row.initials || !Number.isInteger(row.score)) {
+    return errorResponse('Rejected submission has no score to approve', 400);
+  }
+
+  const detail = (row.detail ?? {}) as Record<string, unknown>;
+  const tps = Number(detail.serverTimePlayedSeconds);
+  const { error: insertError } = await supabaseAdmin.rpc('insert_score_with_audit', {
+    p_initials: row.initials,
+    p_score: row.score,
+    p_level: row.level ?? 1,
+    p_time_played_seconds: Number.isFinite(tps) ? Math.floor(tps) : 0,
+    p_source: 'admin_approved',
+    p_session_token: row.session_token,
+  });
+  if (insertError) {
+    console.error('Admin approve insert error:', insertError);
+    return errorResponse('Failed to insert score', 500);
+  }
+
+  await supabaseAdmin.from('rejected_submissions').update({ approved: true }).eq('id', rejectedId);
+  return successResponse({ success: true });
 }
 
 // --- Main handler ---
@@ -1031,6 +1077,10 @@ Deno.serve(async (req) => {
 
     if (url.pathname.endsWith('/admin-delete') && req.method === 'POST') {
       return withCors(await handleAdminDelete(req, supabaseAdmin));
+    }
+
+    if (url.pathname.endsWith('/admin-approve') && req.method === 'POST') {
+      return withCors(await handleAdminApprove(req, supabaseAdmin));
     }
 
     return withCors(errorResponse('Invalid endpoint', 404));
