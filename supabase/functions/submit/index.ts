@@ -64,7 +64,8 @@ const MAX_SCORE_PER_SECOND = 1000;
 const MAX_SCORE_PER_LEVEL = 75000;
 const MAX_LEVEL = 30;
 const MIN_PLAY_TIME_SECONDS = 10;
-const MAX_CHECKPOINT_GAP_SECONDS = 90;
+const MAX_CHECKPOINT_GAP_SECONDS = 600;
+const MAX_SCORE_BURST = 60000;
 const MAX_SCORE_JUMP_PER_SECOND = 1000;
 const MAX_LEVEL_JUMP = 5;
 const HIGH_SCORE_MIN_PLAY_SECONDS = 300;
@@ -346,7 +347,7 @@ async function handleHeartbeat(req: Request, supabaseAdmin: any) {
     }
 
     // Score delta must be plausible for elapsed time
-    const maxScoreDelta = MAX_SCORE_PER_SECOND * dtSec;
+    const maxScoreDelta = MAX_SCORE_PER_SECOND * dtSec + MAX_SCORE_BURST;
     if (scoreDelta > maxScoreDelta) {
       console.log(`Score delta too high: +${scoreDelta} in ${dtSec.toFixed(1)}s (max ${maxScoreDelta.toFixed(0)}), token=${payload.token}`);
       return errorResponse('Score progression anomaly', 403);
@@ -622,7 +623,7 @@ async function handleSubmit(req: Request, supabaseAdmin: any) {
   const dtSinceLastHeartbeat = (Date.now() - lastHeartbeatAt) / 1000;
 
   // Allow a small time-based tolerance for score gained between last heartbeat and game over
-  const maxFinalScore = lastScore + (dtSinceLastHeartbeat * MAX_SCORE_JUMP_PER_SECOND);
+  const maxFinalScore = lastScore + (dtSinceLastHeartbeat * MAX_SCORE_JUMP_PER_SECOND) + MAX_SCORE_BURST;
 
   if (submission.score > maxFinalScore) {
     console.log(`Final score exceeds server state: submitted=${submission.score}, lastHB=${lastScore}, dt=${dtSinceLastHeartbeat.toFixed(1)}s, max=${maxFinalScore.toFixed(0)}`);
@@ -630,7 +631,7 @@ async function handleSubmit(req: Request, supabaseAdmin: any) {
   }
 
   // For high scores (>50k), use time-aware tolerance instead of hard 5k cap
-  const timeTolerance = Math.max(10000, dtSinceLastHeartbeat * MAX_SCORE_JUMP_PER_SECOND);
+  const timeTolerance = Math.max(10000, dtSinceLastHeartbeat * MAX_SCORE_JUMP_PER_SECOND) + MAX_SCORE_BURST;
   if (submission.score > 50000 && submission.score > lastScore + timeTolerance) {
     console.log(`High-score mismatch: submitted=${submission.score}, lastHB=${lastScore}, tolerance=${timeTolerance.toFixed(0)}, token=${submission.gameSessionToken}`);
     return errorResponse('Final score anomaly', 403);
@@ -679,7 +680,7 @@ async function handleSubmit(req: Request, supabaseAdmin: any) {
       }
 
       const scoreDelta = curr.score - prev.score;
-      const maxJump = gapSeconds * MAX_SCORE_JUMP_PER_SECOND;
+      const maxJump = gapSeconds * MAX_SCORE_JUMP_PER_SECOND + MAX_SCORE_BURST;
       if (scoreDelta > maxJump) {
         console.log(`Score jump too large: +${scoreDelta} in ${gapSeconds}s (max ${maxJump})`);
         return errorResponse('Score progression anomaly', 403);
