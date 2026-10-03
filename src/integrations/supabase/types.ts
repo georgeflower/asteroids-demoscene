@@ -83,6 +83,7 @@ export type Database = {
       game_sessions: {
         Row: {
           expired: boolean
+          flags: Json
           heartbeat_count_minute: number | null
           heartbeat_window_start: string | null
           id: string
@@ -102,6 +103,7 @@ export type Database = {
         }
         Insert: {
           expired?: boolean
+          flags?: Json
           heartbeat_count_minute?: number | null
           heartbeat_window_start?: string | null
           id?: string
@@ -121,6 +123,7 @@ export type Database = {
         }
         Update: {
           expired?: boolean
+          flags?: Json
           heartbeat_count_minute?: number | null
           heartbeat_window_start?: string | null
           id?: string
@@ -158,6 +161,51 @@ export type Database = {
           id?: string
           initials?: string
           score?: number
+        }
+        Relationships: []
+      }
+      rejected_submissions: {
+        Row: {
+          approved: boolean
+          code: string
+          created_at: string
+          detail: Json
+          id: string
+          initials: string | null
+          level: number | null
+          message: string
+          origin: string | null
+          score: number | null
+          session_token: string | null
+          user_agent: string | null
+        }
+        Insert: {
+          approved?: boolean
+          code: string
+          created_at?: string
+          detail?: Json
+          id?: string
+          initials?: string | null
+          level?: number | null
+          message: string
+          origin?: string | null
+          score?: number | null
+          session_token?: string | null
+          user_agent?: string | null
+        }
+        Update: {
+          approved?: boolean
+          code?: string
+          created_at?: string
+          detail?: Json
+          id?: string
+          initials?: string | null
+          level?: number | null
+          message?: string
+          origin?: string | null
+          score?: number | null
+          session_token?: string | null
+          user_agent?: string | null
         }
         Relationships: []
       }
