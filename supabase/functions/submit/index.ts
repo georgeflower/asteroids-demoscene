@@ -927,24 +927,28 @@ async function handleAdminData(req: Request, supabaseAdmin: any) {
     return errorResponse('Failed to fetch scores', 500);
   }
 
-  const { data: flags, error: flagsError } = await supabaseAdmin
+  const { data: flagsData, error: flagsError } = await supabaseAdmin
     .from('submission_flags')
     .select('id, score_id, flag_type, severity, reasoning, admin_override, created_at')
     .order('created_at', { ascending: false })
     .limit(200);
 
+  let flags = flagsData ?? [];
   if (flagsError) {
-    return errorResponse('Failed to fetch flags', 500);
+    console.error('admin-data: submission_flags query failed:', flagsError.message);
+    flags = [];
   }
 
-  const { data: auditLogs, error: auditError } = await supabaseAdmin
+  const { data: auditData, error: auditError } = await supabaseAdmin
     .from('score_audit_log')
     .select('score_id, session_token, submission_method, created_at')
     .order('created_at', { ascending: false })
     .limit(100);
 
+  let auditLogs = auditData ?? [];
   if (auditError) {
-    return errorResponse('Failed to fetch audit logs', 500);
+    console.error('admin-data: score_audit_log query failed:', auditError.message);
+    auditLogs = [];
   }
 
   const { data: rejected, error: rejectedError } = await supabaseAdmin
