@@ -11,6 +11,7 @@ import OnlineLobby from "@/components/OnlineLobby";
 import LobbyChat from "@/components/LobbyChat";
 import PlayerList from "@/components/PlayerList";
 import CRTBootOverlay from "@/components/CRTBootOverlay";
+import GameOverPanel from "@/components/GameOverPanel";
 import ControlSettings from "@/components/ControlSettings";
 import { loadBindings, displayKeyName, type ControlBindings } from "@/hooks/useControlSettings";
 import type { DuelNetState, CoopNetState, SessionMode } from "@/types/multiplayer";
@@ -6487,126 +6488,23 @@ const Game = () => {
         )}
 
         {showGameOver && gameMode === "solo" && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/80 overflow-auto py-4">
-            <div className="text-3xl sm:text-5xl font-mono text-[hsl(var(--game-danger))] mb-3 sm:mb-4 animate-pulse">
-              GAME OVER
-            </div>
-            <div className="text-base sm:text-2xl font-mono text-[hsl(var(--game-foreground))] mb-3 sm:mb-4">
-              FINAL SCORE: {displayScore.toString().padStart(8, "0")}
-            </div>
-
-            {/* Run summary (solo) */}
-            {runSummary && (
-              <div className="mb-2 w-72 font-mono text-[8px] sm:text-[9px] text-[hsl(var(--game-foreground))] border border-[hsl(var(--game-foreground))]/40 px-3 py-2">
-                <div className="grid grid-cols-2 gap-x-5 gap-y-1">
-                  <span><span className="opacity-60">ACCURACY </span>{runSummary.accuracy === null ? "—" : `${runSummary.accuracy.toFixed(0)}%`}</span>
-                  <span><span className="opacity-60">ASTEROIDS </span>{runSummary.asteroids}</span>
-                  <span><span className="opacity-60">BEST CHAIN </span>x{runSummary.bestChain}</span>
-                  <span><span className="opacity-60">TIME </span>{Math.floor(runSummary.timeSurvived / 60)}:{(runSummary.timeSurvived % 60).toString().padStart(2, "0")}</span>
-                  <span><span className="opacity-60">WAVE </span>{runSummary.wave}</span>
-                </div>
-                <div className={`mt-2 text-center text-[9px] sm:text-[10px] ${!runSummary.prevBest || runSummary.score > runSummary.prevBest.score ? "text-[hsl(var(--game-glow))] font-bold" : "opacity-60"}`}>
-                  {!runSummary.prevBest
-                    ? "NEW PERSONAL BEST!"
-                    : runSummary.score > runSummary.prevBest.score
-                      ? `NEW PERSONAL BEST! +${(runSummary.score - runSummary.prevBest.score).toLocaleString()}`
-                      : `BEST: ${runSummary.prevBest.score.toLocaleString()} (-${(runSummary.prevBest.score - runSummary.score).toLocaleString()})`}
-                </div>
-              </div>
-            )}
-
-            {/* High score entry */}
-            {enteringInitials && (
-              <div className="mb-4 flex flex-col items-center gap-2">
-                <div className="text-lg font-mono text-[hsl(var(--game-glow))]">ENTER INITIALS TO SAVE YOUR SCORE:</div>
-                {initialsError && (
-                  <div className="text-sm font-mono text-[hsl(var(--game-danger))] animate-pulse">{initialsError}</div>
-                )}
-                <div className="flex gap-2 items-center">
-                  <input
-                    type="text"
-                    maxLength={3}
-                    value={initials}
-                    onChange={(e) => {
-                      const newInitials = e.target.value.toUpperCase().replace(/[^A-Z]/g, "");
-                      setInitials(newInitials);
-                      setInitialsError("");
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" && initials.length > 0) {
-                        submitInitials(initials, displayScore);
-                      }
-                      e.stopPropagation();
-                    }}
-                    {...(initials.length === 0 ? { autoFocus: true } : {})}
-                    className="w-20 text-center text-2xl font-mono bg-transparent border-2 border-[hsl(var(--game-foreground))] text-[hsl(var(--game-foreground))] p-1 uppercase tracking-widest"
-                    placeholder="___"
-                  />
-                  <Button
-                    onClick={() => {
-                      if (initials.length > 0) {
-                        submitInitials(initials, displayScore);
-                      }
-                    }}
-                    disabled={initials.length === 0 || !!initialsError}
-                    className="bg-[hsl(var(--game-foreground))] text-[hsl(var(--game-background))] hover:bg-[hsl(var(--game-glow))] font-mono disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    OK
-                  </Button>
-                </div>
-              </div>
-            )}
-
-            {/* Scoreboard on game over */}
-            {!enteringInitials && (HIGH_SCORES_ENABLED ? leaderboard.length > 0 : localHighScores.length > 0) && (
-              <div className="mb-4 w-72">
-                <div className="text-lg font-mono text-[hsl(var(--game-glow))] text-center mb-2">
-                  {HIGH_SCORES_ENABLED ? "CLOUD LEADERBOARD" : "LOCAL HIGH SCORES"}
-                </div>
-                <div className="border border-[hsl(var(--game-foreground))] p-2">
-                  {(HIGH_SCORES_ENABLED ? leaderboard : localHighScores).slice(0, 5).map((entry, i) => (
-                    <div
-                      key={i}
-                      className={`flex justify-between font-mono text-sm py-0.5 ${
-                        entry.score === displayScore && entry.initials === initials.toUpperCase()
-                          ? "text-[hsl(var(--game-glow))]"
-                          : "text-[hsl(var(--game-foreground))]"
-                      }`}
-                    >
-                      <span style={{ whiteSpace: "pre" }}>
-                        {(i + 1).toString().padStart(2, " ")}. {entry.initials.padEnd(3, " ")}
-                      </span>
-                      <span>{entry.score.toString().padStart(8, "0")}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            <div className="flex gap-4">
-              <Button
-                onClick={initGame}
-                className={`text-xl px-8 py-4 font-mono transition-all ${
-                  gameOverSelection === 0
-                    ? "bg-[hsl(var(--game-foreground))] text-[hsl(var(--game-background))] shadow-[0_0_15px_hsl(var(--game-foreground))]"
-                    : "bg-[hsl(var(--game-foreground))]/20 text-[hsl(var(--game-foreground))] border border-[hsl(var(--game-foreground))]/40"
-                }`}
-              >
-                {gameOverSelection === 0 ? "▸ " : ""}PLAY AGAIN
-              </Button>
-              <Button
-                onClick={quitToMenu}
-                variant="outline"
-                className={`font-mono transition-all ${
-                  gameOverSelection === 1
-                    ? "border-[hsl(var(--game-foreground))] text-[hsl(var(--game-foreground))] bg-[hsl(var(--game-foreground))]/20 shadow-[0_0_15px_hsl(var(--game-foreground))]"
-                    : "border-[hsl(var(--game-foreground))]/40 text-[hsl(var(--game-foreground))]/60"
-                }`}
-              >
-                {gameOverSelection === 1 ? "▸ " : ""}MENU
-              </Button>
-            </div>
-          </div>
+          <GameOverPanel
+            score={displayScore}
+            runSummary={runSummary}
+            boardTitle={HIGH_SCORES_ENABLED ? "CLOUD LEADERBOARD" : "LOCAL HIGH SCORES"}
+            entries={(HIGH_SCORES_ENABLED ? leaderboard : localHighScores).slice(0, 10)}
+            enteringInitials={enteringInitials}
+            initials={initials}
+            hasStoredInitials={!!localStorage.getItem("playerInitials")}
+            isTouchDevice={isTouchDevice}
+            status={initialsError}
+            statusIsError={!!initialsError}
+            selection={gameOverSelection}
+            onInitialsChange={(v) => { setInitials(v); setInitialsError(""); }}
+            onSubmitInitials={() => submitInitials(initials, displayScore)}
+            onPlayAgain={initGame}
+            onMenu={quitToMenu}
+          />
         )}
 
         {/* Co-op game over statistics overlay */}
