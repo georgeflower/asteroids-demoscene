@@ -1,5 +1,7 @@
 # Codebase Deep-Dive Analysis — Findings Report
 
+> **Status (2026-10-04):** historical snapshot from 2026-04-07. Several items have since been fixed or changed (see CHANGELOG.md and SECURITY.md); line numbers are out of date. Treat as a backlog reference, not current state.
+
 > **Scope**: Full 3-pass analysis of every file in the repository.  
 > **Date**: 2026-04-07  
 > **Analyst**: Copilot Task Agent  

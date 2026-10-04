@@ -43,6 +43,7 @@ All three Edge Function endpoints (`/start-session`, `/heartbeat`, `/submit`) ch
 - The Edge Function generates a cryptographically random UUID (`crypto.randomUUID()`), stores it in `game_sessions`, and returns it.
 - Every subsequent request must carry this token. There is no way to forge a valid token.
 - Sessions expire after **1 hour** of total age and are marked `expired = true` after the first score submission, making each token single-use.
+- A session accepts exactly one submission; the slot is claimed atomically (`submission_count` 0 → 1), so later retries of the same session receive `MAX_SUBMISSIONS`. The client treats that as success when the leaderboard already contains the same initials and score.
 
 ---
 
@@ -240,9 +241,17 @@ Accepted scores are written via the `insert_score_with_audit` PostgreSQL RPC whi
 
 ### Layer 21 — Admin Endpoint Authentication
 
-The `/admin-data` (GET) and `/admin-delete` (POST) endpoints require a secret `x-admin-key` request header that must exactly match the `ADMIN_SECRET_KEY` environment variable stored in the Edge Function secrets. Any request with a missing or incorrect key receives `401 Unauthorized`.
+The `/admin-data` (GET), `/admin-delete` (POST), and `/admin-approve` (POST) endpoints require a secret `x-admin-key` request header that must exactly match the `ADMIN_SECRET_KEY` environment variable stored in the Edge Function secrets. Any request with a missing or incorrect key receives `401 Unauthorized`.
+
+`/admin-approve` inserts a rejected run into the leaderboard with source `admin_approved` through `insert_score_with_audit`; already-approved rows are refused.
 
 The in-browser Admin Monitoring Dashboard (`AdminMonitor.tsx`) is activated by setting `localStorage.asteroids_admin = 'true'` and also requires the correct admin key at runtime.
+
+---
+
+### Layer 22 — Rejected-Submission Log & Admin Review
+
+Every hard rejection is stored in `rejected_submissions` with `session_token`, `initials`, `score`, `level`, `code`, `message`, `detail` jsonb, `origin`, `user_agent`, `approved`, and `created_at`. The admin dashboard lists the latest 100 rejected submissions and can approve a legitimate run.
 
 ---
 
@@ -302,6 +311,22 @@ Comparison: timing-safe byte-by-byte XOR (`timingSafeEqual`) to prevent timing-o
 | `admin_override` | bool | Admin has reviewed and cleared this flag |
 | `created_at` | timestamptz | When the flag was recorded |
 
+#### `rejected_submissions`
+| Column | Type | Description |
+|---|---|---|
+| `id` | uuid | Primary key |
+| `session_token` | text | Session associated with the rejected run |
+| `initials` | text | Submitted initials |
+| `score` | int | Submitted score |
+| `level` | int | Submitted wave/level |
+| `code` | text | Machine-readable rejection reason |
+| `message` | text | Human-readable rejection reason |
+| `detail` | jsonb | Validation details captured at rejection |
+| `origin` | text | Request origin |
+| `user_agent` | text | Request user agent |
+| `approved` | bool | Whether an admin approved the run |
+| `created_at` | timestamptz | When the rejection was recorded |
+
 #### `current_high_scores` CHECK Constraints
 Database-level `CHECK` constraints enforce valid ranges for `score` (0–9 999 999), `initials` format (1–3 uppercase A-Z), `level`, and `time_played_seconds`.
 
@@ -325,7 +350,7 @@ Database-level `CHECK` constraints enforce valid ranges for `score` (0–9 999 9
 ### What This Does NOT Protect Against
 
 ⚠️ A sophisticated attacker who can read memory of the running browser process, intercept the HMAC key, and reconstruct perfectly valid-looking heartbeats with a manipulated score trajectory — this would require defeating the entropy, delta, and plausibility checks simultaneously  
-⚠️ Collusion where a legitimate player knowingly plays slowly to build up valid heartbeats, then attempts a large final-score submission (partially mitigated by the final-score cross-check and 5 000-point post-heartbeat tolerance cap)
+⚠️ Collusion where a legitimate player knowingly plays slowly to build up valid heartbeats, then attempts a large final-score submission (partially mitigated by the final-score cross-check, which flags a final jump of more than 60 000 points since the last heartbeat)
 
 ---
 
@@ -341,6 +366,16 @@ If you discover a security vulnerability in the highscore system or any other pa
 ---
 
 ### Changelog
+
+#### 2026-10-04: Rejected-submission review
+- Added the admin approve endpoint
+- Added Layer 22 for rejected-submission logging and review
+- Added client-side retries for session starts and score submissions
+
+#### 2026-10-03: Score limits rebuilt
+- Set the hard ceiling to 10 000 points per second plus a 100 000-point burst allowance
+- Changed statistical checks to flag instead of reject
+- Added the `rejected_submissions` log
 
 #### 2026-03-27: Security Documentation Expanded
 - Documented all 21 security layers in detail

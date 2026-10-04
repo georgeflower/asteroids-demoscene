@@ -2,6 +2,140 @@
 
 All notable changes to this project will be documented in this file.
 
+## Coming next (planned, not released — subject to change)
+
+### Game balance
+- **Fewer extra lives**: later and rarer 1UPs, a cap on total lives, and no extra-life drops from plain asteroids
+- **Fewer, fairer enemies**: new enemy types arrive later, fewer are alive at once, and spawns have more breathing room
+- **Green aliens**: slower, shorter-range and less precise shots, with a visible warning just before they fire
+- **Blue teleporters**: teleport less often, never land on top of you, and show a marker where they will appear
+- **Fix**: the green-enemy spawn cooldown announced in 0.3.1 was never actually applied (a timer was overwritten) and will finally take effect
+
+### Game feel
+- Screen shake and a brief hit-stop on big impacts (respects reduced-motion settings)
+- A short wave-clear pause with a bonus tally
+
+### Polish
+- Sound-effects mute / volume control
+- Hyperspace cooldown indicator on the touch button
+- Accessibility labels for all buttons
+
+### Under consideration
+- Landscape layout for phones
+- Difficulty-curve tuning based on in-game telemetry
+- Splitting the rendering code out of `Game.tsx`
+
+## [0.4.0] - 2026-10-04 — Reliable cloud saves & admin review
+
+### Added
+
+- **Cloud-save status** on the Game Over screen: SAVING / SAVED / SAVED LOCALLY / CLOUD SAVE FAILED with a short reason code
+- **TAP TO RETRY CLOUD SAVE** button after a failed save
+- **Admin Monitor**: REJECTED SUBMISSIONS table (reason code, score, wave, details) with an APPROVE action to add a legitimate run to the board
+
+### Changed
+
+- The game session now starts with automatic retries, and a final heartbeat is sent when the run ends so the last score is on record
+- Score submission retries on network errors and server errors; the proof-of-work wait is bounded and reports `POW` if it times out
+- If the server already holds your score (for example the response was lost), the game recognises it and shows SAVED instead of an error
+- If no server session could be started, the run is saved locally and no retry is offered
+
+### Fixed
+
+- False "CLOUD SAVE FAILED: MAX_SUBMISSI" after a lost response
+- A retry button that could never succeed without a session token
+
+## [0.3.7] - 2026-10-04 — Main menu & persistent radio
+
+### Changed
+
+- **Main menu redesign**: clear button list, GLOBAL / LOCAL score card, control hints, compact radio player and tidy footer
+- Changelog, All Scores and Settings open as proper dialogs, closable with Escape
+- DUEL is only offered on devices with a keyboard or mouse (no more flash on phones)
+
+### Fixed
+
+- Radio music no longer restarts when switching between menu and game (one persistent audio element)
+- The in-game radio play/pause button could get stuck on pause
+- Pressing Enter on a focused menu control (CHANGELOG, tabs, radio) no longer starts SOLO instead
+
+## [0.3.6] - 2026-10-04 — Mobile layout & touch controls
+
+### Changed
+
+- Compact in-game radio mini-player and a pause button for touch devices
+- Larger, clearer touch controls (rotate, thrust, fire) with a separate HYPERSPACE button; touch targets are at least 44 px
+- Two-tap "main menu" quit while playing
+- Desktop control hints shown as two centred lines
+- FPS overlay is now debug-mode only
+
+### Fixed
+
+- HUD clipped on phone screens; the layout no longer shifts while playing
+
+## [0.3.5] - 2026-10-03 — Anti-cheat overhaul
+
+### Changed
+
+- Score limits are now based on what is physically possible (hard ceiling of 10,000 points per second plus a 100,000 burst allowance for boss kills); the old heartbeat cap wrongly rejected legitimate late-wave runs
+- Statistical checks now only flag a score for admin review instead of rejecting it
+- Heartbeats: minimum 5 s gap, at most 6 per minute, strictly increasing sequence numbers; one atomic submission per session
+
+### Added
+
+- Rejected submissions are logged with a reason code and details (`rejected_submissions`) for admin review
+
+### Fixed
+
+- Legitimate high scores being rejected as impossible
+
+## [0.3.4] - 2026-10-03 — Solo UI & Game Over redesign
+
+### Changed
+
+- **Redesigned Game Over screen**: fixed-height layout that no longer jumps, run summary, initials entry, cloud status row and PLAY AGAIN / MENU; full-screen on phones
+- Solo-mode UI fixes
+
+### Fixed
+
+- Score bar layout shift in the solo HUD
+- Restored a missing leaderboard entry (QUM)
+
+## [0.3.3] - 2026-09-02 — Combo chain, run summary & HUD
+
+### Added
+
+- **Combo chain**: kills within 2 seconds of each other build a score multiplier (+10% per link, up to ×5) with an on-canvas indicator and decay bar; it resets when you lose a life
+- **Run summary** on the Game Over screen: time, wave, accuracy, asteroids, best chain and personal best
+- **NEXT 1UP** counter in the HUD
+
+### Changed
+
+- Extra lives (every 10,000 points) are now awarded for every kind of kill, not only asteroids
+
+### Fixed
+
+- Game Over keyboard and gamepad selection (Enter / Space / A) made reliable
+
+## [0.3.2] - 2026-08-27 — Restart flow & input hardening
+
+### Added
+
+- **Instant restart**: PLAY AGAIN and MENU are never locked; Enter / Space activate them on Game Over
+- **Remembered initials**: pre-filled from your last entry
+- A minimum score of 1,000 is required before you are asked for initials
+
+### Changed
+
+- Initials entry no longer blocks anything: the local score is saved instantly and the cloud save runs in the background
+
+### Fixed
+
+- Touch controls in online duel
+- Audio resumes after the browser suspends it
+- Handling of window blur and tab visibility changes
+- **Arrow Key Scrolling**: Arrow keys (Up, Down, Left, Right) and WASD keys no longer scroll the browser page while the game canvas is focused, including during active gameplay and when the pause menu is open. Normal browser scrolling is restored when the game no longer has focus (for example, after clicking outside the canvas or switching tabs).
+
 ## [0.3.1] - 2026-04-13
 
 ### Added
@@ -106,12 +240,6 @@ All notable changes to this project will be documented in this file.
 
 - **Top Scores**: Main menu "TOP SCORES" and "VIEW ALL SCORES" now display scores from the new active table
 - **Score Saving**: New scores are saved to the fresh scoreboard
-
-## [Unreleased]
-
-### Fixed
-
-- **Arrow Key Scrolling**: Arrow keys (Up, Down, Left, Right) and WASD keys no longer scroll the browser page while the game canvas is focused, including during active gameplay and when the pause menu is open. Normal browser scrolling is restored when the game no longer has focus (for example, after clicking outside the canvas or switching tabs).
 
 ## 🚀 v0.1.4 — UI/UX Polish & HUD Improvements
 
