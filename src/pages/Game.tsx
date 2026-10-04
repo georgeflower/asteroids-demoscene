@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useCallback, type RefObject } from "react";
 import { useNavigate } from "react-router-dom";
+import { APP_VERSION as GAME_VERSION } from "@/constants/version";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import hyperspaceIcon from "@/assets/hyperspace.png";
@@ -296,7 +297,6 @@ const ONLINE_INPUT_SEND_INTERVAL_MS = 50;
 /** Coop state is broadcast every Nth worker tick; at 60 Hz this gives ~20 Hz. */
 const ONLINE_STATE_BROADCAST_TICK_INTERVAL = 3;
 
-const GAME_VERSION = "0.4.0";
 
 const LOCAL_SCORES_KEY = "asteroids_local_highscores";
 interface LocalScore {
