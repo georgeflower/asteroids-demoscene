@@ -5887,10 +5887,10 @@ const Game = () => {
             }
           } else if (gameModeRef.current === "menu") {
             if (justUp) {
-              setMenuSelection((s) => (s - 1 + 5) % 5);
+              setMenuSelection((s) => (!canUseKeyboard && (s === 2 || s === 3) ? 0 : s === 4 ? 3 : s === 3 ? (canUseKeyboard ? 1 : 0) : 0));
             }
             if (justDown) {
-              setMenuSelection((s) => (s + 1) % 5);
+              setMenuSelection((s) => (s === 0 ? (canUseKeyboard ? 1 : 3) : s === 1 ? 3 : s === 3 ? 4 : 0));
             }
             if (justA) {
               setMenuSelection((s) => {
@@ -5939,7 +5939,7 @@ const Game = () => {
     };
     rafId = requestAnimationFrame(poll);
     return () => cancelAnimationFrame(rafId);
-  }, [initGame, initDuel, initCoop, showGameOver, togglePause, resumeGame, quitToMenu]);
+  }, [initGame, initDuel, initCoop, showGameOver, togglePause, resumeGame, quitToMenu, canUseKeyboard]);
 
   // ===== CRT BOOT ANIMATION =====
   if (showBootAnimation) {
