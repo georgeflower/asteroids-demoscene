@@ -2905,6 +2905,7 @@ const Game = () => {
       showLifeLostRef.current
     )
       return;
+    gameStateRef.current.tick = (gameStateRef.current.tick ?? 0) + 1;
 
     const state = gameStateRef.current;
 
