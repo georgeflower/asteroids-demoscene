@@ -1008,7 +1008,7 @@ const Game = () => {
           new Promise<undefined>((resolve) => setTimeout(resolve, 20000)),
         ]);
       }
-      if (powPromiseRef.current && powSolutionRef.current === null) return { ok: false, code: "NETWORK" };
+      if (powPromiseRef.current && powSolutionRef.current === null) return { ok: false, code: "POW" };
 
       // Compute HMAC for submission — sign ALL validated fields
       let hmac: string | undefined;
@@ -1047,20 +1047,27 @@ const Game = () => {
 
           const result = await response.json().catch(() => ({}));
 
-          if (!response.ok) {
-            console.error("Failed to save score:", result.error || "Unknown error");
-            if (response.status === 400 && result.error === "Please choose different initials") {
-              return { ok: false, validation: result.error };
-            }
-            if (response.status === 409) {
+            if (response.status === 409 || result.code === "MAX_SUBMISSIONS") {
+              // The submission slot may already have been claimed by a lost response
+              // (request reached the server, reply never arrived). If the score is on
+              // the board, treat it as saved.
               const board = await loadLeaderboard();
               setLeaderboard(board);
-              return { ok: true };
+              const exists = board.some(
+                (row) => row.initials === playerInitials.toUpperCase() && row.score === snapshot.score,
+              );
+              if (exists) return { ok: true };
+              if (response.status >= 500 && attempt < retryDelays.length) continue;
             }
-            if (response.status >= 500 && attempt < retryDelays.length) continue;
-            const rawCode = typeof result.code === "string" ? result.code : typeof result.error === "string" ? result.error : String(response.status);
-            return { ok: false, code: rawCode.toUpperCase().replace(/[^A-Z0-9_]/g, "_").slice(0, 12) || String(response.status) };
-          }
+            if (!response.ok) {
+              console.error("Failed to save score:", result.error || "Unknown error");
+              if (response.status === 400 && result.error === "Please choose different initials") {
+                return { ok: false, validation: result.error };
+              }
+              if (response.status >= 500 && attempt < retryDelays.length) continue;
+              const rawCode = typeof result.code === "string" ? result.code : typeof result.error === "string" ? result.error : String(response.status);
+              return { ok: false, code: rawCode.toUpperCase().replace(/[^A-Z0-9_]/g, "_").slice(0, 12) || String(response.status) };
+            }
 
           const board = await loadLeaderboard();
           setLeaderboard(board);
