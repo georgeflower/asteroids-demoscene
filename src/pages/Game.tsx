@@ -18,7 +18,7 @@ import ChangelogOverlay from "@/components/ChangelogOverlay";
 import { loadBindings, displayKeyName, type ControlBindings } from "@/hooks/useControlSettings";
 import type { DuelNetState, CoopNetState, SessionMode } from "@/types/multiplayer";
 import { DEBUG_ENABLED, DEBUG_CATEGORIES, type DebugCategory, type DebugLogEntry } from "@/constants/debug";
-import { SPAWN_INVULNERABILITY_FRAMES, SHIELD_DURATION, RAPID_FIRE_DURATION, MULTIPLIER_DURATION, POWERUP_DROP_RATE_SOLO, DEFAULT_TURN_SPEED, BULLET_LIFETIME, BOSS_TYPES, BOSS_NAMES, HIGH_SCORES_ENABLED, MIN_SCORE_FOR_INITIALS, CHAIN_WINDOW, CHAIN_STEP, CHAIN_MAX, EXTRA_LIFE_INTERVAL } from "@/constants/gameConstants";
+import { SPAWN_INVULNERABILITY_FRAMES, SHIELD_DURATION, RAPID_FIRE_DURATION, MULTIPLIER_DURATION, DEFAULT_TURN_SPEED, BULLET_LIFETIME, BOSS_TYPES, BOSS_NAMES, HIGH_SCORES_ENABLED, MIN_SCORE_FOR_INITIALS, CHAIN_WINDOW, CHAIN_STEP, CHAIN_MAX, BALANCE, extraLifeThreshold, type DropSource } from "@/constants/gameConstants";
 import { readGamepad as readGamepadUtil } from "@/hooks/useInput";
 
 interface Vector {
@@ -198,6 +198,9 @@ const COLOR_THEMES: ColorTheme[] = [
 ];
 
 interface GameState {
+  extraLifeCount?: number;
+  lastDropTick?: number;
+  tick?: number;
   ship: Ship;
   asteroids: Asteroid[];
   bullets: Bullet[];
@@ -1449,10 +1452,24 @@ const Game = () => {
     return base;
   };
 
-  const createPowerUp = (x: number, y: number): PowerUp | null => {
-    if (Math.random() > POWERUP_DROP_RATE_SOLO) return null;
-    const types: PowerUp["type"][] = ["shield", "rapidFire", "extraLife", "multiplier"];
-    const type = types[Math.floor(Math.random() * types.length)];
+  const pickWeighted = <T extends string>(weights: Record<T, number>): T => {
+    const entries = Object.entries(weights) as [T, number][];
+    const total = entries.reduce((a, [, w]) => a + w, 0);
+    let r = Math.random() * total;
+    for (const [k, w] of entries) { if ((r -= w) < 0) return k; }
+    return entries[entries.length - 1][0];
+  };
+
+  const createPowerUp = (x: number, y: number, source: DropSource): PowerUp | null => {
+    const st = gameStateRef.current;
+    const tick = st?.tick ?? 0;
+    if (st) {
+      if (st.powerUps.length >= BALANCE.MAX_POWERUPS_ON_SCREEN) return null;
+      if (tick - (st.lastDropTick ?? -Infinity) < BALANCE.DROP_COOLDOWN_TICKS) return null;
+    }
+    if (Math.random() >= BALANCE.DROP_RATE[source]) return null;
+    if (st) st.lastDropTick = tick;
+    const type: PowerUp["type"] = pickWeighted(BALANCE.DROP_WEIGHTS);
     return {
       pos: { x, y },
       vel: { x: (Math.random() - 0.5) * 0.5, y: (Math.random() - 0.5) * 0.5 },
@@ -1500,6 +1517,9 @@ const Game = () => {
       ufos: [],
       powerUps: [],
       score: 0,
+      extraLifeCount: 0,
+      lastDropTick: -Infinity,
+      tick: 0,
       lives: 3,
       wave: 1,
       gameOver: false,
@@ -2308,15 +2328,17 @@ const Game = () => {
     return dx * dx + dy * dy < r * r;
   };
 
-  // Award one extra life per EXTRA_LIFE_INTERVAL threshold crossed (solo only)
-  const awardExtraLives = useCallback((state: GameState, prevScore: number) => {
-    let threshold = (Math.floor(prevScore / EXTRA_LIFE_INTERVAL) + 1) * EXTRA_LIFE_INTERVAL;
-    while (state.score >= threshold) {
-      state.lives++;
-      setDisplayLives(state.lives);
-      spawnFloatingText(state.ship.pos, "EXTRA LIFE!", "#CC66FF", 22);
-      soundEffects.powerUp();
-      threshold += EXTRA_LIFE_INTERVAL;
+  // Award extra lives at escalating score thresholds, capped at MAX_LIVES (solo only)
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const awardExtraLives = useCallback((state: GameState, _prevScore: number) => {
+    while (state.score >= extraLifeThreshold((state.extraLifeCount ?? 0) + 1)) {
+      state.extraLifeCount = (state.extraLifeCount ?? 0) + 1;
+      if (state.lives < BALANCE.MAX_LIVES) {
+        state.lives++;
+        setDisplayLives(state.lives);
+        spawnFloatingText(state.ship.pos, "EXTRA LIFE!", "#CC66FF", 22);
+        soundEffects.powerUp();
+      }
     }
   }, []);
 
@@ -3512,8 +3534,10 @@ const Game = () => {
             state.powerUpActive.rapidFire = RAPID_FIRE_DURATION;
             break;
           case "extraLife": {
-            state.lives++;
-            setDisplayLives(state.lives);
+            if (state.lives < BALANCE.MAX_LIVES) {
+              state.lives++;
+              setDisplayLives(state.lives);
+            }
             break;
           }
           case "multiplier":
@@ -3603,7 +3627,7 @@ const Game = () => {
           } else {
             soundEffects.smallExplode();
           }
-          const powerUp = createPowerUp(asteroid.pos.x, asteroid.pos.y);
+          const powerUp = createPowerUp(asteroid.pos.x, asteroid.pos.y, asteroid.size === "large" ? "asteroidLarge" : asteroid.size === "medium" ? "asteroidMedium" : "asteroidSmall");
           if (powerUp) state.powerUps.push(powerUp);
           return false;
         }
@@ -3624,7 +3648,7 @@ const Game = () => {
           soundEffects.explode();
           spawnFloatingText(ufo.pos, `+${pts}`, "#FFFF66", 18);
           spawnExplosion(ufo.pos, "#FFFF66", 15);
-          const powerUp = createPowerUp(ufo.pos.x, ufo.pos.y);
+          const powerUp = createPowerUp(ufo.pos.x, ufo.pos.y, ufo.size === "large" ? "ufoLarge" : "ufoSmall");
           if (powerUp) state.powerUps.push(powerUp);
           return false;
         }
@@ -3650,7 +3674,7 @@ const Game = () => {
             const color = colorMap[alien.type] ?? "#FFFFFF";
             spawnFloatingText(alien.pos, `+${pts}`, color, 16);
             spawnExplosion(alien.pos, color, 12);
-            const powerUp = createPowerUp(alien.pos.x, alien.pos.y);
+            const powerUp = createPowerUp(alien.pos.x, alien.pos.y, "alien");
             if (powerUp) state.powerUps.push(powerUp);
           } else {
             spawnFloatingText(alien.pos, "HIT!", "#FFFFFF", 12);
@@ -3681,12 +3705,15 @@ const Game = () => {
             spawnExplosion(state.boss.pos, "#FF44FF", 30);
             spawnExplosion(state.boss.pos, "#FFFF44", 20);
             soundEffects.explode();
-            const bossDropTypes: PowerUp["type"][] = ["shield", "rapidFire", "extraLife", "multiplier"];
+            const bossDropType: PowerUp["type"] = pickWeighted({
+              ...BALANCE.BOSS_DROP_WEIGHTS,
+              extraLife: state.lives < BALANCE.MAX_LIVES ? BALANCE.BOSS_DROP_WEIGHTS.extraLife : 0,
+            });
             state.powerUps.push({
               pos: { ...state.boss.pos },
               vel: { x: Math.random() - 0.5, y: Math.random() - 0.5 },
               rotation: 0,
-              type: bossDropTypes[Math.floor(Math.random() * bossDropTypes.length)],
+              type: bossDropType,
               lifetime: 600,
             });
             state.boss = null;
@@ -6289,7 +6316,7 @@ const Game = () => {
           <span>
             LIVES: {displayLives}{" "}
             <span className="pointer-events-none opacity-60 text-[7px] sm:text-[9px] hidden md:inline">
-              NEXT 1UP: {(EXTRA_LIFE_INTERVAL - (displayScore % EXTRA_LIFE_INTERVAL)).toLocaleString()}
+              NEXT 1UP: {Math.max(0, extraLifeThreshold((gameStateRef.current?.extraLifeCount ?? 0) + 1) - displayScore).toLocaleString()}
             </span>
           </span>
           <div className="flex items-center gap-2">
