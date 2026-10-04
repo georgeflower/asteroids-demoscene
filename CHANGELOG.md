@@ -2,14 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
-## Coming next (planned, not released — subject to change)
+## [0.4.1] - 2026-10-04 — Balance pass: lives, rewards & enemy pacing
 
-### Game balance
-- **Fewer extra lives**: later and rarer 1UPs, a cap on total lives, and no extra-life drops from plain asteroids
-- **Fewer, fairer enemies**: new enemy types arrive later, fewer are alive at once, and spawns have more breathing room
-- **Green aliens**: slower, shorter-range and less precise shots, with a visible warning just before they fire
-- **Blue teleporters**: teleport less often, never land on top of you, and show a marker where they will appear
-- **Fix**: the green-enemy spawn cooldown announced in 0.3.1 was never actually applied (a timer was overwritten) and will finally take effect
+### Changed
+
+- **Fewer extra lives**: the first arrives past 40,000 points and the second past 120,000, with a cap of 5 lives; every kind of kill can still earn drops, but plain asteroids never grant an extra life
+- **NEXT 1UP** in the HUD now counts down to the next extra-life threshold
+- Boss kills drop shields and power-ups more evenly; an extra life is only offered while you are below the 5-life cap
+- **Green aliens**: spawn less often, shoot slower and shorter-range bullets that die well before reaching you, with a visible charge ring before every shot
+- **Blue sentinels**: teleport less often, never land within 220 px of your ship, show a destination ring before arriving, and leave on their own after 30 s
+- Fewer, fairer enemies: new enemy types arrive later and spawns have more breathing room
+
+### Fixed
+
+- The green-enemy spawn cooldown announced in 0.3.1 was never actually applied (a timer was overwritten); it now works
+
+
 
 ### Game feel
 - Screen shake and a brief hit-stop on big impacts (respects reduced-motion settings)

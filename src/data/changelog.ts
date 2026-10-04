@@ -2,13 +2,6 @@ export interface ChangelogSection { label: string; items: string[] }
 export interface ChangelogRelease { version: string; date: string; title?: string; sections: ChangelogSection[] }
 
 export const COMING_NEXT: ChangelogSection[] = [
-  { label: "Balance", items: [
-    "Fewer extra lives: later, rarer and capped",
-    "Fewer, fairer enemies; new types arrive later",
-    "Green aliens: slower, shorter range, less precise, with a warning before they fire",
-    "Blue teleporters: rarer, never land on you, a marker shows where they will appear",
-    "Fix: the green spawn cooldown announced in 0.3.1 was never applied; it will finally work",
-  ] },
   { label: "Feel & polish", items: [
     "Screen shake and hit-stop (reduced-motion safe)",
     "Wave-clear pause with a bonus tally",
