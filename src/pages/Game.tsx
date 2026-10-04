@@ -389,11 +389,7 @@ interface RadioMiniPlayerProps {
   isPlaying: boolean;
   nowPlaying: { artist: string; title: string } | null;
   autoPlayMusic: boolean;
-  userPaused: boolean;
   onToggleAutoPlay: () => void;
-  onPlay: () => void;
-  onPause: () => void;
-  onError: (message?: string) => void;
   onPauseGame?: () => void;
 }
 
@@ -402,11 +398,7 @@ function RadioMiniPlayer({
   isPlaying,
   nowPlaying,
   autoPlayMusic,
-  userPaused,
   onToggleAutoPlay,
-  onPlay,
-  onPause,
-  onError,
   onPauseGame,
 }: RadioMiniPlayerProps) {
   return (
@@ -418,8 +410,8 @@ function RadioMiniPlayer({
         onClick={() => {
           const audio = audioRef.current;
           if (!audio) return;
-          if (isPlaying) audio.pause();
-          else audio.play().catch(() => {});
+          if (audio.paused) audio.play().catch(() => {});
+          else audio.pause();
         }}
         className="relative h-9 w-9 shrink-0 rounded border border-[hsl(var(--game-foreground))]/60 text-[hsl(var(--game-foreground))] before:absolute before:-inset-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
       >
@@ -456,17 +448,6 @@ function RadioMiniPlayer({
           <span aria-hidden="true">⏸</span>
         </button>
       )}
-      <audio
-        ref={audioRef}
-        autoPlay={autoPlayMusic && !userPaused}
-        preload={autoPlayMusic ? "auto" : "none"}
-        className="hidden"
-        onPause={onPause}
-        onPlay={onPlay}
-        onError={(event) => onError(event.currentTarget.error?.message)}
-      >
-        <source src="https://nectarine.inversi0n.org/necta192.mp3" type="audio/mpeg" />
-      </audio>
     </div>
   );
 }
@@ -551,10 +532,18 @@ const Game = () => {
   const gameStatsRef = useRef({ asteroidsDestroyed: 0, bulletsFired: 0 });
   const heartbeatSeqRef = useRef(0);
   const [isTouchDevice, setIsTouchDevice] = useState(false);
-  const [canUseKeyboard, setCanUseKeyboard] = useState(true);
+  const [canUseKeyboard, setCanUseKeyboard] = useState(() =>
+    typeof window === "undefined" ? true : window.matchMedia("(any-pointer: fine)").matches,
+  );
   const [nowPlaying, setNowPlaying] = useState<{ artist: string; title: string } | null>(null);
   const nowPlayingRef = useRef<{ artist: string; title: string } | null>(null);
-  const [isRadioPlaying, setIsRadioPlaying] = useState(false);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  if (audioRef.current === null && typeof Audio !== "undefined") {
+    const audio = new Audio("https://nectarine.inversi0n.org/necta192.mp3");
+    audio.preload = "none";
+    audioRef.current = audio;
+  }
+  const [isRadioPlaying, setIsRadioPlaying] = useState(() => audioRef.current !== null && !audioRef.current.paused);
   const [quitConfirm, setQuitConfirm] = useState(false);
   const quitConfirmTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [gameMode, setGameMode] = useState<GameMode>("menu");
@@ -602,7 +591,6 @@ const Game = () => {
   const isPausedRef = useRef(false);
   const [pauseSelection, setPauseSelection] = useState(0); // 0=resume, 1=quit
   const prevGamepadButtonRef = useRef<boolean[]>([false, false, false, false, false, false, false]);
-  const audioRef = useRef<HTMLAudioElement>(null);
   const [autoPlayMusic, setAutoPlayMusic] = useState(() => {
     const stored = localStorage.getItem("autoPlayMusic");
     return stored === "true";
@@ -5047,7 +5035,10 @@ const Game = () => {
 
   useEffect(() => {
     setIsTouchDevice("ontouchstart" in window || navigator.maxTouchPoints > 0);
-    setCanUseKeyboard(window.matchMedia("(any-pointer: fine)").matches);
+    const mql = window.matchMedia("(any-pointer: fine)");
+    const handleChange = (event: MediaQueryListEvent) => setCanUseKeyboard(event.matches);
+    mql.addEventListener("change", handleChange);
+    return () => mql.removeEventListener("change", handleChange);
   }, []);
 
   const handleRadioPause = useCallback(() => {
@@ -5059,6 +5050,21 @@ const Game = () => {
   const handleRadioPlay = useCallback(() => {
     setIsRadioPlaying(true);
     setUserPaused(false);
+  }, []);
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    const handleError = () => console.error("Audio loading error:", audio.error?.message);
+    setIsRadioPlaying(!audio.paused);
+    audio.addEventListener("play", handleRadioPlay);
+    audio.addEventListener("pause", handleRadioPause);
+    audio.addEventListener("error", handleError);
+    return () => {
+      audio.removeEventListener("play", handleRadioPlay);
+      audio.removeEventListener("pause", handleRadioPause);
+      audio.removeEventListener("error", handleError);
+    };
   }, []);
 
   useEffect(() => () => {
@@ -5829,6 +5835,8 @@ const Game = () => {
   useEffect(() => {
     if (gameMode !== "menu" || showFullLeaderboard || showOldLeaderboard || showChangelog || showSettings) return;
     const handleMenuKey = (event: KeyboardEvent) => {
+      const target = event.target instanceof Element ? event.target : null;
+      if (event.key === "Enter" && target?.closest('button, a, input, [role="tab"]')) return;
       if (event.key === "ArrowUp" || event.key === "ArrowDown") {
         event.preventDefault();
         setMenuSelection((selection) => {
@@ -6108,11 +6116,7 @@ const Game = () => {
               isPlaying={isRadioPlaying}
               nowPlaying={nowPlaying}
               autoPlayMusic={autoPlayMusic}
-              userPaused={userPaused}
               onToggleAutoPlay={() => setAutoPlayMusic((enabled) => !enabled)}
-              onPlay={handleRadioPlay}
-              onPause={handleRadioPause}
-              onError={(message) => console.error("Audio loading error:", message)}
             />
             {DEBUG_ENABLED && (
               <label className="mt-1 flex h-5 items-center justify-center gap-2 font-mono text-[10px] text-[hsl(var(--game-danger))] opacity-70">
@@ -6933,11 +6937,7 @@ const Game = () => {
           isPlaying={isRadioPlaying}
           nowPlaying={nowPlaying}
           autoPlayMusic={autoPlayMusic}
-          userPaused={userPaused}
           onToggleAutoPlay={() => setAutoPlayMusic((enabled) => !enabled)}
-          onPlay={handleRadioPlay}
-          onPause={handleRadioPause}
-          onError={(message) => console.error("Audio loading error:", message)}
           onPauseGame={isTouchDevice ? togglePause : undefined}
         />
       </div>
