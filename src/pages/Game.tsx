@@ -5983,329 +5983,146 @@ const Game = () => {
 
   // ===== MENU SCREEN =====
   if (gameMode === "menu") {
+    const activeScores = scoreTab === "global" ? leaderboard : localHighScores;
+    const scoreRows = leaderboardLoading && scoreTab === "global" ? null : activeScores.slice(0, 3);
     return (
-      <div className="min-h-screen bg-[hsl(var(--game-background))] flex flex-col items-center justify-center p-4">
-        <div
-          className="text-3xl sm:text-4xl md:text-6xl font-mono text-[hsl(var(--game-foreground))] mb-2 tracking-widest"
-          style={{ textShadow: "0 0 30px hsl(var(--game-foreground))" }}
-        >
-          ASTEROIDS
-        </div>
-        <div className="text-sm font-mono text-[hsl(var(--game-foreground))] opacity-50 mb-12">DEMOSCENE EDITION</div>
+      <div className="relative min-h-dvh w-full overflow-x-hidden bg-[hsl(var(--game-background))] flex flex-col items-center px-4 pt-[max(1rem,env(safe-area-inset-top))] pb-[max(1rem,env(safe-area-inset-bottom))]">
+        <div aria-hidden="true" className="pointer-events-none fixed inset-0 z-0 bg-[radial-gradient(circle_at_center,transparent_30%,rgba(0,0,0,0.6)_100%)]" />
+        <svg aria-hidden="true" className="pointer-events-none fixed left-3 top-8 z-0 h-20 w-20 text-[hsl(var(--game-foreground))] opacity-10" viewBox="0 0 100 100">
+          <polygon points="11,42 25,15 56,7 87,28 92,61 69,89 32,85 7,63" fill="none" stroke="currentColor" strokeWidth="1.5" />
+          <polygon points="28,35 43,27 53,39 41,48" fill="none" stroke="currentColor" strokeWidth="1.5" />
+        </svg>
+        <svg aria-hidden="true" className="pointer-events-none fixed bottom-10 right-2 z-0 h-28 w-28 text-[hsl(var(--game-foreground))] opacity-[0.12]" viewBox="0 0 100 100">
+          <polygon points="8,35 26,9 60,13 91,39 82,75 54,93 20,80" fill="none" stroke="currentColor" strokeWidth="1.5" />
+          <polygon points="51,25 70,34 66,50 48,47" fill="none" stroke="currentColor" strokeWidth="1.5" />
+        </svg>
 
-        <div className="flex flex-col gap-4 items-center mb-12">
-          <Button
-            onClick={initGame}
-            className={`text-2xl px-12 py-6 font-mono tracking-wider transition-all ${
-              menuSelection === 0
-                ? "bg-[hsl(var(--game-foreground))] text-[hsl(var(--game-background))] shadow-[0_0_20px_hsl(var(--game-foreground))]"
-                : "bg-[hsl(var(--game-foreground))]/20 text-[hsl(var(--game-foreground))] border-2 border-[hsl(var(--game-foreground))]/40"
-            }`}
-          >
-            {menuSelection === 0 ? "▸ " : "  "}SOLO
-          </Button>
-          <Button
-            onClick={initDuel}
-            className={`text-2xl px-12 py-6 font-mono tracking-wider border-2 transition-all ${
-              menuSelection === 1 ? "shadow-[0_0_20px_rgba(255,136,68,0.5)]" : "opacity-60"
-            }`}
-            style={{
-              borderColor: P2_COLOR,
-              color: P2_COLOR,
-              background: menuSelection === 1 ? "rgba(255,136,68,0.15)" : "transparent",
-            }}
-          >
-            {menuSelection === 1 ? "▸ " : "  "}DUEL
-          </Button>
-
-          <Button
-            onClick={() => setGameMode("online_lobby")}
-            className={`text-2xl px-12 py-6 font-mono tracking-wider border-2 transition-all ${
-              menuSelection === 3
-                ? "shadow-[0_0_20px_rgba(68,255,68,0.5)] border-[#44FF44] text-[#44FF44] bg-[rgba(68,255,68,0.15)]"
-                : "opacity-60 border-[#44FF44]/60 text-[#44FF44]/60"
-            }`}
-          >
-            {menuSelection === 3 ? "▸ " : "  "}ONLINE
-            <span className="text-xs text-red-500 ml-1 align-middle">ALPHA</span>
-          </Button>
-          <Button
-            onClick={() => setShowSettings(true)}
-            className={`text-2xl px-12 py-6 font-mono tracking-wider border-2 transition-all ${
-              menuSelection === 4
-                ? "bg-[hsl(var(--game-foreground))] text-[hsl(var(--game-background))] shadow-[0_0_20px_hsl(var(--game-foreground))]"
-                : "bg-[hsl(var(--game-foreground))]/20 text-[hsl(var(--game-foreground))] border-2 border-[hsl(var(--game-foreground))]/40"
-            }`}
-          >
-            {menuSelection === 4 ? "▸ " : "  "}SETTINGS
-          </Button>
-        </div>
-
-        {/* Top 3 High Scores (current) */}
-        {HIGH_SCORES_ENABLED && leaderboard.length > 0 && (
-          <div className="mb-4 w-72">
+        <div className="relative z-10 my-auto flex w-full max-w-[360px] flex-col items-stretch gap-6">
+          <header className="text-center">
             <div
-              className="text-sm font-mono text-[hsl(var(--game-glow))] text-center mb-2 tracking-wider"
-              style={{ textShadow: "0 0 10px hsl(var(--game-glow))" }}
+              className="font-mono text-3xl tracking-widest text-[hsl(var(--game-foreground))] sm:text-4xl md:text-6xl"
+              style={{ textShadow: "0 0 30px hsl(var(--game-foreground))" }}
             >
-              ★ TOP SCORES ★
+              ASTEROIDS
             </div>
-            <div className="border border-[hsl(var(--game-foreground))]/30 p-2">
-              {leaderboard.slice(0, 3).map((entry, i) => (
-                <div
-                  key={i}
-                  className="flex justify-between font-mono text-sm py-0.5 text-[hsl(var(--game-foreground))]"
-                >
-                  <span
-                    className={i === 0 ? "text-[#FFD700]" : i === 1 ? "text-[#C0C0C0]" : "text-[#CD7F32]"}
-                    style={{ whiteSpace: "pre" }}
-                  >
-                    {(i + 1).toString().padStart(2, " ")}. {entry.initials.padEnd(3, " ")}
-                  </span>
-                  <span className={i === 0 ? "text-[#FFD700]" : i === 1 ? "text-[#C0C0C0]" : "text-[#CD7F32]"}>
-                    {entry.score.toString().padStart(8, "0")}
-                  </span>
-                </div>
-              ))}
+            <div className="mt-2 font-mono text-xs tracking-[0.3em] text-[hsl(var(--game-foreground))] opacity-70">
+              DEMOSCENE EDITION
             </div>
-            <button
-              onClick={() => setShowFullLeaderboard(true)}
-              className="w-full mt-1 font-mono text-[10px] text-[hsl(var(--game-foreground))] opacity-50 hover:opacity-100 transition-opacity uppercase tracking-widest text-center py-1"
-            >
-              VIEW ALL SCORES ▸
-            </button>
-            <button
-              onClick={() => {
-                loadOldLeaderboard().then(setOldLeaderboard);
-                setShowOldLeaderboard(true);
-              }}
-              className="w-full font-mono text-[10px] text-[hsl(var(--game-foreground))] opacity-50 hover:opacity-100 transition-opacity uppercase tracking-widest text-center py-1"
-            >
-              OLD HIGHSCORES ▸
-            </button>
+          </header>
+
+          <div className="flex flex-col items-stretch gap-3">
+            <MenuButton label="SOLO" onClick={initGame} variant="primary" selected={menuSelection === 0} />
+            {canUseKeyboard && (
+              <MenuButton label="DUEL" onClick={initDuel} variant="secondary" accent="orange" selected={menuSelection === 1} subLabel="2P LOCAL" />
+            )}
+            <MenuButton label="ONLINE" onClick={() => setGameMode("online_lobby")} variant="secondary" accent="green" selected={menuSelection === 3} badge="ALPHA" ariaLabel="Online alpha" />
+            <MenuButton label="SETTINGS" onClick={() => setShowSettings(true)} variant="ghost" selected={menuSelection === 4} />
           </div>
-        )}
 
-
-        {/* High scores disabled message */}
-        {!HIGH_SCORES_ENABLED && localHighScores.length === 0 && (
-          <div className="mb-8 w-72 text-center">
-            <div
-              className="text-sm font-mono text-[hsl(var(--game-glow))] mb-1 tracking-wider"
-              style={{ textShadow: "0 0 10px hsl(var(--game-glow))" }}
-            >
-              ★ NO HIGH SCORES YET ★
-            </div>
-            <div
-              className="text-sm font-mono tracking-wider"
-              style={{ color: "#FFD700", textShadow: "0 0 10px #FFD700" }}
-            >
-              PLAY A GAME TO SET A RECORD!
-            </div>
-          </div>
-        )}
-
-        {/* Local high scores on main menu */}
-        {localHighScores.length > 0 && (
-          <div className="mb-4 w-72">
-            <div
-              className="text-sm font-mono text-[hsl(var(--game-glow))] text-center mb-2 tracking-wider"
-              style={{ textShadow: "0 0 10px hsl(var(--game-glow))" }}
-            >
-              ★ LOCAL HIGH SCORES ★
-            </div>
-            <div className="border border-[hsl(var(--game-foreground))]/30 p-2">
-              {localHighScores.slice(0, 3).map((entry, i) => (
-                <div
-                  key={i}
-                  className="flex justify-between font-mono text-sm py-0.5 text-[hsl(var(--game-foreground))]"
-                >
-                  <span
-                    className={i === 0 ? "text-[#FFD700]" : i === 1 ? "text-[#C0C0C0]" : "text-[#CD7F32]"}
-                    style={{ whiteSpace: "pre" }}
-                  >
-                    {(i + 1).toString().padStart(2, " ")}. {entry.initials.padEnd(3, " ")}
-                  </span>
-                  <span className={i === 0 ? "text-[#FFD700]" : i === 1 ? "text-[#C0C0C0]" : "text-[#CD7F32]"}>
-                    {entry.score.toString().padStart(8, "0")}
-                  </span>
-                </div>
-              ))}
-            </div>
-            <button
-              onClick={() => setShowFullLeaderboard(true)}
-              className="w-full mt-1 font-mono text-[10px] text-[hsl(var(--game-foreground))] opacity-50 hover:opacity-100 transition-opacity uppercase tracking-widest text-center py-1"
-            >
-              VIEW ALL SCORES ▸
-            </button>
-          </div>
-        )}
-
-        {/* Full local leaderboard overlay */}
-        {showFullLeaderboard && (
-          <div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/85"
-            onClick={() => setShowFullLeaderboard(false)}
-          >
-            <div
-              className="bg-[hsl(var(--game-background))] border-2 border-[hsl(var(--game-foreground))]/40 p-6 max-w-sm w-full max-h-[80vh] overflow-auto"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div
-                className="text-lg font-mono text-[hsl(var(--game-glow))] text-center mb-4 tracking-wider"
-                style={{ textShadow: "0 0 10px hsl(var(--game-glow))" }}
-              >
-                ★ LOCAL HIGH SCORES ★
-              </div>
-              {localHighScores.length === 0 ? (
-                <div className="text-center font-mono text-sm text-[hsl(var(--game-foreground))]/60">No scores yet</div>
-              ) : (
-                localHighScores.map((entry, i) => (
-                  <div
-                    key={i}
-                    className="flex justify-between font-mono text-sm py-0.5 text-[hsl(var(--game-foreground))]"
-                  >
-                    <span style={{ whiteSpace: "pre" }}>
-                      {(i + 1).toString().padStart(2, " ")}. {entry.initials.padEnd(3, " ")}
-                    </span>
-                    <span>{entry.score.toString().padStart(8, "0")}</span>
-                  </div>
-                ))
-              )}
-              <div className="flex gap-2 mt-4">
-                <button
-                  onClick={() => setShowFullLeaderboard(false)}
-                  className="flex-1 font-mono text-xs text-[hsl(var(--game-foreground))] opacity-60 hover:opacity-100 transition-opacity uppercase tracking-widest text-center py-2 border border-[hsl(var(--game-foreground))]/30"
-                >
-                  CLOSE
-                </button>
-                {localHighScores.length > 0 && (
+          <section className="w-full" aria-label="High scores">
+            <div className="overflow-hidden rounded-md border border-[hsl(var(--game-foreground))]/30 bg-[hsl(var(--game-background))]/70">
+              <div role="tablist" aria-label="Score source" className="grid grid-cols-2 border-b border-[hsl(var(--game-foreground))]/30">
+                {(["global", "local"] as const).map((tab) => (
                   <button
-                    onClick={() => {
-                      localStorage.removeItem(LOCAL_SCORES_KEY);
-                      setLocalHighScores([]);
-                    }}
-                    className="flex-1 font-mono text-xs text-[hsl(var(--game-danger))] opacity-60 hover:opacity-100 transition-opacity uppercase tracking-widest text-center py-2 border border-[hsl(var(--game-danger))]/30"
+                    key={tab}
+                    type="button"
+                    role="tab"
+                    aria-selected={scoreTab === tab}
+                    onClick={() => setScoreTab(tab)}
+                    className={`h-11 font-mono text-[10px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary ${scoreTab === tab ? "bg-[hsl(var(--game-foreground))] text-[hsl(var(--game-background))]" : "text-[hsl(var(--game-foreground))] opacity-80"}`}
                   >
-                    CLEAR SCORES
+                    {tab.toUpperCase()}
                   </button>
+                ))}
+              </div>
+              <div className="flex h-[84px] flex-col justify-center px-4 font-mono text-sm" role="tabpanel">
+                {scoreRows === null ? (
+                  [0, 1, 2].map((row) => <div key={row} className="flex h-7 items-center justify-between text-[hsl(var(--game-foreground))] opacity-70"><span>···</span><span>········</span></div>)
+                ) : scoreRows.length === 0 ? (
+                  <div className="text-center text-[10px] text-[hsl(var(--game-foreground))] opacity-80">NO SCORES YET — PLAY A GAME!</div>
+                ) : (
+                  scoreRows.map((entry, index) => (
+                    <div key={`${entry.initials}-${entry.score}-${index}`} className={`flex h-7 items-center justify-between ${index === 0 ? "text-[#FFD700]" : index === 1 ? "text-[#C0C0C0]" : "text-[#CD7F32]"}`}>
+                      <span className="whitespace-pre">{(index + 1).toString().padStart(2, " ")}. {entry.initials.padEnd(3, " ")}</span>
+                      <span>{entry.score.toString().padStart(8, "0")}</span>
+                    </div>
+                  ))
                 )}
               </div>
             </div>
-          </div>
-        )}
+            <div className="mt-1 grid grid-cols-2 gap-2">
+              <button type="button" onClick={() => setShowFullLeaderboard(true)} className="h-11 font-mono text-[10px] text-[hsl(var(--game-foreground))] opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">ALL SCORES ▸</button>
+              {HIGH_SCORES_ENABLED && (
+                <button type="button" onClick={() => { loadOldLeaderboard().then(setOldLeaderboard); setShowOldLeaderboard(true); }} className="h-11 font-mono text-[10px] text-[hsl(var(--game-foreground))] opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">OLD HIGHSCORES ▸</button>
+              )}
+            </div>
+          </section>
 
-        {/* Full server leaderboard overlay (current scores) */}
-        {HIGH_SCORES_ENABLED && showFullLeaderboard && (
-          <div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/85"
-            onClick={() => setShowFullLeaderboard(false)}
-          >
-            <div
-              className="bg-[hsl(var(--game-background))] border-2 border-[hsl(var(--game-foreground))]/40 p-6 max-w-sm w-full max-h-[80vh] overflow-auto"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div
-                className="text-lg font-mono text-[hsl(var(--game-glow))] text-center mb-4 tracking-wider"
-                style={{ textShadow: "0 0 10px hsl(var(--game-glow))" }}
-              >
-                ★ HIGH SCORES ★
+          <div className="max-w-full space-y-1 text-center font-mono text-[10px] text-[hsl(var(--game-foreground))] opacity-80">
+            {!canUseKeyboard ? (
+              <>
+                <div>TOUCH: ◀ ▶ TURN · ▲ THRUST · ◎ FIRE</div>
+                <div>ONLINE: CREATE OR JOIN A ROOM</div>
+              </>
+            ) : (
+              <>
+                <div className="whitespace-normal">SOLO: {displayKeyName(controlBindingsRef.current.p1.left)}{displayKeyName(controlBindingsRef.current.p1.right)}{displayKeyName(controlBindingsRef.current.p1.thrust)} + {displayKeyName(controlBindingsRef.current.p1.fire)} + {displayKeyName(controlBindingsRef.current.p1.hyperspace)} | GAMEPAD</div>
+                <div className="whitespace-normal">DUEL: P1 {displayKeyName(controlBindingsRef.current.p1.left)}{displayKeyName(controlBindingsRef.current.p1.right)}{displayKeyName(controlBindingsRef.current.p1.thrust)}+{displayKeyName(controlBindingsRef.current.p1.fire)} | P2 {displayKeyName(controlBindingsRef.current.p2.left)}{displayKeyName(controlBindingsRef.current.p2.right)}{displayKeyName(controlBindingsRef.current.p2.thrust)}+{displayKeyName(controlBindingsRef.current.p2.fire)}</div>
+                <div className="whitespace-normal">ONLINE: CREATE OR JOIN A ROOM</div>
+              </>
+            )}
+          </div>
+
+          <div>
+            <RadioMiniPlayer
+              audioRef={audioRef}
+              isPlaying={isRadioPlaying}
+              nowPlaying={nowPlaying}
+              autoPlayMusic={autoPlayMusic}
+              userPaused={userPaused}
+              onToggleAutoPlay={() => setAutoPlayMusic((enabled) => !enabled)}
+              onPlay={handleRadioPlay}
+              onPause={handleRadioPause}
+              onError={(message) => console.error("Audio loading error:", message)}
+            />
+            {DEBUG_ENABLED && (
+              <label className="mt-1 flex h-5 items-center justify-center gap-2 font-mono text-[10px] text-[hsl(var(--game-danger))] opacity-70">
+                <input type="checkbox" checked={trainerMode} onChange={(event) => setTrainerMode(event.target.checked)} className="accent-[hsl(var(--game-danger))]" />
+                TRAINER (NO SCORES)
+              </label>
+            )}
+          </div>
+
+          <footer className="flex items-center justify-center gap-4">
+            <button type="button" onClick={() => setShowChangelog(true)} className="inline-flex min-h-11 min-w-11 items-center justify-center font-mono text-[10px] text-[hsl(var(--game-foreground))] opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">📋 CHANGELOG</button>
+            <a href="https://buymeacoffee.com/qumran" target="_blank" rel="noopener noreferrer" className="inline-flex min-h-11 min-w-11 items-center justify-center opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary" title="Buy me a coffee">
+              <img src={bmcIcon} alt="Buy me a coffee" className="h-6 w-6" />
+            </a>
+          </footer>
+        </div>
+
+        {showFullLeaderboard && (
+          <div role="dialog" aria-modal="true" aria-label={scoreTab === "local" ? "Local high scores" : "Global high scores"} className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4" onClick={() => setShowFullLeaderboard(false)}>
+            <div className="max-h-[80dvh] w-full max-w-sm overflow-auto border-2 border-[hsl(var(--game-foreground))]/40 bg-[hsl(var(--game-background))] p-4" onClick={(event) => event.stopPropagation()}>
+              <div className="mb-4 text-center font-mono text-lg tracking-wider text-[hsl(var(--game-glow))]">★ {scoreTab === "local" ? "LOCAL HIGH SCORES" : "HIGH SCORES"} ★</div>
+              {activeScores.length === 0 ? <div className="text-center font-mono text-sm text-[hsl(var(--game-foreground))] opacity-70">No scores yet</div> : activeScores.map((entry, index) => <div key={`${entry.initials}-${entry.score}-${index}`} className="flex justify-between py-0.5 font-mono text-sm text-[hsl(var(--game-foreground))]"><span className="whitespace-pre">{(index + 1).toString().padStart(2, " ")}. {entry.initials.padEnd(3, " ")}</span><span>{entry.score.toString().padStart(8, "0")}</span></div>)}
+              <div className="mt-4 flex gap-2">
+                <button type="button" onClick={() => setShowFullLeaderboard(false)} className="min-h-11 flex-1 border border-[hsl(var(--game-foreground))]/30 font-mono text-xs text-[hsl(var(--game-foreground))] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">CLOSE</button>
+                {scoreTab === "local" && localHighScores.length > 0 && <button type="button" onClick={() => { localStorage.removeItem(LOCAL_SCORES_KEY); setLocalHighScores([]); }} className="min-h-11 flex-1 border border-[hsl(var(--game-danger))]/30 font-mono text-xs text-[hsl(var(--game-danger))] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">CLEAR SCORES</button>}
               </div>
-              {leaderboard.map((entry, i) => (
-                <div
-                  key={i}
-                  className="flex justify-between font-mono text-sm py-0.5 text-[hsl(var(--game-foreground))]"
-                >
-                  <span style={{ whiteSpace: "pre" }}>
-                    {(i + 1).toString().padStart(2, " ")}. {entry.initials.padEnd(3, " ")}
-                  </span>
-                  <span>{entry.score.toString().padStart(8, "0")}</span>
-                </div>
-              ))}
-              <button
-                onClick={() => setShowFullLeaderboard(false)}
-                className="w-full mt-4 font-mono text-xs text-[hsl(var(--game-foreground))] opacity-60 hover:opacity-100 transition-opacity uppercase tracking-widest text-center py-2 border border-[hsl(var(--game-foreground))]/30"
-              >
-                CLOSE
-              </button>
             </div>
           </div>
         )}
 
-        {/* Old highscores overlay */}
         {HIGH_SCORES_ENABLED && showOldLeaderboard && (
-          <div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/85"
-            onClick={() => setShowOldLeaderboard(false)}
-          >
-            <div
-              className="bg-[hsl(var(--game-background))] border-2 border-[hsl(var(--game-foreground))]/40 p-6 max-w-sm w-full max-h-[80vh] overflow-auto"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div
-                className="text-lg font-mono text-[#FFD700] text-center mb-4 tracking-wider"
-                style={{ textShadow: "0 0 10px #FFD700" }}
-              >
-                ★ OLD HIGHSCORES ★
-              </div>
-              {oldLeaderboard.map((entry, i) => (
-                <div
-                  key={i}
-                  className="flex justify-between font-mono text-sm py-0.5 text-[hsl(var(--game-foreground))]"
-                >
-                  <span style={{ whiteSpace: "pre" }}>
-                    {(i + 1).toString().padStart(2, " ")}. {entry.initials.padEnd(3, " ")}
-                  </span>
-                  <span>{entry.score.toString().padStart(8, "0")}</span>
-                </div>
-              ))}
-              <button
-                onClick={() => setShowOldLeaderboard(false)}
-                className="w-full mt-4 font-mono text-xs text-[hsl(var(--game-foreground))] opacity-60 hover:opacity-100 transition-opacity uppercase tracking-widest text-center py-2 border border-[hsl(var(--game-foreground))]/30"
-              >
-                CLOSE
-              </button>
+          <div role="dialog" aria-modal="true" aria-label="Old high scores" className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4" onClick={() => setShowOldLeaderboard(false)}>
+            <div className="max-h-[80dvh] w-full max-w-sm overflow-auto border-2 border-[hsl(var(--game-foreground))]/40 bg-[hsl(var(--game-background))] p-4" onClick={(event) => event.stopPropagation()}>
+              <div className="mb-4 text-center font-mono text-lg tracking-wider text-[#FFD700]">★ OLD HIGHSCORES ★</div>
+              {oldLeaderboard.map((entry, index) => <div key={`${entry.initials}-${entry.score}-${index}`} className="flex justify-between py-0.5 font-mono text-sm text-[hsl(var(--game-foreground))]"><span className="whitespace-pre">{(index + 1).toString().padStart(2, " ")}. {entry.initials.padEnd(3, " ")}</span><span>{entry.score.toString().padStart(8, "0")}</span></div>)}
+              <button type="button" onClick={() => setShowOldLeaderboard(false)} className="mt-4 min-h-11 w-full border border-[hsl(var(--game-foreground))]/30 font-mono text-xs text-[hsl(var(--game-foreground))] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">CLOSE</button>
             </div>
           </div>
         )}
-
-        <div className="text-[hsl(var(--game-foreground))] font-mono text-xs space-y-1 opacity-60 text-center">
-          <div>
-            SOLO: {displayKeyName(controlBindingsRef.current.p1.left)}
-            {displayKeyName(controlBindingsRef.current.p1.right)}
-            {displayKeyName(controlBindingsRef.current.p1.thrust)} +{" "}
-            {displayKeyName(controlBindingsRef.current.p1.fire)} +{" "}
-            {displayKeyName(controlBindingsRef.current.p1.hyperspace)} | Gamepad supported
-          </div>
-          <div>
-            DUEL: P1 {displayKeyName(controlBindingsRef.current.p1.left)}
-            {displayKeyName(controlBindingsRef.current.p1.right)}
-            {displayKeyName(controlBindingsRef.current.p1.thrust)}+{displayKeyName(controlBindingsRef.current.p1.fire)}{" "}
-            | P2 {displayKeyName(controlBindingsRef.current.p2.left)}
-            {displayKeyName(controlBindingsRef.current.p2.right)}
-            {displayKeyName(controlBindingsRef.current.p2.thrust)}+{displayKeyName(controlBindingsRef.current.p2.fire)}{" "}
-            | Gamepads 1 & 2
-          </div>
-          <div>ONLINE: Create or join a room to duel remotely</div>
-        </div>
-
-        <div className="mt-4 flex items-center gap-4 justify-center">
-          <button
-            onClick={() => setShowChangelog(true)}
-            className="text-[hsl(var(--game-foreground))] font-mono text-[10px] opacity-50 hover:opacity-100 transition-opacity uppercase tracking-widest"
-          >
-            📋 CHANGELOG
-          </button>
-          <a
-            href="https://buymeacoffee.com/qumran"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="opacity-60 hover:opacity-100 transition-opacity"
-            title="Buy me a coffee"
-          >
-            <img src={bmcIcon} alt="Buy me a coffee" className="h-6 w-6" />
-          </a>
-        </div>
 
         {/* Settings overlay */}
         {showSettings && (
@@ -6323,17 +6140,20 @@ const Game = () => {
         {/* Changelog overlay */}
         {showChangelog && (
           <div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/90"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Changelog"
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4"
             onClick={() => setShowChangelog(false)}
           >
             <div
-              className="bg-black border border-[hsl(var(--game-foreground))]/40 rounded p-6 max-w-2xl w-[90vw] max-h-[80vh] overflow-y-auto relative"
+              className="relative max-h-[80dvh] w-[90vw] max-w-2xl overflow-y-auto rounded border border-[hsl(var(--game-foreground))]/40 bg-black p-4 sm:p-6"
               onClick={(e) => e.stopPropagation()}
               style={{ scrollbarWidth: "thin", scrollbarColor: "#444 #111" }}
             >
               <button
                 onClick={() => setShowChangelog(false)}
-                className="absolute top-3 right-3 font-mono text-[hsl(var(--game-foreground))] hover:text-[#FFD700] text-xl leading-none"
+                className="absolute right-2 top-2 inline-flex min-h-11 min-w-11 items-center justify-center font-mono text-xl leading-none text-[hsl(var(--game-foreground))] hover:text-[#FFD700] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                 aria-label="Close changelog"
               >
                 ✕
@@ -6463,51 +6283,6 @@ const Game = () => {
           </div>
         )}
 
-        <div className="mt-8 flex flex-col gap-2 max-w-md">
-          <a
-            href="https://scenestream.net/demovibes/"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-[hsl(var(--game-foreground))] font-mono text-sm text-center hover:opacity-80 transition-opacity"
-          >
-            🎵 NECTARINE DEMOSCENE RADIO
-          </a>
-          <audio
-            ref={audioRef}
-            controls
-            autoPlay={autoPlayMusic && !userPaused}
-            preload="auto"
-            className="w-full"
-            onPause={handleRadioPause}
-            onPlay={handleRadioPlay}
-            onError={(e) => {
-              const target = e.currentTarget;
-              console.error("Audio loading error:", target.error?.message);
-            }}
-          >
-            <source src="https://nectarine.inversi0n.org/necta192.mp3" type="audio/mpeg" />
-          </audio>
-          <label className="flex items-center gap-2 font-mono text-xs text-[hsl(var(--game-foreground))] opacity-70 hover:opacity-100 transition-opacity cursor-pointer justify-center mt-1">
-            <input
-              type="checkbox"
-              checked={autoPlayMusic}
-              onChange={(e) => setAutoPlayMusic(e.target.checked)}
-              className="accent-[hsl(var(--game-foreground))]"
-            />
-            AUTO-PLAY MUSIC
-          </label>
-          {DEBUG_ENABLED && (
-            <label className="flex items-center gap-2 font-mono text-xs text-[#FF4444] opacity-70 hover:opacity-100 transition-opacity cursor-pointer justify-center mt-1">
-              <input
-                type="checkbox"
-                checked={trainerMode}
-                onChange={(e) => setTrainerMode(e.target.checked)}
-                className="accent-[#FF4444]"
-              />
-              TRAINER (NO SCORES)
-            </label>
-          )}
-        </div>
       </div>
     );
   }
