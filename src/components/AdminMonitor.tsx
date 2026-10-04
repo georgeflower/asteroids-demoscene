@@ -41,6 +41,21 @@ interface AuditLog {
   created_at: string;
 }
 
+interface RejectedSubmission {
+  id: string;
+  created_at: string;
+  initials: string | null;
+  score: number | null;
+  level: number | null;
+  code: string | null;
+  message: string | null;
+  detail: Record<string, unknown> | null;
+  approved: boolean;
+  session_token: string | null;
+  origin: string | null;
+  user_agent: string | null;
+}
+
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
 const SUBMIT_URL = `${SUPABASE_URL}/functions/v1/submit`;
 const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
@@ -59,10 +74,13 @@ export function AdminMonitor() {
   const [scores, setScores] = useState<Score[]>([]);
   const [flags, setFlags] = useState<Flag[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
+  const [rejected, setRejected] = useState<RejectedSubmission[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<"all" | "flagged">("all");
   const [selectedScore, setSelectedScore] = useState<string | null>(null);
+  const [showRejected, setShowRejected] = useState(true);
+  const [expandedRejected, setExpandedRejected] = useState<string | null>(null);
 
   const fetchData = useCallback(async (key: string) => {
     setLoading(true);
@@ -80,10 +98,11 @@ export function AdminMonitor() {
         setLoading(false);
         return;
       }
-      const { scores: s, flags: f, auditLogs: a } = await res.json();
+      const { scores: s, flags: f, auditLogs: a, rejected: r } = await res.json();
       setScores(s || []);
       setFlags(f || []);
       setAuditLogs(a || []);
+      setRejected(r || []);
       localStorage.setItem("asteroids_admin_key", key);
       setAdminKey(key);
     } catch (e) {
