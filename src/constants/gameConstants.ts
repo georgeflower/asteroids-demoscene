@@ -50,5 +50,20 @@ export const CHAIN_STEP = 0.1;
 /** Maximum chain multiplier factor. */
 export const CHAIN_MAX = 5;
 
-/** Score interval that awards an extra life. */
-export const EXTRA_LIFE_INTERVAL = 10000;
+// ===== BALANCE (solo lives & reward economy) =====
+export const BALANCE = {
+  EXTRA_LIFE_FIRST: 40000,
+  EXTRA_LIFE_STEP: 40000,
+  MAX_LIVES: 5,
+  DROP_RATE: { asteroidLarge: 0.04, asteroidMedium: 0.02, asteroidSmall: 0, ufoLarge: 0.2, ufoSmall: 0.35, alien: 0.15 },
+  DROP_WEIGHTS: { shield: 40, rapidFire: 30, multiplier: 30 },
+  BOSS_DROP_WEIGHTS: { extraLife: 35, shield: 35, rapidFire: 15, multiplier: 15 },
+  MAX_POWERUPS_ON_SCREEN: 2,
+  DROP_COOLDOWN_TICKS: 480,
+} as const;
+
+export type DropSource = keyof typeof BALANCE.DROP_RATE;
+
+/** Score threshold for the n-th extra life (n = 1, 2, 3…): 40k, 120k, 240k, 400k… */
+export const extraLifeThreshold = (n: number): number =>
+  BALANCE.EXTRA_LIFE_FIRST * n + (BALANCE.EXTRA_LIFE_STEP * n * (n - 1)) / 2;
