@@ -295,7 +295,7 @@ const ONLINE_INPUT_SEND_INTERVAL_MS = 50;
 /** Coop state is broadcast every Nth worker tick; at 60 Hz this gives ~20 Hz. */
 const ONLINE_STATE_BROADCAST_TICK_INTERVAL = 3;
 
-const GAME_VERSION = "0.3.1";
+const GAME_VERSION = "0.4.0";
 
 const LOCAL_SCORES_KEY = "asteroids_local_highscores";
 interface LocalScore {
@@ -6295,7 +6295,78 @@ const Game = () => {
                 📋 CHANGELOG
               </div>
               <pre className="font-mono text-[11px] text-[hsl(var(--game-foreground))] whitespace-pre-wrap leading-relaxed opacity-90">
-                {`[0.3.1] - 2026-04-13
+                {`COMING NEXT (planned, subject to change)
+
+  Balance
+  - Fewer extra lives: later, rarer, capped
+  - Fewer, fairer enemies; new types arrive later
+  - Green aliens: slower, shorter range, less
+    precise, with a warning before they fire
+  - Blue teleporters: rarer, never land on you,
+    marker shows where they will appear
+  - Fix: the green spawn cooldown from 0.3.1 was
+    never applied; it will finally work
+
+  Feel & polish
+  - Screen shake and hit-stop (reduced-motion safe)
+  - Wave-clear pause with bonus tally
+  - SFX mute, hyperspace cooldown on touch button
+
+[0.4.0] - 2026-10-04
+
+  Cloud saves & admin review
+  - Save status on Game Over, with TAP TO RETRY
+  - Automatic retries; lost responses recognised
+    as SAVED instead of an error
+  - No session = saved locally, no retry offered
+  - Admin: rejected submissions table + APPROVE
+  - Fixed false "CLOUD SAVE FAILED: MAX_SUBMISSI"
+
+[0.3.7] - 2026-10-04
+
+  Main menu & radio
+  - Redesigned main menu, score card, compact radio
+  - Dialogs close with Escape; DUEL hidden on phones
+  - Radio no longer restarts between menu and game
+  - Enter on a focused control no longer starts SOLO
+
+[0.3.6] - 2026-10-04
+
+  Mobile
+  - Compact touch controls, HYPERSPACE button
+  - Two-tap quit; pause button for touch
+  - Fixed clipped HUD and layout shifts on phones
+
+[0.3.5] - 2026-10-03
+
+  Anti-cheat overhaul
+  - Physically-based score limits; legit late-wave
+    runs no longer rejected
+  - Statistical checks now flag instead of reject
+  - Rejected submissions logged for admin review
+
+[0.3.4] - 2026-10-03
+
+  Game Over redesign
+  - Fixed-height layout, run summary, cloud status
+  - Fixed solo score bar layout shift
+
+[0.3.3] - 2026-09-02
+
+  Combo chain & run summary
+  - Chain multiplier (+10% per link, max x5)
+  - Run summary with personal best, NEXT 1UP counter
+  - 1UP now awarded for every kind of kill
+
+[0.3.2] - 2026-08-27
+
+  Restart flow
+  - Instant restart, remembered initials
+  - Initials no longer block; cloud save in background
+  - Touch controls in online duel, audio resume,
+    blur/visibility handling
+
+[0.3.1] - 2026-04-13
 
   Added
   - Submission loading state: "SUBMITTING..." indicator

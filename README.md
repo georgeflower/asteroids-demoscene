@@ -2,17 +2,21 @@
 
 A modern tribute to the classic Asteroids arcade game, infused with demoscene aesthetics and retro computing vibes. Built with React, TypeScript, and Canvas rendering, featuring CRT visual effects, multiple game modes, and a global leaderboard system.
 
+**Current version: 0.4.0** — see [CHANGELOG.md](./CHANGELOG.md) for history and what is coming next.
+
 ## ✨ Features
 
 ### Game Modes
 - **Solo Mode** - Classic single-player survival gameplay with progressive difficulty waves
-- **Duel Mode** - Local 2-player competitive mode (P1: Cyan ship, P2: Orange ship)
-- **Online Mode** - Multiplayer support with WebWorker-based game logic
+- **Duel Mode** - Local 2-player competitive mode on keyboard/mouse devices (P1: Cyan ship, P2: Orange ship)
+- **Co-op Mode** - Local cooperative play
+- **Online Duel** - Online competitive multiplayer
+- **Online Co-op** - Cooperative multiplayer with room codes
 
 ### Gameplay
 - **Classic Mechanics** - Navigate your ship, shoot asteroids, and avoid collisions
 - **Asteroids** - Large, medium, and small variants with increasing speed and points
-- **Aliens** - Multiple alien types including UFOs, green men, and purple swarms with flocking AI
+- **Enemies** - UFOs plus four alien types: Brown chasers, Green gunners, Blue sentinels (teleport + burst fire) and Purple swarms (flocking)
 - **Boss Battles** - Epic boss fights every 5 waves featuring:
   - Amiga Ball (wave 5)
   - Flying Saucer (wave 10)
@@ -20,6 +24,10 @@ A modern tribute to the classic Asteroids arcade game, infused with demoscene ae
   - Borg Cube (wave 20)
 - **Hyperspace** - Emergency teleportation with charge-up mechanic
 - **Difficulty Scaling** - Speed increases by 5% per wave
+- **Combo chain** - consecutive kills within 2 s raise a score multiplier (+10% per link, up to x5)
+- **Extra lives** - every 10,000 points, plus rare power-up drops
+- **Run summary** - time, wave, accuracy, best chain and personal best after every solo run
+- **Mobile play** - compact touch controls, safe-area aware layout
 
 ### Visuals & Audio
 - **CRT Effects** - Authentic scanlines and vignette for retro aesthetics
@@ -29,9 +37,8 @@ A modern tribute to the classic Asteroids arcade game, infused with demoscene ae
 
 ### Leaderboard System
 - **Hall of Fame** - Top 3 all-time scores displayed on main menu
-- **Global Highscores** - Scrollable top 30 leaderboard
-- **Secure Submissions** - HMAC signature verification with session tokens
-- **Profanity Filter** - Built-in inappropriate initials detection
+- **Global Highscores** - cloud leaderboard with local fallback; retry button if a cloud save fails
+- **Secure Submissions** - session tokens, HMAC signatures, proof-of-work, heartbeat checks and admin review of rejected scores (see SECURITY.md)
 - **Trainer Mode** - Practice without affecting leaderboards
 
 ## 🎮 Controls
@@ -43,7 +50,7 @@ A modern tribute to the classic Asteroids arcade game, infused with demoscene ae
 | Rotate Right | → |
 | Thrust | ↑ |
 | Fire | Space |
-| Hyperspace | H |
+| Hyperspace | Ctrl (Left/Right) |
 | Pause | Esc |
 
 ### Keyboard (Duel)
@@ -53,6 +60,16 @@ A modern tribute to the classic Asteroids arcade game, infused with demoscene ae
 | Rotate Right | → | D |
 | Thrust | ↑ | W |
 | Fire | Space | E |
+
+### Touch
+| Action | Control |
+|--------|---------|
+| Rotate | ◀ ▶ |
+| Thrust | ▲ |
+| Fire | ◎ |
+| Hyperspace | HYPERSPACE button |
+| Pause | Pause button |
+| Main menu | Two taps |
 
 ### Gamepad
 - **Stick/D-pad** - Move
@@ -127,18 +144,21 @@ npm run preview
 asteroids-demoscene/
 ├── src/
 │   ├── pages/
-│   │   └── Game.tsx          # Main game component (~5000 lines)
+│   │   └── Game.tsx          # Main game component (~7,000 lines)
 │   │                          # - Game state management
 │   │                          # - Canvas rendering
 │   │                          # - Input handling
 │   │                          # - Collision detection
 │   │                          # - UI overlays
 │   ├── workers/
-│   │   └── gameWorker.ts     # WebWorker for multiplayer game logic
+│   │   ├── gameWorker.ts     # WebWorker for multiplayer game logic
 │   │                          # - Fixed 60Hz timestep updates
 │   │                          # - Physics simulation
 │   │                          # - State synchronization
+│   │   └── coopWorker.ts     # WebWorker for cooperative game logic
 │   ├── components/           # Reusable UI components (shadcn/ui)
+│   │   ├── GameOverPanel.tsx
+│   │   └── AdminMonitor.tsx
 │   ├── integrations/         # Supabase client configuration
 │   ├── hooks/                # Custom React hooks
 │   ├── lib/                  # Utility libraries
@@ -153,6 +173,7 @@ asteroids-demoscene/
 │   │       │                 #   POST /submit         — validate & accept final score
 │   │       │                 #   GET  /admin-data     — admin leaderboard view
 │   │       │                 #   POST /admin-delete   — admin score removal
+│   │       │                 #   POST /admin-approve  — approve a rejected score
 │   └── migrations/           # Database schema migrations
 ├── scripts/                  # Utility scripts
 │   └── check-highscore-legitimacy.mjs
@@ -214,7 +235,7 @@ Game Client (Browser)
     ├─[3]─► POST /submit → Edge Function
     │         Carries: token, final score, initials, level,
     │                  PoW nonce, HMAC, seq, game metrics
-    │         Server runs all 21 validation layers (see SECURITY.md)
+    │         Server runs all 22 validation layers (see SECURITY.md)
     │         → insert_score_with_audit() RPC (atomic)
     │
     └─[4]─► Success / Error Response
@@ -231,8 +252,35 @@ For a complete description of every security layer see [SECURITY.md](./SECURITY.
 | Small Asteroid | 100 |
 | Large UFO | 200 |
 | Small UFO | 1,000 |
-| Aliens | Variable |
-| Bosses | Variable (based on wave) |
+| Brown | 300 |
+| Green | 500 |
+| Blue | 600 |
+| Purple | 100 |
+| Boss | 2,000 + 200 per wave |
+| Chain multiplier | x1.0 → x5.0 |
+| Score multiplier power-up | x2 for 15 s |
+
+## 🔭 Coming next
+
+### Game balance
+- **Fewer extra lives**: later and rarer 1UPs, a cap on total lives, and no extra-life drops from plain asteroids
+- **Fewer, fairer enemies**: new enemy types arrive later, fewer are alive at once, and spawns have more breathing room
+- **Green aliens**: slower, shorter-range and less precise shots, with a visible warning just before they fire
+- **Blue teleporters**: teleport less often, never land on top of you, and show a marker where they will appear
+
+### Game feel
+- Screen shake and a brief hit-stop on big impacts (respects reduced-motion settings)
+- A short wave-clear pause with a bonus tally
+
+### Polish
+- Sound-effects mute / volume control
+- Hyperspace cooldown indicator on the touch button
+- Accessibility labels for all buttons
+
+### Under consideration
+- Landscape layout for phones
+- Difficulty-curve tuning based on in-game telemetry
+- Splitting the rendering code out of `Game.tsx`
 
 ## 📄 License
 
