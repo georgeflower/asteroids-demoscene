@@ -337,6 +337,140 @@ interface FpsDisplayData {
   frameTime: number;
 }
 
+interface MenuButtonProps {
+  label: string;
+  onClick: () => void;
+  variant: "primary" | "secondary" | "ghost";
+  accent?: "green" | "orange";
+  selected: boolean;
+  badge?: string;
+  subLabel?: string;
+  ariaLabel?: string;
+}
+
+function MenuButton({ label, onClick, variant, accent, selected, badge, subLabel, ariaLabel }: MenuButtonProps) {
+  const accentClasses =
+    accent === "green"
+      ? "border-[#44FF44] text-[#44FF44] shadow-[0_0_14px_rgba(68,255,68,0.22)]"
+      : accent === "orange"
+        ? "border-[#FF8844] text-[#FF8844] shadow-[0_0_14px_rgba(255,136,68,0.22)]"
+        : "border-[hsl(var(--game-foreground))]/40 text-[hsl(var(--game-foreground))]";
+  const variantClasses =
+    variant === "primary"
+      ? "bg-[hsl(var(--game-foreground))] text-[hsl(var(--game-background))] border-[hsl(var(--game-foreground))] shadow-[0_0_18px_hsl(var(--game-foreground)/0.35)]"
+      : variant === "ghost"
+        ? "h-11 border-[hsl(var(--game-foreground))]/40 text-sm text-[hsl(var(--game-foreground))]"
+        : accentClasses;
+
+  return (
+    <Button
+      type="button"
+      onClick={onClick}
+      aria-label={ariaLabel ?? label}
+      className={`relative w-full ${variant === "ghost" ? "h-11 text-sm" : "h-14 text-lg"} rounded-md border-2 bg-transparent font-mono tracking-wider motion-safe:transition-transform active:scale-[0.98] motion-reduce:transform-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-[hsl(var(--game-background))] ${variantClasses} ${selected ? "brightness-125" : ""}`}
+    >
+      <span aria-hidden="true" className="absolute left-4 w-4 text-left">
+        {selected ? "▸" : ""}
+      </span>
+      <span>{label}</span>
+      {(badge || subLabel) && (
+        <span
+          className={`absolute right-3 text-[10px] ${badge ? "rounded border border-[hsl(var(--game-danger))] px-1.5 py-0.5 text-[hsl(var(--game-danger))]" : "opacity-80"}`}
+        >
+          {badge ?? subLabel}
+        </span>
+      )}
+    </Button>
+  );
+}
+
+interface RadioMiniPlayerProps {
+  audioRef: React.RefObject<HTMLAudioElement>;
+  isPlaying: boolean;
+  nowPlaying: { artist: string; title: string } | null;
+  autoPlayMusic: boolean;
+  userPaused: boolean;
+  onToggleAutoPlay: () => void;
+  onPlay: () => void;
+  onPause: () => void;
+  onError: (message?: string) => void;
+  onPauseGame?: () => void;
+}
+
+function RadioMiniPlayer({
+  audioRef,
+  isPlaying,
+  nowPlaying,
+  autoPlayMusic,
+  userPaused,
+  onToggleAutoPlay,
+  onPlay,
+  onPause,
+  onError,
+  onPauseGame,
+}: RadioMiniPlayerProps) {
+  return (
+    <div className="h-11 w-full max-w-[800px] flex shrink-0 items-center gap-2 rounded-md border border-border/60 bg-[hsl(var(--game-background))]/80 px-2 font-mono">
+      <button
+        type="button"
+        aria-label={isPlaying ? "Pause radio" : "Play radio"}
+        aria-pressed={isPlaying}
+        onClick={() => {
+          const audio = audioRef.current;
+          if (!audio) return;
+          if (isPlaying) audio.pause();
+          else audio.play().catch(() => {});
+        }}
+        className="relative h-9 w-9 shrink-0 rounded border border-[hsl(var(--game-foreground))]/60 text-[hsl(var(--game-foreground))] before:absolute before:-inset-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+      >
+        <span aria-hidden="true">{isPlaying ? "❚❚" : "▶"}</span>
+      </button>
+      <a
+        href="https://scenestream.net/demovibes/"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="min-w-0 flex-1 truncate text-[10px] text-[hsl(var(--game-foreground))] opacity-80 hover:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+      >
+        ♪ {nowPlaying ? `${nowPlaying.artist} – ${nowPlaying.title}` : "NECTARINE RADIO"}
+      </a>
+      <button
+        type="button"
+        aria-label="Automatic radio playback"
+        aria-pressed={autoPlayMusic}
+        onClick={onToggleAutoPlay}
+        className={`relative h-8 min-w-[52px] shrink-0 rounded border px-2 text-[10px] before:absolute before:-inset-y-1.5 before:inset-x-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
+          autoPlayMusic
+            ? "border-[hsl(var(--game-foreground))] bg-[hsl(var(--game-foreground))] text-[hsl(var(--game-background))]"
+            : "border-[hsl(var(--game-foreground))]/60 text-[hsl(var(--game-foreground))]"
+        }`}
+      >
+        AUTO
+      </button>
+      {onPauseGame && (
+        <button
+          type="button"
+          aria-label="Pause"
+          onClick={onPauseGame}
+          className="relative h-9 w-9 shrink-0 rounded border border-[hsl(var(--game-foreground))]/60 text-[hsl(var(--game-foreground))] before:absolute before:-inset-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+        >
+          <span aria-hidden="true">⏸</span>
+        </button>
+      )}
+      <audio
+        ref={audioRef}
+        autoPlay={autoPlayMusic && !userPaused}
+        preload={autoPlayMusic ? "auto" : "none"}
+        className="hidden"
+        onPause={onPause}
+        onPlay={onPlay}
+        onError={(event) => onError(event.currentTarget.error?.message)}
+      >
+        <source src="https://nectarine.inversi0n.org/necta192.mp3" type="audio/mpeg" />
+      </audio>
+    </div>
+  );
+}
+
 function FpsOverlay() {
   const [data, setData] = useState<FpsDisplayData>({ fps: 0, ups: 0, frameTime: 0 });
   useEffect(() => {
