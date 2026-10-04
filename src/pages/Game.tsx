@@ -7110,20 +7110,20 @@ const Game = () => {
       {!isTouchDevice && (
         <div className="mt-2 text-[hsl(var(--game-foreground))] font-mono text-[10px] opacity-70 max-w-[800px] w-full whitespace-nowrap">
           {gameMode === "solo" && (
-            <div className="flex justify-center gap-6 flex-wrap">
+            <div className="flex flex-nowrap justify-center gap-3 overflow-hidden">
               <span>⌨ ← → ROTATE | ↑ THRUST | SPACE FIRE | CTRL HYPER | ESC PAUSE</span>
               <span>🎮 STICK MOVE | A FIRE | B HYPER | X THRUST | START PAUSE</span>
             </div>
           )}
           {gameMode === "duel" && (
-            <div className="flex justify-center gap-6 flex-wrap">
+            <div className="flex flex-nowrap justify-center gap-3 overflow-hidden">
               <span style={{ color: P1_COLOR }}>P1: ←→↑ SPACE</span>
               <span style={{ color: P2_COLOR }}>P2: WASD E</span>
               <span>🎮 GP1/GP2 | A FIRE | B HYPER | ESC PAUSE</span>
             </div>
           )}
           {(gameMode === "coop" || gameMode === "online_coop") && (
-            <div className="flex justify-center gap-6 flex-wrap">
+            <div className="flex flex-nowrap justify-center gap-3 overflow-hidden">
               <span style={{ color: P1_COLOR }}>P1: ←→↑ SPACE</span>
               <span style={{ color: P2_COLOR }}>{gameMode === "coop" ? "P2: WASD E" : "P2: Remote"}</span>
               <span>🎮 GP1/GP2 | A FIRE | ESC PAUSE</span>
