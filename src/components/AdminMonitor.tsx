@@ -41,6 +41,21 @@ interface AuditLog {
   created_at: string;
 }
 
+interface RejectedSubmission {
+  id: string;
+  created_at: string;
+  initials: string | null;
+  score: number | null;
+  level: number | null;
+  code: string | null;
+  message: string | null;
+  detail: Record<string, unknown> | null;
+  approved: boolean;
+  session_token: string | null;
+  origin: string | null;
+  user_agent: string | null;
+}
+
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
 const SUBMIT_URL = `${SUPABASE_URL}/functions/v1/submit`;
 const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
@@ -59,10 +74,13 @@ export function AdminMonitor() {
   const [scores, setScores] = useState<Score[]>([]);
   const [flags, setFlags] = useState<Flag[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
+  const [rejected, setRejected] = useState<RejectedSubmission[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<"all" | "flagged">("all");
   const [selectedScore, setSelectedScore] = useState<string | null>(null);
+  const [showRejected, setShowRejected] = useState(true);
+  const [expandedRejected, setExpandedRejected] = useState<string | null>(null);
 
   const fetchData = useCallback(async (key: string) => {
     setLoading(true);
@@ -80,10 +98,11 @@ export function AdminMonitor() {
         setLoading(false);
         return;
       }
-      const { scores: s, flags: f, auditLogs: a } = await res.json();
+      const { scores: s, flags: f, auditLogs: a, rejected: r } = await res.json();
       setScores(s || []);
       setFlags(f || []);
       setAuditLogs(a || []);
+      setRejected(r || []);
       localStorage.setItem("asteroids_admin_key", key);
       setAdminKey(key);
     } catch (e) {
@@ -120,6 +139,29 @@ export function AdminMonitor() {
       setFlags((prev) => prev.filter((f) => f.score_id !== scoreId));
       setAuditLogs((prev) => prev.filter((a) => a.score_id !== scoreId));
       if (selectedScore === scoreId) setSelectedScore(null);
+    } catch (e) {
+      alert(String(e));
+    }
+  };
+
+  const approveRejected = async (rejectedId: string) => {
+    if (!confirm("Approve this score onto the leaderboard?")) return;
+    try {
+      const res = await fetch(`${SUBMIT_URL}/admin-approve`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${SUPABASE_KEY}`,
+          "x-admin-key": adminKey,
+        },
+        body: JSON.stringify({ rejectedId }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({ error: res.statusText }));
+        alert(body.error || "Failed to approve score");
+        return;
+      }
+      await fetchData(adminKey);
     } catch (e) {
       alert(String(e));
     }
@@ -269,6 +311,121 @@ export function AdminMonitor() {
       )}
 
       {loading && <div style={{ color: "#888" }}>Loading…</div>}
+
+      {/* Rejected submissions */}
+      {!loading && (
+        <div style={{ marginBottom: 24 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+            <span style={{ color: "#FF4444", fontSize: 13 }}>
+              REJECTED SUBMISSIONS ({rejected.length})
+            </span>
+            <button
+              onClick={() => setShowRejected(!showRejected)}
+              style={btnStyle("#555", 11)}
+            >
+              {showRejected ? "[-]" : "[+]"}
+            </button>
+          </div>
+          {showRejected && (
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <thead>
+                <tr style={{ borderBottom: "1px solid #333", color: "#888" }}>
+                  <th style={th}>TIME</th>
+                  <th style={th}>INITIALS</th>
+                  <th style={th}>SCORE</th>
+                  <th style={th}>LEVEL</th>
+                  <th style={th}>CODE</th>
+                  <th style={th}>MESSAGE</th>
+                  <th style={th}>ACTIONS</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rejected
+                  .slice()
+                  .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+                  .map((r) => {
+                    const isExpanded = expandedRejected === r.id;
+                    const canApprove = r.initials !== null && r.score !== null && !r.approved;
+                    return (
+                      <Fragment key={r.id}>
+                        <tr
+                          style={{
+                            background: isExpanded ? "#222" : "transparent",
+                            borderBottom: "1px solid #1a1a1a",
+                            cursor: "pointer",
+                            opacity: r.approved ? 0.5 : 1,
+                          }}
+                          onClick={() => setExpandedRejected(isExpanded ? null : r.id)}
+                        >
+                          <td style={td}>{new Date(r.created_at).toLocaleString()}</td>
+                          <td style={td}>{r.initials ?? "—"}</td>
+                          <td style={td}>{r.score !== null ? r.score.toLocaleString() : "—"}</td>
+                          <td style={td}>{r.level ?? "—"}</td>
+                          <td style={td}>
+                            {r.code && (
+                              <span
+                                style={{
+                                  background: severityColor.high + "33",
+                                  color: severityColor.high,
+                                  border: `1px solid ${severityColor.high}55`,
+                                  borderRadius: 3,
+                                  padding: "1px 5px",
+                                  fontSize: 11,
+                                }}
+                              >
+                                {r.code}
+                              </span>
+                            )}
+                          </td>
+                          <td style={td}>{r.message ?? "—"}</td>
+                          <td style={td}>
+                            {r.approved ? (
+                              <span style={{ color: "#90EE90", fontSize: 11 }}>APPROVED</span>
+                            ) : canApprove ? (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  approveRejected(r.id);
+                                }}
+                                style={btnStyle("#90EE90", 11)}
+                              >
+                                APPROVE
+                              </button>
+                            ) : null}
+                          </td>
+                        </tr>
+                        {isExpanded && (
+                          <tr>
+                            <td colSpan={7} style={{ padding: "8px 16px", background: "#111", borderBottom: "1px solid #333" }}>
+                              <pre
+                                style={{
+                                  margin: 0,
+                                  whiteSpace: "pre-wrap",
+                                  wordBreak: "break-word",
+                                  fontSize: 11,
+                                  color: "#aaa",
+                                }}
+                              >
+                                {JSON.stringify(r.detail ?? {}, null, 2)}
+                              </pre>
+                            </td>
+                          </tr>
+                        )}
+                      </Fragment>
+                    );
+                  })}
+                {rejected.length === 0 && (
+                  <tr>
+                    <td colSpan={7} style={{ ...td, color: "#888", textAlign: "center" }}>
+                      No rejected submissions.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
 
       {/* Score list */}
       {!loading && (
