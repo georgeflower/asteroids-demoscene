@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useCallback, type RefObject } from "react";
 import { useNavigate } from "react-router-dom";
+import { APP_VERSION as GAME_VERSION } from "@/constants/version";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import hyperspaceIcon from "@/assets/hyperspace.png";
