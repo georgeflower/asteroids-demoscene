@@ -1132,8 +1132,8 @@ const Game = () => {
       submittingScoreRef.current = true;
       setCloudStatus("saving");
       const result = await saveToLeaderboard(normalized);
-      submittingScoreRef.current = false;
       if (submissionGenerationRef.current !== generation) return;
+      submittingScoreRef.current = false;
       if (result.ok) {
         setCloudStatus("saved");
       } else if (result.validation) {
@@ -1155,8 +1155,8 @@ const Game = () => {
     setInitialsError("");
     setCloudStatus("saving");
     const result = await saveToLeaderboard(pendingInitialsRef.current);
-    submittingScoreRef.current = false;
     if (submissionGenerationRef.current !== generation) return;
+    submittingScoreRef.current = false;
     if (result.ok) {
       setCloudStatus("saved");
     } else if (result.validation) {
