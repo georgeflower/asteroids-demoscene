@@ -53,6 +53,7 @@ interface Bullet extends GameObject {
   isAlien?: boolean;
   color?: string;
   owner?: number; // 1 or 2 for duel mode
+  shooter?: object; // solo: alien that fired this bullet
 }
 
 interface UFO extends GameObject {
@@ -65,6 +66,7 @@ interface UFO extends GameObject {
 interface PowerUp extends GameObject {
   type: "shield" | "rapidFire" | "extraLife" | "multiplier";
   lifetime: number;
+  fromBoss?: boolean;
 }
 
 interface FloatingText {
@@ -110,6 +112,10 @@ interface Alien extends GameObject {
   burstCount?: number;
   teleportCooldown?: number;
   chargeTimer?: number;
+  tpX?: number;
+  tpY?: number;
+  age?: number;
+  leaving?: boolean;
   // Purple Swarm specific
   flockId?: number;
 }
@@ -198,6 +204,7 @@ const COLOR_THEMES: ColorTheme[] = [
 ];
 
 interface GameState {
+  alienSpawnBudget?: number;
   extraLifeCount?: number;
   lastDropTick?: number;
   tick?: number;
@@ -536,6 +543,18 @@ const Game = () => {
   const powPromiseRef = useRef<Promise<number> | null>(null);
   const sessionNonceRef = useRef<string | null>(null);
   const gameStatsRef = useRef({ asteroidsDestroyed: 0, bulletsFired: 0 });
+  // Solo balance telemetry (debug log only, never sent to the server)
+  const freshBalanceStats = () => ({
+    aliensSpawned: { brown: 0, greenMan: 0, blueSentinel: 0, purpleSwarm: 0 } as Record<string, number>,
+    livesGained: { score: 0, pickup: 0, boss: 0 } as Record<string, number>,
+    deaths: { asteroid: 0, ufo: 0, ufoBullet: 0, greenBullet: 0, blueBullet: 0, alienTouch: 0, boss: 0, bossBullet: 0 } as Record<string, number>,
+    waveReached: 1,
+  });
+  const balanceStatsRef = useRef(freshBalanceStats());
+  const recordDeath = (cause: string) => {
+    const d = balanceStatsRef.current.deaths;
+    d[cause] = (d[cause] ?? 0) + 1;
+  };
   const heartbeatSeqRef = useRef(0);
   const pendingSubmissionRef = useRef<{
     token: string;
@@ -1510,6 +1529,7 @@ const Game = () => {
       }
     }
 
+    balanceStatsRef.current = freshBalanceStats();
     gameStateRef.current = {
       ship: createShip(),
       asteroids,
@@ -1531,6 +1551,7 @@ const Game = () => {
       aliens: [],
       boss: null,
       alienSpawnTimer: 600,
+      alienSpawnBudget: 0,
       bossDefeated: false,
       pendingNextWave: false,
       chain: 0,
@@ -2272,7 +2293,8 @@ const Game = () => {
 
     state.asteroids = asteroids;
     state.ship = createShip();
-    state.alienSpawnTimer = Math.max(300, 600 - state.wave * 20);
+    state.alienSpawnTimer = BALANCE.ALIENS.FIRST_EVENT_TICKS;
+    state.alienSpawnBudget = Math.min(BALANCE.ALIENS.BUDGET_BASE + Math.floor(state.wave / BALANCE.ALIENS.BUDGET_PER_WAVES), BALANCE.ALIENS.BUDGET_MAX);
     setDisplayWave(state.wave);
 
     const theme = getTheme(state.wave);
@@ -2335,6 +2357,7 @@ const Game = () => {
       state.extraLifeCount = (state.extraLifeCount ?? 0) + 1;
       if (state.lives < BALANCE.MAX_LIVES) {
         state.lives++;
+        balanceStatsRef.current.livesGained.score++;
         setDisplayLives(state.lives);
         spawnFloatingText(state.ship.pos, "EXTRA LIFE!", "#CC66FF", 22);
         soundEffects.powerUp();
@@ -2424,6 +2447,8 @@ const Game = () => {
 
       if (state.lives <= 0) {
         state.gameOver = true;
+        balanceStatsRef.current.waveReached = state.wave;
+        addDebugLog("death", `balance ${JSON.stringify(balanceStatsRef.current)}`);
         void sendHeartbeat(true);
         pendingSubmissionRef.current = {
           token: gameSessionTokenRef.current ?? "",
@@ -2997,10 +3022,11 @@ const Game = () => {
     // UFO spawn timer
     state.ufoSpawnTimer--;
     if (state.ufoSpawnTimer <= 0 && state.ufos.length === 0 && !state.boss) {
-      const size = state.wave > 6 ? (Math.random() < 0.5 ? "small" : "large") : "large";
+      const U = BALANCE.UFO;
+      const size = state.wave > U.SMALL_AFTER_WAVE && Math.random() < U.SMALL_CHANCE ? "small" : "large";
       state.ufos.push(createUFO(size));
       addDebugLog("spawn", `UFO spawned (${size})`);
-      state.ufoSpawnTimer = Math.max(400, 900 - state.wave * 30) + Math.random() * 400;
+      state.ufoSpawnTimer = Math.max(U.INTERVAL_MIN, U.INTERVAL_BASE - U.INTERVAL_PER_WAVE * state.wave) + Math.random() * U.INTERVAL_RAND;
     }
 
     // Update UFOs
@@ -3023,7 +3049,8 @@ const Game = () => {
         ufo.shootTimer = 60 + Math.random() * 60;
         const angle =
           ufo.size === "small"
-            ? Math.atan2(state.ship.pos.y - ufo.pos.y, state.ship.pos.x - ufo.pos.x)
+            ? Math.atan2(state.ship.pos.y - ufo.pos.y, state.ship.pos.x - ufo.pos.x) +
+              (Math.random() * 2 - 1) * BALANCE.UFO.SMALL_SCATTER
             : Math.random() * Math.PI * 2;
 
         state.bullets.push({
@@ -3041,27 +3068,50 @@ const Game = () => {
     // Alien spawn timer
     if (!state.boss) {
       state.alienSpawnTimer--;
-      if (state.alienSpawnTimer <= 0) {
-        if (state.wave >= 3 && state.aliens.filter((a) => a.type === "brown").length < 3) {
-          state.aliens.push(createAlien("brown", state.wave));
-          addDebugLog("spawn", `Brown alien spawned (wave ${state.wave})`);
+      if (state.alienSpawnTimer <= 0 && (state.alienSpawnBudget ?? 0) > 0) {
+        // Spawn director: exactly one unit per event (a purple swarm group counts as one unit)
+        const A = BALANCE.ALIENS;
+        type AType = keyof typeof A.WEIGHTS;
+        const units: Record<AType, number> = { brown: 0, greenMan: 0, blueSentinel: 0, purpleSwarm: 0 };
+        const flocks = new Set<number | undefined>();
+        for (const a of state.aliens) {
+          if (a.type === "purpleSwarm") flocks.add(a.flockId);
+          else units[a.type]++;
         }
-        if (state.wave >= 6 && state.aliens.filter((a) => a.type === "greenMan").length < 2) {
-          state.aliens.push(createAlien("greenMan", state.wave));
-          state.alienSpawnTimer += 300; // Extra cooldown for green enemy spawns
-          addDebugLog("spawn", `Green man spawned (wave ${state.wave})`);
+        units.purpleSwarm = flocks.size;
+        const totalUnits = units.brown + units.greenMan + units.blueSentinel + units.purpleSwarm;
+        const globalCap = state.wave < 7 ? 1 : state.wave < 12 ? 2 : 3;
+        const typeCap = (t: AType) =>
+          t === "greenMan" && state.wave >= A.GREEN_CAP_LATE_WAVE ? A.GREEN_CAP_LATE : A.TYPE_CAP[t];
+        const weights = {} as Record<AType, number>;
+        let any = false;
+        for (const t of Object.keys(A.WEIGHTS) as AType[]) {
+          const ok = totalUnits < globalCap && state.wave >= A.INTRO_WAVE[t] && units[t] < typeCap(t);
+          weights[t] = ok ? A.WEIGHTS[t] : 0;
+          if (ok) any = true;
         }
-        // Red Drone removed
-        if (state.wave >= 8 && state.aliens.filter((a) => a.type === "blueSentinel").length < 1) {
-          state.aliens.push(createAlien("blueSentinel", state.wave));
-          addDebugLog("spawn", `Blue sentinel spawned (wave ${state.wave})`);
+        if (!any) {
+          state.alienSpawnTimer = A.RETRY_TICKS;
+        } else {
+          const t = pickWeighted(weights);
+          if (t === "purpleSwarm") {
+            state.aliens.push(...spawnPurpleSwarmGroup(state.wave));
+          } else {
+            const alien = createAlien(t, state.wave);
+            if (t === "greenMan") {
+              alien.shootTimer = BALANCE.GREEN.INITIAL_SHOOT_MIN + Math.random() * BALANCE.GREEN.INITIAL_SHOOT_RAND;
+            } else if (t === "blueSentinel") {
+              alien.teleportCooldown = BALANCE.BLUE.TELEPORT_COOLDOWN + Math.random() * BALANCE.BLUE.TELEPORT_RAND;
+              alien.age = 0;
+            }
+            state.aliens.push(alien);
+          }
+          balanceStatsRef.current.aliensSpawned[t]++;
+          state.alienSpawnBudget = (state.alienSpawnBudget ?? 0) - 1;
+          addDebugLog("spawn", `${t} spawned (wave ${state.wave}, budget left ${state.alienSpawnBudget})`);
+          state.alienSpawnTimer =
+            Math.max(A.INTERVAL_MIN, A.INTERVAL_BASE - A.INTERVAL_PER_WAVE * state.wave) + Math.random() * A.INTERVAL_RAND;
         }
-        if (state.wave >= 12 && state.aliens.filter((a) => a.type === "purpleSwarm").length < 3) {
-          const swarm = spawnPurpleSwarmGroup(state.wave);
-          state.aliens.push(...swarm);
-          addDebugLog("spawn", `Purple swarm group spawned (wave ${state.wave})`);
-        }
-        state.alienSpawnTimer = Math.max(180, 500 - state.wave * 20) + Math.random() * 200;
       }
     }
 
@@ -3094,22 +3144,35 @@ const Game = () => {
       } else if (alien.type === "greenMan") {
         alien.vel.x *= 0.99;
         alien.vel.y += Math.sin(alien.zigzagPhase) * 0.02;
-        alien.shootTimer--;
-        if (alien.shootTimer <= 0) {
-          alien.shootTimer = Math.max(40, 80 - state.wave * 2) + Math.random() * 40;
+        const G = BALANCE.GREEN;
+        const onScreen = alien.pos.x >= G.SCREEN_MARGIN && alien.pos.x <= CANVAS_WIDTH - G.SCREEN_MARGIN;
+        const liveShots = state.bullets.reduce((n, b) => (b.shooter === alien ? n + 1 : n), 0);
+        const canFire = onScreen && liveShots < G.MAX_BULLETS;
+        // Hold at 1 tick while unable to fire so the telegraph ring stays honest
+        if (alien.shootTimer > 1 || canFire) alien.shootTimer--;
+        if (alien.shootTimer <= 0 && canFire) {
+          alien.shootTimer = Math.max(G.FIRE_MIN, G.FIRE_BASE - G.FIRE_PER_WAVE * state.wave) + Math.random() * G.FIRE_RAND;
           const baseAngle = Math.atan2(state.ship.pos.y - alien.pos.y, state.ship.pos.x - alien.pos.x);
-          const angle = baseAngle + (Math.random() - 0.5) * 0.35; // ~10% less accurate
+          const scatter = Math.max(G.SCATTER_MIN, G.SCATTER_BASE - G.SCATTER_PER_WAVE * state.wave);
+          const angle = baseAngle + (Math.random() * 2 - 1) * scatter;
           state.bullets.push({
             pos: { ...alien.pos },
-            vel: { x: Math.cos(angle) * 6, y: Math.sin(angle) * 6 },
+            vel: { x: Math.cos(angle) * G.BULLET_SPEED, y: Math.sin(angle) * G.BULLET_SPEED },
             rotation: angle,
-            lifetime: BULLET_LIFETIME,
+            lifetime: G.BULLET_LIFETIME,
             isAlien: true,
             color: "#44FF44",
+            shooter: alien,
           });
         }
       } else if (alien.type === "blueSentinel") {
         // Teleport + burst fire + invisibility
+        const BL = BALANCE.BLUE;
+        alien.age = (alien.age ?? 0) + 1;
+        if (alien.age >= BL.LIFETIME_TICKS && !alien.leaving) {
+          alien.leaving = true;
+          alien.teleportCooldown = 0;
+        }
         alien.teleportCooldown = (alien.teleportCooldown ?? 90) - 1;
         alien.vel.x *= 0.95;
         alien.vel.y *= 0.95;
@@ -3136,7 +3199,7 @@ const Game = () => {
             });
             if (alien.burstCount! >= 3) {
               alien.burstCount = 0;
-              alien.shootTimer = 120 + Math.random() * 60;
+              alien.shootTimer = BL.BURST_GAP + Math.random() * BL.BURST_GAP_RAND;
               // Go invisible after burst
               alien.isInvisible = true;
               alien.invisTimer = 60;
@@ -3146,7 +3209,18 @@ const Game = () => {
           if (alien.teleportCooldown! <= 0) {
             if (!alien.chargeTimer || alien.chargeTimer <= 0) {
               // Start charge-up before teleport
-              alien.chargeTimer = 30; // 0.5 sec charge
+              alien.chargeTimer = BL.CHARGE_TICKS;
+              // Choose a destination far from the ship now, so it can be telegraphed
+              let bestX = 0, bestY = 0, bestD = -1;
+              for (let i = 0; i < BL.DEST_TRIES; i++) {
+                const x = BL.EDGE_MARGIN + Math.random() * (CANVAS_WIDTH - 2 * BL.EDGE_MARGIN);
+                const y = BL.EDGE_MARGIN + Math.random() * (CANVAS_HEIGHT - 2 * BL.EDGE_MARGIN);
+                const d = Math.hypot(x - state.ship.pos.x, y - state.ship.pos.y);
+                if (d > bestD) { bestD = d; bestX = x; bestY = y; }
+                if (d >= BL.MIN_SHIP_DIST) break;
+              }
+              alien.tpX = alien.leaving ? undefined : bestX;
+              alien.tpY = alien.leaving ? undefined : bestY;
               soundEffects.warpCharge();
             }
           }
@@ -3156,12 +3230,17 @@ const Game = () => {
             alien.vel.x = 0;
             alien.vel.y = 0;
             if (alien.chargeTimer <= 0) {
+              spawnExplosion(alien.pos, "#4488FF", 6);
+              if (alien.leaving) return false; // teleports away for good
               // Execute teleport
-              alien.pos.x = 50 + Math.random() * (CANVAS_WIDTH - 100);
-              alien.pos.y = 50 + Math.random() * (CANVAS_HEIGHT - 100);
+              alien.pos.x = alien.tpX ?? BL.EDGE_MARGIN + Math.random() * (CANVAS_WIDTH - 2 * BL.EDGE_MARGIN);
+              alien.pos.y = alien.tpY ?? BL.EDGE_MARGIN + Math.random() * (CANVAS_HEIGHT - 2 * BL.EDGE_MARGIN);
+              alien.tpX = undefined;
+              alien.tpY = undefined;
               alien.vel.x = 0;
               alien.vel.y = 0;
-              alien.teleportCooldown = 200 + Math.random() * 120;
+              alien.teleportCooldown = BL.TELEPORT_COOLDOWN + Math.random() * BL.TELEPORT_RAND;
+              alien.shootTimer = Math.max(alien.shootTimer, BL.ARRIVE_NO_FIRE);
               spawnExplosion(alien.pos, "#4488FF", 6);
             }
           }
@@ -3537,6 +3616,7 @@ const Game = () => {
           case "extraLife": {
             if (state.lives < BALANCE.MAX_LIVES) {
               state.lives++;
+              balanceStatsRef.current.livesGained[powerUp.fromBoss ? "boss" : "pickup"]++;
               setDisplayLives(state.lives);
             }
             break;
@@ -3716,6 +3796,7 @@ const Game = () => {
               rotation: 0,
               type: bossDropType,
               lifetime: 600,
+              fromBoss: true,
             });
             state.boss = null;
             state.bossDefeated = true;
@@ -3741,6 +3822,7 @@ const Game = () => {
         const radius = asteroid.size === "large" ? 40 : asteroid.size === "medium" ? 25 : 12;
         if (checkCollision(state.ship.pos, SHIP_SIZE, asteroid.pos, radius)) {
           addDebugLog("collision", `Ship hit ${asteroid.size} asteroid`);
+          recordDeath("asteroid");
           loseLife(state);
           break;
         }
@@ -3753,6 +3835,7 @@ const Game = () => {
         const radius = ufo.size === "large" ? 20 : 10;
         if (checkCollision(state.ship.pos, SHIP_SIZE, ufo.pos, radius)) {
           addDebugLog("collision", `Ship hit ${ufo.size} UFO`);
+          recordDeath("ufo");
           loseLife(state);
           break;
         }
@@ -3766,6 +3849,7 @@ const Game = () => {
         if (alien.isInvisible) continue;
         if (checkCollision(state.ship.pos, SHIP_SIZE, alien.pos, alienRadius)) {
           addDebugLog("collision", `Ship hit ${alien.type} alien`);
+          recordDeath("alienTouch");
           loseLife(state);
           break;
         }
@@ -3785,6 +3869,7 @@ const Game = () => {
               : 65;
       if (boss && checkCollision(state.ship.pos, SHIP_SIZE, boss.pos, bossRadius)) {
         addDebugLog("collision", "Ship hit boss");
+        recordDeath("boss");
         loseLife(state);
       }
     }
@@ -3795,6 +3880,12 @@ const Game = () => {
         if (!bullet.isUFO && !bullet.isAlien) return true;
         if (checkCollision(bullet.pos, 2, state.ship.pos, SHIP_SIZE)) {
           addDebugLog("collision", `Ship hit by ${bullet.isUFO ? "UFO" : "alien"} bullet`);
+          recordDeath(
+            bullet.color === "#44FF44" ? "greenBullet"
+              : bullet.color === "#4488FF" ? "blueBullet"
+              : bullet.isUFO && bullet.color === "#FF4444" && !state.boss ? "ufoBullet"
+              : state.boss ? "bossBullet" : bullet.isUFO ? "ufoBullet" : "alienTouch",
+          );
           loseLife(state);
           return false;
         }
@@ -4218,6 +4309,16 @@ const Game = () => {
     aliens
       .filter((a) => a.type === "greenMan")
       .forEach((alien) => {
+        if (alien.shootTimer <= BALANCE.GREEN.TELEGRAPH_TICKS) {
+          ctx.save();
+          ctx.globalAlpha = 0.6 + 0.2 * Math.sin(alien.shootTimer * 0.8);
+          ctx.strokeStyle = "#44FF44";
+          ctx.lineWidth = 1.5;
+          ctx.beginPath();
+          ctx.arc(alien.pos.x, alien.pos.y, 16, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.restore();
+        }
         ctx.save();
         ctx.translate(alien.pos.x, alien.pos.y);
         ctx.strokeStyle = "#44FF44";
@@ -4284,9 +4385,19 @@ const Game = () => {
         }
         // Draw charge rings before teleport
         if (alien.chargeTimer && alien.chargeTimer > 0) {
+          if (alien.tpX !== undefined && alien.tpY !== undefined) {
+            ctx.save();
+            ctx.globalAlpha = 0.4;
+            ctx.strokeStyle = "#4488FF";
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.arc(alien.tpX, alien.tpY, 14, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.restore();
+          }
           ctx.save();
           ctx.translate(alien.pos.x, alien.pos.y);
-          const chargeProgress = 1 - alien.chargeTimer / 30;
+          const chargeProgress = Math.max(0, 1 - alien.chargeTimer / 30);
           for (let ring = 0; ring < 3; ring++) {
             ctx.globalAlpha = 0.3 + chargeProgress * 0.4 - ring * 0.1;
             ctx.strokeStyle = "#4488FF";
