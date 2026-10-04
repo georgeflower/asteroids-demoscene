@@ -6357,13 +6357,13 @@ const Game = () => {
           <span>SCORE: {displayScore.toString().padStart(8, "0")}</span>
           <span>
             LIVES: {displayLives}{" "}
-            <span className="pointer-events-none opacity-60 text-[7px] sm:text-[9px] hidden sm:inline">
+            <span className="pointer-events-none opacity-60 text-[7px] sm:text-[9px] hidden md:inline">
               NEXT 1UP: {(EXTRA_LIFE_INTERVAL - (displayScore % EXTRA_LIFE_INTERVAL)).toLocaleString()}
             </span>
           </span>
           <div className="flex items-center gap-2">
             <span>WAVE: {displayWave}</span>
-            <span className="text-[#888888] text-[7px] hidden sm:inline" style={{ textShadow: "none" }}>
+            <span className="text-[#888888] text-[7px] hidden md:inline" style={{ textShadow: "none" }}>
               v{GAME_VERSION}
             </span>
           </div>
