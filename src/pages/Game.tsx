@@ -2448,7 +2448,7 @@ const Game = () => {
       if (state.lives <= 0) {
         state.gameOver = true;
         balanceStatsRef.current.waveReached = state.wave;
-        addDebugLog("balance", JSON.stringify(balanceStatsRef.current));
+        addDebugLog("death", `balance ${JSON.stringify(balanceStatsRef.current)}`);
         void sendHeartbeat(true);
         pendingSubmissionRef.current = {
           token: gameSessionTokenRef.current ?? "",
