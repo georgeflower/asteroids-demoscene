@@ -11,7 +11,7 @@ import OnlineLobby from "@/components/OnlineLobby";
 import LobbyChat from "@/components/LobbyChat";
 import PlayerList from "@/components/PlayerList";
 import CRTBootOverlay from "@/components/CRTBootOverlay";
-import GameOverPanel from "@/components/GameOverPanel";
+import GameOverPanel, { type CloudStatus } from "@/components/GameOverPanel";
 import ControlSettings from "@/components/ControlSettings";
 import { loadBindings, displayKeyName, type ControlBindings } from "@/hooks/useControlSettings";
 import type { DuelNetState, CoopNetState, SessionMode } from "@/types/multiplayer";
@@ -496,6 +496,7 @@ const Game = () => {
   const lastShotP2Ref = useRef(0);
   const enteringInitialsRef = useRef(false);
   const submissionGenerationRef = useRef(0);
+  const submittingScoreRef = useRef(false);
   const [displayScore, setDisplayScore] = useState(0);
   const [displayLives, setDisplayLives] = useState(3);
   const [displayWave, setDisplayWave] = useState(1);
@@ -511,7 +512,7 @@ const Game = () => {
     }
   });
   const [initialsError, setInitialsError] = useState("");
-  const [submittingScore, setSubmittingScore] = useState(false);
+  const [cloudStatus, setCloudStatus] = useState<CloudStatus>("idle");
   const [leaderboard, setLeaderboard] = useState<{ initials: string; score: number; date: string }[]>([]);
   const [leaderboardLoading, setLeaderboardLoading] = useState(HIGH_SCORES_ENABLED);
   const [scoreTab, setScoreTab] = useState<"global" | "local">(HIGH_SCORES_ENABLED ? "global" : "local");
@@ -528,9 +529,20 @@ const Game = () => {
   const gameStartTimeRef = useRef<number>(Date.now());
   const heartbeatIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const powSolutionRef = useRef<number | null>(null);
+  const powPromiseRef = useRef<Promise<number> | null>(null);
   const sessionNonceRef = useRef<string | null>(null);
   const gameStatsRef = useRef({ asteroidsDestroyed: 0, bulletsFired: 0 });
   const heartbeatSeqRef = useRef(0);
+  const pendingSubmissionRef = useRef<{
+    token: string;
+    nonce: string | null;
+    score: number;
+    wave: number;
+    asteroidsDestroyed: number;
+    bulletsFired: number;
+    seq: number;
+  } | null>(null);
+  const pendingInitialsRef = useRef("");
   const [isTouchDevice, setIsTouchDevice] = useState(false);
   const [canUseKeyboard, setCanUseKeyboard] = useState(() =>
     typeof window === "undefined" ? true : window.matchMedia("(any-pointer: fine)").matches,
@@ -799,22 +811,7 @@ const Game = () => {
 
   // --- Crypto helpers for anti-cheat ---
   const solvePoW = useCallback((challenge: string, difficulty: number): Promise<number> => {
-    if (HIGH_SCORES_ENABLED && typeof Worker !== "undefined") {
-      return new Promise((resolve, reject) => {
-        const worker = new Worker(new URL("../workers/powWorker.ts", import.meta.url), { type: "module" });
-        worker.onmessage = (e: MessageEvent<{ nonce: number }>) => {
-          resolve(e.data.nonce);
-          worker.terminate();
-        };
-        worker.onerror = (err) => {
-          reject(err);
-          worker.terminate();
-        };
-        worker.postMessage({ challenge, difficulty });
-      });
-    }
-    // Fallback: solve on main thread (yielding every 1000 iterations)
-    return (async () => {
+    const solveOnMainThread = async () => {
       let nonce = 0;
       while (true) {
         const data = new TextEncoder().encode(challenge + nonce.toString());
@@ -840,7 +837,27 @@ const Game = () => {
         nonce++;
         if (nonce % 1000 === 0) await new Promise((r) => setTimeout(r, 0));
       }
-    })();
+    };
+
+    if (HIGH_SCORES_ENABLED && typeof Worker !== "undefined") {
+      try {
+        return new Promise((resolve) => {
+          const worker = new Worker(new URL("../workers/powWorker.ts", import.meta.url), { type: "module" });
+          worker.onmessage = (e: MessageEvent<{ nonce: number }>) => {
+            worker.terminate();
+            resolve(e.data.nonce);
+          };
+          worker.onerror = () => {
+            worker.terminate();
+            void solveOnMainThread().then(resolve);
+          };
+          worker.postMessage({ challenge, difficulty });
+        });
+      } catch {
+        return solveOnMainThread();
+      }
+    }
+    return solveOnMainThread();
   }, []);
 
   const computeHMAC = useCallback(async (key: string, message: string): Promise<string> => {
@@ -855,45 +872,62 @@ const Game = () => {
   }, []);
 
   const startGameSession = useCallback(async () => {
-    try {
-      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/submit/start-session`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-        },
-      });
+    gameSessionTokenRef.current = null;
+    sessionNonceRef.current = null;
+    powSolutionRef.current = null;
+    powPromiseRef.current = null;
+    heartbeatSeqRef.current = 0;
+    gameStatsRef.current = { asteroidsDestroyed: 0, bulletsFired: 0 };
 
-      if (!response.ok) {
-        console.error("Failed to start game session");
-        return null;
+    const generation = submissionGenerationRef.current;
+    const retryDelays = [500, 2000, 5000];
+    for (let attempt = 0; attempt <= retryDelays.length; attempt++) {
+      const runEnded = gameStateRef.current?.gameOver ?? true;
+      if (submissionGenerationRef.current !== generation || runEnded) return null;
+      if (attempt > 0) {
+        await new Promise((resolve) => setTimeout(resolve, retryDelays[attempt - 1]));
+        const endedDuringDelay = gameStateRef.current?.gameOver ?? true;
+        if (submissionGenerationRef.current !== generation || endedDuringDelay) return null;
       }
 
-      const data = await response.json();
-      gameSessionTokenRef.current = data.sessionToken;
-      sessionNonceRef.current = data.sessionNonce || null;
-      gameStatsRef.current = { asteroidsDestroyed: 0, bulletsFired: 0 };
-      heartbeatSeqRef.current = 0;
-      powSolutionRef.current = null;
-
-      // Solve PoW challenge in background
-      if (data.challenge && data.difficulty) {
-        solvePoW(data.challenge, data.difficulty).then((nonce) => {
-          powSolutionRef.current = nonce;
+      try {
+        const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/submit/start-session`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          },
         });
-      }
+        if (!response.ok) {
+          console.warn("Failed to start game session:", response.status);
+          continue;
+        }
 
-      return data.sessionToken;
-    } catch (error) {
-      console.error("Error starting game session:", error);
-      return null;
+        const data = await response.json();
+        const endedBeforeStore = gameStateRef.current?.gameOver ?? true;
+        if (submissionGenerationRef.current !== generation || endedBeforeStore) return null;
+        gameSessionTokenRef.current = data.sessionToken;
+        sessionNonceRef.current = data.sessionNonce || null;
+
+        if (data.challenge && data.difficulty) {
+          const powPromise = solvePoW(data.challenge, data.difficulty);
+          powPromiseRef.current = powPromise;
+          void powPromise.then((nonce) => {
+            if (submissionGenerationRef.current === generation) powSolutionRef.current = nonce;
+          });
+        }
+        return data.sessionToken;
+      } catch (error) {
+        console.warn("Error starting game session:", error);
+      }
     }
+    return null;
   }, [solvePoW]);
 
-  const sendHeartbeat = useCallback(async () => {
+  const sendHeartbeat = useCallback(async (force = false) => {
     const token = gameSessionTokenRef.current;
     const state = gameStateRef.current;
-    if (!token || !state || state.gameOver || isPausedRef.current) return;
+    if (!token || !state || (!force && (state.gameOver || isPausedRef.current))) return;
     try {
       const score = state.score;
       const level = state.wave;
@@ -912,24 +946,28 @@ const Game = () => {
         );
       }
 
-      await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/submit/heartbeat`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-        },
-        body: JSON.stringify({
-          gameSessionToken: token,
-          score,
-          level,
-          asteroidsDestroyed,
-          bulletsFired,
-          hmac,
-          seq,
-        }),
-      });
-    } catch (_) {
-      // Non-blocking: heartbeat failure doesn't affect gameplay
+      const request = () => fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/submit/heartbeat`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          },
+          body: JSON.stringify({ gameSessionToken: token, score, level, asteroidsDestroyed, bulletsFired, hmac, seq }),
+        });
+
+      let response: Response;
+      try {
+        response = await request();
+      } catch {
+        await new Promise((resolve) => setTimeout(resolve, 3000));
+        response = await request();
+      }
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        console.warn("[heartbeat]", response.status, body.error);
+      }
+    } catch (error) {
+      console.warn("[heartbeat]", "NETWORK", error);
     }
   }, [computeHMAC]);
 
@@ -948,35 +986,44 @@ const Game = () => {
   }, []);
 
   const saveToLeaderboard = useCallback(
-    async (playerInitials: string, score: number): Promise<boolean> => {
+    async (playerInitials: string): Promise<{ ok: boolean; code?: string; validation?: string }> => {
       // Trainer mode: don't save scores
       if (DEBUG_ENABLED && trainerModeRef.current) {
         console.log("Trainer mode: score not saved");
         // Return true to close dialog and proceed - trainer mode is for practice only
-        return true;
+        return { ok: true };
       }
 
-      if (!gameSessionTokenRef.current) {
+      const snapshot = pendingSubmissionRef.current;
+      if (!snapshot?.token) {
         console.error("No game session token available");
-        setInitialsError("Unable to save score. Please try again.");
-        return false;
+        return { ok: false, code: "NETWORK" };
       }
 
       const timePlayedSeconds = Math.floor((Date.now() - gameStartTimeRef.current) / 1000);
-      const currentWave = gameStateRef.current?.wave ?? 1;
+
+      if (powPromiseRef.current && powSolutionRef.current === null) {
+        await Promise.race([
+          powPromiseRef.current.catch(() => undefined),
+          new Promise<undefined>((resolve) => setTimeout(resolve, 20000)),
+        ]);
+      }
+      if (powPromiseRef.current && powSolutionRef.current === null) return { ok: false, code: "NETWORK" };
 
       // Compute HMAC for submission — sign ALL validated fields
       let hmac: string | undefined;
-      if (sessionNonceRef.current) {
-        const { asteroidsDestroyed, bulletsFired } = gameStatsRef.current;
+      if (snapshot.nonce) {
         hmac = await computeHMAC(
-          sessionNonceRef.current,
-          `${gameSessionTokenRef.current}|${score}|${currentWave}|${asteroidsDestroyed}|${bulletsFired}|${heartbeatSeqRef.current}`,
+          snapshot.nonce,
+          `${snapshot.token}|${snapshot.score}|${snapshot.wave}|${snapshot.asteroidsDestroyed}|${snapshot.bulletsFired}|${snapshot.seq}`,
         );
       }
 
-      try {
-        const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/submit/submit`, {
+      const retryDelays = [2000, 6000];
+      for (let attempt = 0; attempt <= retryDelays.length; attempt++) {
+        if (attempt > 0) await new Promise((resolve) => setTimeout(resolve, retryDelays[attempt - 1]));
+        try {
+          const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/submit/submit`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -984,51 +1031,46 @@ const Game = () => {
           },
           body: JSON.stringify({
             initials: playerInitials.toUpperCase(),
-            score,
-            gameSessionToken: gameSessionTokenRef.current,
+            score: snapshot.score,
+            gameSessionToken: snapshot.token,
             timestamp: Date.now(),
-            level: currentWave,
+            level: snapshot.wave,
             timePlayedSeconds,
             source: "game_client",
             powNonce: powSolutionRef.current,
             hmac,
-            asteroidsDestroyed: gameStatsRef.current.asteroidsDestroyed,
-            bulletsFired: gameStatsRef.current.bulletsFired,
-            seq: heartbeatSeqRef.current,
+            asteroidsDestroyed: snapshot.asteroidsDestroyed,
+            bulletsFired: snapshot.bulletsFired,
+            seq: snapshot.seq,
           }),
         });
 
-        const result = await response.json();
+          const result = await response.json().catch(() => ({}));
 
-        if (!response.ok) {
-          console.error("Failed to save score:", result.error || "Unknown error");
-          // Handle inappropriate initials error
-          if (response.status === 400 && result.error === "Please choose different initials") {
-            setInitialsError(result.error);
-            return false;
+          if (!response.ok) {
+            console.error("Failed to save score:", result.error || "Unknown error");
+            if (response.status === 400 && result.error === "Please choose different initials") {
+              return { ok: false, validation: result.error };
+            }
+            if (response.status === 409) {
+              const board = await loadLeaderboard();
+              setLeaderboard(board);
+              return { ok: true };
+            }
+            if (response.status >= 500 && attempt < retryDelays.length) continue;
+            const rawCode = typeof result.code === "string" ? result.code : typeof result.error === "string" ? result.error : String(response.status);
+            return { ok: false, code: rawCode.toUpperCase().replace(/[^A-Z0-9_]/g, "_").slice(0, 12) || String(response.status) };
           }
-          // Log duplicate score detection - UI could be enhanced with toast notification
-          if (response.status === 409) {
-            console.warn("Duplicate score detected:", result.error);
-            // Refresh leaderboard to show current standings
-            const board = await loadLeaderboard();
-            setLeaderboard(board);
-            // For duplicate scores, consider it successful since the score is already there
-            return true;
-          }
-          // Generic error message for other failures
-          setInitialsError("Error logged — the developer has been notified.");
-          return false;
+
+          const board = await loadLeaderboard();
+          setLeaderboard(board);
+          return { ok: true };
+        } catch (error) {
+          console.error("Error saving score:", error);
+          if (attempt >= retryDelays.length) return { ok: false, code: "NETWORK" };
         }
-
-        const board = await loadLeaderboard();
-        setLeaderboard(board);
-        return true;
-      } catch (error) {
-        console.error("Error saving score:", error);
-        setInitialsError("Error logged — the developer has been notified.");
-        return false;
       }
+      return { ok: false, code: "NETWORK" };
     },
     [loadLeaderboard, computeHMAC],
   );
@@ -1057,7 +1099,8 @@ const Game = () => {
   );
 
   const submitInitials = useCallback(
-    (inits: string, score: number) => {
+    async (inits: string, score: number) => {
+      if (submittingScoreRef.current) return;
       const normalized = inits.toUpperCase().replace(/[^A-Z]/g, "").slice(0, 3);
       if (normalized.length === 0) return;
 
@@ -1079,22 +1122,52 @@ const Game = () => {
       enteringInitialsRef.current = false;
       setInitialsError("");
 
-      if (!HIGH_SCORES_ENABLED) return;
+      if (!isCloudHighScore(score)) {
+        setCloudStatus("local");
+        return;
+      }
 
-      // Fire-and-forget cloud submission
       const generation = submissionGenerationRef.current;
-      setSubmittingScore(true);
-      saveToLeaderboard(normalized, score).then((ok) => {
-        // Guard: ignore if a new run has started
-        if (submissionGenerationRef.current !== generation) return;
-        setSubmittingScore(false);
-        if (!ok) {
-          setInitialsError("Score saved locally. Cloud sync failed.");
-        }
-      });
+      pendingInitialsRef.current = normalized;
+      submittingScoreRef.current = true;
+      setCloudStatus("saving");
+      const result = await saveToLeaderboard(normalized);
+      submittingScoreRef.current = false;
+      if (submissionGenerationRef.current !== generation) return;
+      if (result.ok) {
+        setCloudStatus("saved");
+      } else if (result.validation) {
+        setCloudStatus("idle");
+        setInitialsError(result.validation);
+      } else {
+        const code = (result.code ?? "NETWORK").toUpperCase().slice(0, 12);
+        setInitialsError(`CLOUD SAVE FAILED: ${code}`);
+        setCloudStatus("failed");
+      }
     },
-    [localHighScores, saveToLeaderboard],
+    [localHighScores, isCloudHighScore, saveToLeaderboard],
   );
+
+  const retryCloudSubmission = useCallback(async () => {
+    if (submittingScoreRef.current || !pendingSubmissionRef.current || !pendingInitialsRef.current) return;
+    const generation = submissionGenerationRef.current;
+    submittingScoreRef.current = true;
+    setInitialsError("");
+    setCloudStatus("saving");
+    const result = await saveToLeaderboard(pendingInitialsRef.current);
+    submittingScoreRef.current = false;
+    if (submissionGenerationRef.current !== generation) return;
+    if (result.ok) {
+      setCloudStatus("saved");
+    } else if (result.validation) {
+      setCloudStatus("idle");
+      setInitialsError(result.validation);
+    } else {
+      const code = (result.code ?? "NETWORK").toUpperCase().slice(0, 12);
+      setInitialsError(`CLOUD SAVE FAILED: ${code}`);
+      setCloudStatus("failed");
+    }
+  }, [saveToLeaderboard]);
 
   useEffect(() => {
     loadLeaderboard()
@@ -1441,6 +1514,10 @@ const Game = () => {
 
     duelStateRef.current = null;
     submissionGenerationRef.current += 1;
+    submittingScoreRef.current = false;
+    pendingSubmissionRef.current = null;
+    pendingInitialsRef.current = "";
+    setCloudStatus("idle");
     setDisplayScore(0);
     setDisplayLives(3);
     setDisplayWave(1);
@@ -2317,6 +2394,16 @@ const Game = () => {
 
       if (state.lives <= 0) {
         state.gameOver = true;
+        void sendHeartbeat(true);
+        pendingSubmissionRef.current = {
+          token: gameSessionTokenRef.current ?? "",
+          nonce: sessionNonceRef.current,
+          score: state.score,
+          wave: state.wave,
+          asteroidsDestroyed: gameStatsRef.current.asteroidsDestroyed,
+          bulletsFired: gameStatsRef.current.bulletsFired,
+          seq: heartbeatSeqRef.current,
+        };
         stopHeartbeatInterval();
         buildRunSummary(state);
         setShowGameOver(true);
@@ -2333,7 +2420,7 @@ const Game = () => {
         setShowLifeLost(true);
       }
     },
-    [shouldPromptForInitials, loadLeaderboard, addDebugLog, stopHeartbeatInterval, buildRunSummary],
+    [shouldPromptForInitials, loadLeaderboard, addDebugLog, sendHeartbeat, stopHeartbeatInterval, buildRunSummary],
   );
 
   const shootBullet = useCallback(() => {
@@ -5640,13 +5727,16 @@ const Game = () => {
       prevCoopThrustRef.current = false;
       prevCoopFireRef.current = false;
       prevCoopHyperspaceRef.current = false;
+    } else {
+      void sendHeartbeat();
     }
-  }, []);
+  }, [sendHeartbeat]);
 
   const resumeGame = useCallback(() => {
     isPausedRef.current = false;
     setIsPaused(false);
-  }, []);
+    void sendHeartbeat();
+  }, [sendHeartbeat]);
 
   const handleCanvasKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLCanvasElement>) => {
@@ -6471,10 +6561,11 @@ const Game = () => {
             initials={initials}
             hasStoredInitials={!!localStorage.getItem("playerInitials")}
             isTouchDevice={isTouchDevice}
-            status={initialsError}
-            statusIsError={!!initialsError}
+            cloudStatus={cloudStatus}
+            statusText={initialsError}
+            onRetryCloud={retryCloudSubmission}
             selection={gameOverSelection}
-            onInitialsChange={(v) => { setInitials(v); setInitialsError(""); }}
+            onInitialsChange={(v) => { setInitials(v); setInitialsError(""); setCloudStatus("idle"); }}
             onSubmitInitials={() => submitInitials(initials, displayScore)}
             onPlayAgain={initGame}
             onMenu={quitToMenu}

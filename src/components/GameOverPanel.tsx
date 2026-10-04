@@ -12,6 +12,8 @@ export interface GameOverRunSummary {
 
 interface Entry { initials: string; score: number }
 
+export type CloudStatus = "idle" | "saving" | "saved" | "failed" | "local";
+
 interface Props {
   score: number;
   runSummary: GameOverRunSummary | null;
@@ -21,8 +23,9 @@ interface Props {
   initials: string;
   hasStoredInitials: boolean;
   isTouchDevice: boolean;
-  status: string;
-  statusIsError: boolean;
+  cloudStatus: CloudStatus;
+  statusText?: string;
+  onRetryCloud: () => void;
   selection: number;
   onInitialsChange: (v: string) => void;
   onSubmitInitials: () => void;
@@ -54,6 +57,13 @@ export default function GameOverPanel(p: Props) {
   ];
   const autoFocus = !p.isTouchDevice && !p.hasStoredInitials;
   const btnBase = "w-full min-h-12 font-mono text-sm sm:text-base border-2 transition-colors";
+  const cloudStatusText = p.cloudStatus === "saving"
+    ? "SAVING..."
+    : p.cloudStatus === "saved"
+      ? "SAVED"
+      : p.cloudStatus === "local"
+        ? "SAVED LOCALLY"
+        : p.statusText ?? "\u00a0";
 
   return (
     <div
@@ -128,13 +138,20 @@ export default function GameOverPanel(p: Props) {
 
         {/* Row 4: action bar */}
         <div className="pb-[max(0.25rem,env(safe-area-inset-bottom))]">
-          <div
-            role="status"
+          <button
+            type="button"
+            disabled={p.cloudStatus !== "failed"}
+            onClick={p.onRetryCloud}
             aria-live="polite"
-            className={`h-4 text-[10px] text-center truncate ${p.statusIsError ? "text-[hsl(var(--game-danger))]" : "opacity-70"}`}
+            className={`h-8 w-full border-0 text-[10px] text-center leading-tight ${p.cloudStatus === "failed" ? "text-[hsl(var(--game-danger))] cursor-pointer" : "opacity-70 cursor-default"}`}
           >
-            {p.status}
-          </div>
+            {p.cloudStatus === "failed" ? (
+              <span className="flex h-full flex-col items-center justify-center">
+                <span>{cloudStatusText}</span>
+                <span>TAP TO RETRY CLOUD SAVE</span>
+              </span>
+            ) : cloudStatusText}
+          </button>
           <div className="grid grid-cols-[2fr_1fr] gap-2">
             <button
               type="button"
