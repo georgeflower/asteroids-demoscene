@@ -144,6 +144,29 @@ export function AdminMonitor() {
     }
   };
 
+  const approveRejected = async (rejectedId: string) => {
+    if (!confirm("Approve this score onto the leaderboard?")) return;
+    try {
+      const res = await fetch(`${SUBMIT_URL}/admin-approve`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${SUPABASE_KEY}`,
+          "x-admin-key": adminKey,
+        },
+        body: JSON.stringify({ rejectedId }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({ error: res.statusText }));
+        alert(body.error || "Failed to approve score");
+        return;
+      }
+      await fetchData(adminKey);
+    } catch (e) {
+      alert(String(e));
+    }
+  };
+
   const exportCSV = () => {
     const flaggedScoreIds = new Set(flags.map((f) => f.score_id));
     const rows = scores
