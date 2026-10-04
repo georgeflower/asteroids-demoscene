@@ -73,8 +73,8 @@ export default function GameOverPanel(p: Props) {
         {/* Row 2: stats */}
         <div className="grid grid-cols-5 gap-1">
           {stats.map(([l, v]) => (
-            <div key={l} className="h-9 flex flex-col items-center justify-center border border-[hsl(var(--game-foreground))]/30 overflow-hidden">
-              <span className="text-[8px] sm:text-[10px] opacity-60 leading-none">{l}</span>
+            <div key={l} className="h-10 flex flex-col items-center justify-center border border-[hsl(var(--game-foreground))]/30 overflow-hidden">
+              <span className="text-[10px] opacity-60 leading-none">{l}</span>
               <span className="text-[10px] sm:text-xs tabular-nums leading-tight">{v}</span>
             </div>
           ))}
