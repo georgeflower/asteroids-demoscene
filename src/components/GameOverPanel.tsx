@@ -46,8 +46,8 @@ export default function GameOverPanel(p: Props) {
         ? `NEW PERSONAL BEST! +${(rs.score - rs.prevBest.score).toLocaleString()}`
         : `BEST: ${rs.prevBest.score.toLocaleString()} (-${(rs.prevBest.score - rs.score).toLocaleString()})`;
   const stats: [string, string][] = [
-    ["ACCURACY", rs ? (rs.accuracy === null ? "—" : `${rs.accuracy.toFixed(0)}%`) : "—"],
-    ["ASTEROIDS", rs ? String(rs.asteroids) : "—"],
+    ["ACC", rs ? (rs.accuracy === null ? "—" : `${rs.accuracy.toFixed(0)}%`) : "—"],
+    ["KILLS", rs ? String(rs.asteroids) : "—"],
     ["CHAIN", rs ? `x${rs.bestChain}` : "—"],
     ["TIME", rs ? fmtTime(rs.timeSurvived) : "—"],
     ["WAVE", rs ? String(rs.wave) : "—"],
@@ -60,9 +60,9 @@ export default function GameOverPanel(p: Props) {
       role="dialog"
       aria-modal="true"
       aria-labelledby={titleId}
-      className="absolute inset-0 z-20 h-full bg-black/80 motion-safe:animate-[fade-in_150ms_ease-out]"
+      className="fixed inset-0 z-50 h-dvh bg-black/80 md:absolute md:z-20 md:h-full motion-safe:animate-[fade-in_150ms_ease-out]"
     >
-      <div className={`mx-auto w-full max-w-[420px] h-full p-3 grid grid-rows-[auto_auto_minmax(0,1fr)_auto] gap-2 font-mono ${FG}`}>
+      <div className={`mx-auto w-full max-w-[420px] h-full p-3 pt-[max(0.75rem,env(safe-area-inset-top))] grid grid-rows-[auto_auto_minmax(0,1fr)_auto] gap-2 font-mono ${FG}`}>
         {/* Row 1: header */}
         <div className="text-center leading-tight">
           <h2 id={titleId} className="text-xl sm:text-4xl text-[hsl(var(--game-danger))]">GAME OVER</h2>
@@ -81,7 +81,7 @@ export default function GameOverPanel(p: Props) {
         </div>
 
         {/* Row 3: flexible region */}
-        <div className="min-h-0 overflow-y-auto">
+        <div className="min-h-0 overflow-y-auto overscroll-contain">
           {p.enteringInitials && (
             <div className="sticky top-0 z-10 bg-black/95 border border-[hsl(var(--game-glow))] p-2 mb-2 flex items-center justify-center gap-2">
               <label htmlFor={`${titleId}-ini`} className="text-[10px] text-[hsl(var(--game-glow))]">INITIALS</label>

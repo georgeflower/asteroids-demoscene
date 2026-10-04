@@ -6357,13 +6357,13 @@ const Game = () => {
           <span>SCORE: {displayScore.toString().padStart(8, "0")}</span>
           <span>
             LIVES: {displayLives}{" "}
-            <span className="pointer-events-none opacity-60 text-[7px] sm:text-[9px]">
+            <span className="pointer-events-none opacity-60 text-[7px] sm:text-[9px] hidden sm:inline">
               NEXT 1UP: {(EXTRA_LIFE_INTERVAL - (displayScore % EXTRA_LIFE_INTERVAL)).toLocaleString()}
             </span>
           </span>
           <div className="flex items-center gap-2">
             <span>WAVE: {displayWave}</span>
-            <span className="text-[#888888] text-[7px]" style={{ textShadow: "none" }}>
+            <span className="text-[#888888] text-[7px] hidden sm:inline" style={{ textShadow: "none" }}>
               v{GAME_VERSION}
             </span>
           </div>
@@ -6786,8 +6786,8 @@ const Game = () => {
           </div>
         )}
 
-        {/* FPS overlay – always visible, subtle */}
-        <FpsOverlay />
+        {/* FPS overlay (debug only) */}
+        {DEBUG_ENABLED && <FpsOverlay />}
 
         {/* Countdown overlay during active online_coop game (after pressing READY) */}
         {gameMode === "online_coop" && !coopGameOver && restartCountdown != null && restartCountdown > 0 && (
