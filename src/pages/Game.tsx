@@ -1131,6 +1131,35 @@ const Game = () => {
     return () => window.removeEventListener("keydown", closeMenuDialog);
   }, [gameMode, showFullLeaderboard, showOldLeaderboard, showChangelog]);
 
+  useEffect(() => {
+    if (gameMode !== "menu" || showFullLeaderboard || showOldLeaderboard || showChangelog || showSettings) return;
+    const handleMenuKey = (event: KeyboardEvent) => {
+      if (event.key === "ArrowUp" || event.key === "ArrowDown") {
+        event.preventDefault();
+        setMenuSelection((selection) => {
+          if (event.key === "ArrowUp") {
+            if (selection === 4) return 3;
+            if (selection === 3) return canUseKeyboard ? 1 : 0;
+            return 0;
+          }
+          if (selection === 0) return canUseKeyboard ? 1 : 3;
+          if (selection === 1) return 3;
+          if (selection === 3) return 4;
+          return 0;
+        });
+      }
+      if (event.key === "Enter") {
+        event.preventDefault();
+        if (menuSelection === 0) initGame();
+        else if (menuSelection === 1 && canUseKeyboard) initDuel();
+        else if (menuSelection === 3) setGameMode("online_lobby");
+        else if (menuSelection === 4) setShowSettings(true);
+      }
+    };
+    window.addEventListener("keydown", handleMenuKey);
+    return () => window.removeEventListener("keydown", handleMenuKey);
+  }, [gameMode, showFullLeaderboard, showOldLeaderboard, showChangelog, showSettings, menuSelection, canUseKeyboard, initGame, initDuel]);
+
   const createStars = (): Star[] => {
     const stars: Star[] = [];
     for (let i = 0; i < 120; i++) {
@@ -6898,63 +6927,19 @@ const Game = () => {
         )}
       </div>
 
-      <div className="mt-2 h-11 w-full max-w-[800px] flex shrink-0 items-center gap-2 rounded-md border border-border/60 bg-[hsl(var(--game-background))]/80 px-2 font-mono">
-        <button
-          type="button"
-          aria-label={isRadioPlaying ? "Pause radio" : "Play radio"}
-          aria-pressed={isRadioPlaying}
-          onClick={() => {
-            const audio = audioRef.current;
-            if (!audio) return;
-            if (isRadioPlaying) audio.pause();
-            else audio.play().catch(() => {});
-          }}
-          className="relative h-9 w-9 shrink-0 rounded border border-[hsl(var(--game-foreground))]/60 text-[hsl(var(--game-foreground))] before:absolute before:-inset-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-        >
-          <span aria-hidden="true">{isRadioPlaying ? "❚❚" : "▶"}</span>
-        </button>
-        <a
-          href="https://scenestream.net/demovibes/"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="min-w-0 flex-1 truncate text-[10px] text-[hsl(var(--game-foreground))] opacity-80 hover:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-        >
-          ♪ {nowPlaying ? `${nowPlaying.artist} – ${nowPlaying.title}` : "NECTARINE RADIO"}
-        </a>
-        <button
-          type="button"
-          aria-label="Automatic radio playback"
-          aria-pressed={autoPlayMusic}
-          onClick={() => setAutoPlayMusic((enabled) => !enabled)}
-          className={`relative h-8 min-w-[52px] shrink-0 rounded border px-2 text-[10px] before:absolute before:-inset-y-1.5 before:inset-x-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
-            autoPlayMusic
-              ? "border-[hsl(var(--game-foreground))] bg-[hsl(var(--game-foreground))] text-[hsl(var(--game-background))]"
-              : "border-[hsl(var(--game-foreground))]/60 text-[hsl(var(--game-foreground))]"
-          }`}
-        >
-          AUTO
-        </button>
-        {isTouchDevice && (
-          <button
-            type="button"
-            aria-label="Pause"
-            onClick={togglePause}
-            className="relative h-9 w-9 shrink-0 rounded border border-[hsl(var(--game-foreground))]/60 text-[hsl(var(--game-foreground))] before:absolute before:-inset-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-          >
-            <span aria-hidden="true">⏸</span>
-          </button>
-        )}
-        <audio
-          ref={audioRef}
-          autoPlay={autoPlayMusic && !userPaused}
-          preload={autoPlayMusic ? "auto" : "none"}
-          className="hidden"
-          onPause={handleRadioPause}
+      <div className="mt-2 w-full max-w-[800px]">
+        <RadioMiniPlayer
+          audioRef={audioRef}
+          isPlaying={isRadioPlaying}
+          nowPlaying={nowPlaying}
+          autoPlayMusic={autoPlayMusic}
+          userPaused={userPaused}
+          onToggleAutoPlay={() => setAutoPlayMusic((enabled) => !enabled)}
           onPlay={handleRadioPlay}
-          onError={(e) => console.error("Audio loading error:", e.currentTarget.error?.message)}
-        >
-          <source src="https://nectarine.inversi0n.org/necta192.mp3" type="audio/mpeg" />
-        </audio>
+          onPause={handleRadioPause}
+          onError={(message) => console.error("Audio loading error:", message)}
+          onPauseGame={isTouchDevice ? togglePause : undefined}
+        />
       </div>
 
       {DEBUG_ENABLED && (
@@ -7040,25 +7025,23 @@ const Game = () => {
       )}
 
       {!isTouchDevice && (
-        <div className="mt-2 text-[hsl(var(--game-foreground))] font-mono text-[10px] opacity-70 max-w-[800px] w-full whitespace-nowrap">
+        <div className="mt-2 w-full max-w-[800px] font-mono text-[10px] text-[hsl(var(--game-foreground))] opacity-70">
           {gameMode === "solo" && (
-            <div className="flex flex-nowrap justify-center gap-3 overflow-hidden">
-              <span>⌨ ← → ROTATE | ↑ THRUST | SPACE FIRE | CTRL HYPER | ESC PAUSE</span>
-              <span>🎮 STICK MOVE | A FIRE | B HYPER | X THRUST | START PAUSE</span>
+            <div className="flex flex-col items-center gap-1">
+              <span className="whitespace-nowrap">⌨ ← → ROTATE | ↑ THRUST | SPACE FIRE | CTRL HYPER | ESC PAUSE</span>
+              <span className="whitespace-nowrap">🎮 STICK MOVE | A FIRE | B HYPER | X THRUST | START PAUSE</span>
             </div>
           )}
           {gameMode === "duel" && (
-            <div className="flex flex-nowrap justify-center gap-3 overflow-hidden">
-              <span style={{ color: P1_COLOR }}>P1: ←→↑ SPACE</span>
-              <span style={{ color: P2_COLOR }}>P2: WASD E</span>
-              <span>🎮 GP1/GP2 | A FIRE | B HYPER | ESC PAUSE</span>
+            <div className="flex flex-col items-center gap-1">
+              <span className="whitespace-nowrap"><span style={{ color: P1_COLOR }}>P1: ←→↑ SPACE</span> | <span style={{ color: P2_COLOR }}>P2: WASD E</span></span>
+              <span className="whitespace-nowrap">🎮 GP1/GP2 | A FIRE | B HYPER | ESC PAUSE</span>
             </div>
           )}
           {(gameMode === "coop" || gameMode === "online_coop") && (
-            <div className="flex flex-nowrap justify-center gap-3 overflow-hidden">
-              <span style={{ color: P1_COLOR }}>P1: ←→↑ SPACE</span>
-              <span style={{ color: P2_COLOR }}>{gameMode === "coop" ? "P2: WASD E" : "P2: Remote"}</span>
-              <span>🎮 GP1/GP2 | A FIRE | ESC PAUSE</span>
+            <div className="flex flex-col items-center gap-1">
+              <span className="whitespace-nowrap"><span style={{ color: P1_COLOR }}>P1: ←→↑ SPACE</span> | <span style={{ color: P2_COLOR }}>{gameMode === "coop" ? "P2: WASD E" : "P2: Remote"}</span></span>
+              <span className="whitespace-nowrap">🎮 GP1/GP2 | A FIRE | ESC PAUSE</span>
             </div>
           )}
         </div>
