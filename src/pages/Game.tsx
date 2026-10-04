@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback, type RefObject } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -385,7 +385,7 @@ function MenuButton({ label, onClick, variant, accent, selected, badge, subLabel
 }
 
 interface RadioMiniPlayerProps {
-  audioRef: React.RefObject<HTMLAudioElement>;
+  audioRef: RefObject<HTMLAudioElement>;
   isPlaying: boolean;
   nowPlaying: { artist: string; title: string } | null;
   autoPlayMusic: boolean;
@@ -532,6 +532,8 @@ const Game = () => {
   const [initialsError, setInitialsError] = useState("");
   const [submittingScore, setSubmittingScore] = useState(false);
   const [leaderboard, setLeaderboard] = useState<{ initials: string; score: number; date: string }[]>([]);
+  const [leaderboardLoading, setLeaderboardLoading] = useState(HIGH_SCORES_ENABLED);
+  const [scoreTab, setScoreTab] = useState<"global" | "local">(HIGH_SCORES_ENABLED ? "global" : "local");
   
   const [oldLeaderboard, setOldLeaderboard] = useState<{ initials: string; score: number; date: string }[]>([]);
   const [showOldLeaderboard, setShowOldLeaderboard] = useState(false);
@@ -549,6 +551,7 @@ const Game = () => {
   const gameStatsRef = useRef({ asteroidsDestroyed: 0, bulletsFired: 0 });
   const heartbeatSeqRef = useRef(0);
   const [isTouchDevice, setIsTouchDevice] = useState(false);
+  const [canUseKeyboard, setCanUseKeyboard] = useState(true);
   const [nowPlaying, setNowPlaying] = useState<{ artist: string; title: string } | null>(null);
   const nowPlayingRef = useRef<{ artist: string; title: string } | null>(null);
   const [isRadioPlaying, setIsRadioPlaying] = useState(false);
@@ -1106,8 +1109,27 @@ const Game = () => {
   );
 
   useEffect(() => {
-    loadLeaderboard().then(setLeaderboard);
+    loadLeaderboard()
+      .then((board) => {
+        setLeaderboard(board);
+        if (board.length === 0) setScoreTab("local");
+      })
+      .finally(() => setLeaderboardLoading(false));
   }, [loadLeaderboard]);
+
+  useEffect(() => {
+    if (gameMode !== "menu") return;
+    const closeMenuDialog = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      if (showFullLeaderboard) setShowFullLeaderboard(false);
+      else if (showOldLeaderboard) setShowOldLeaderboard(false);
+      else if (showChangelog) setShowChangelog(false);
+      else return;
+      event.preventDefault();
+    };
+    window.addEventListener("keydown", closeMenuDialog);
+    return () => window.removeEventListener("keydown", closeMenuDialog);
+  }, [gameMode, showFullLeaderboard, showOldLeaderboard, showChangelog]);
 
   const createStars = (): Star[] => {
     const stars: Star[] = [];
@@ -5025,6 +5047,7 @@ const Game = () => {
 
   useEffect(() => {
     setIsTouchDevice("ontouchstart" in window || navigator.maxTouchPoints > 0);
+    setCanUseKeyboard(window.matchMedia("(any-pointer: fine)").matches);
   }, []);
 
   const handleRadioPause = useCallback(() => {
