@@ -1131,35 +1131,6 @@ const Game = () => {
     return () => window.removeEventListener("keydown", closeMenuDialog);
   }, [gameMode, showFullLeaderboard, showOldLeaderboard, showChangelog]);
 
-  useEffect(() => {
-    if (gameMode !== "menu" || showFullLeaderboard || showOldLeaderboard || showChangelog || showSettings) return;
-    const handleMenuKey = (event: KeyboardEvent) => {
-      if (event.key === "ArrowUp" || event.key === "ArrowDown") {
-        event.preventDefault();
-        setMenuSelection((selection) => {
-          if (event.key === "ArrowUp") {
-            if (selection === 4) return 3;
-            if (selection === 3) return canUseKeyboard ? 1 : 0;
-            return 0;
-          }
-          if (selection === 0) return canUseKeyboard ? 1 : 3;
-          if (selection === 1) return 3;
-          if (selection === 3) return 4;
-          return 0;
-        });
-      }
-      if (event.key === "Enter") {
-        event.preventDefault();
-        if (menuSelection === 0) initGame();
-        else if (menuSelection === 1 && canUseKeyboard) initDuel();
-        else if (menuSelection === 3) setGameMode("online_lobby");
-        else if (menuSelection === 4) setShowSettings(true);
-      }
-    };
-    window.addEventListener("keydown", handleMenuKey);
-    return () => window.removeEventListener("keydown", handleMenuKey);
-  }, [gameMode, showFullLeaderboard, showOldLeaderboard, showChangelog, showSettings, menuSelection, canUseKeyboard, initGame, initDuel]);
-
   const createStars = (): Star[] => {
     const stars: Star[] = [];
     for (let i = 0; i < 120; i++) {
@@ -5854,6 +5825,35 @@ const Game = () => {
       document.removeEventListener("visibilitychange", handleVisibility);
     };
   }, []);
+
+  useEffect(() => {
+    if (gameMode !== "menu" || showFullLeaderboard || showOldLeaderboard || showChangelog || showSettings) return;
+    const handleMenuKey = (event: KeyboardEvent) => {
+      if (event.key === "ArrowUp" || event.key === "ArrowDown") {
+        event.preventDefault();
+        setMenuSelection((selection) => {
+          if (event.key === "ArrowUp") {
+            if (selection === 4) return 3;
+            if (selection === 3) return canUseKeyboard ? 1 : 0;
+            return 0;
+          }
+          if (selection === 0) return canUseKeyboard ? 1 : 3;
+          if (selection === 1) return 3;
+          if (selection === 3) return 4;
+          return 0;
+        });
+      }
+      if (event.key === "Enter") {
+        event.preventDefault();
+        if (menuSelection === 0) initGame();
+        else if (menuSelection === 1 && canUseKeyboard) initDuel();
+        else if (menuSelection === 3) setGameMode("online_lobby");
+        else if (menuSelection === 4) setShowSettings(true);
+      }
+    };
+    window.addEventListener("keydown", handleMenuKey);
+    return () => window.removeEventListener("keydown", handleMenuKey);
+  }, [gameMode, showFullLeaderboard, showOldLeaderboard, showChangelog, showSettings, menuSelection, canUseKeyboard, initGame, initDuel]);
 
   // Gamepad polling for menus and overlays
   useEffect(() => {
