@@ -1047,22 +1047,21 @@ const Game = () => {
 
           const result = await response.json().catch(() => ({}));
 
-            if (response.status === 409 || result.code === "MAX_SUBMISSIONS") {
-              // The submission slot may already have been claimed by a lost response
-              // (request reached the server, reply never arrived). If the score is on
-              // the board, treat it as saved.
-              const board = await loadLeaderboard();
-              setLeaderboard(board);
-              const exists = board.some(
-                (row) => row.initials === playerInitials.toUpperCase() && row.score === snapshot.score,
-              );
-              if (exists) return { ok: true };
-              if (response.status >= 500 && attempt < retryDelays.length) continue;
-            }
             if (!response.ok) {
               console.error("Failed to save score:", result.error || "Unknown error");
               if (response.status === 400 && result.error === "Please choose different initials") {
                 return { ok: false, validation: result.error };
+              }
+              if (response.status === 409 || result.code === "MAX_SUBMISSIONS") {
+                // The submission slot may already have been claimed by a lost response
+                // (request reached the server, reply never arrived). If the score is
+                // on the board, treat it as saved.
+                const board = await loadLeaderboard();
+                setLeaderboard(board);
+                const exists = board.some(
+                  (row) => row.initials === playerInitials.toUpperCase() && row.score === snapshot.score,
+                );
+                if (exists) return { ok: true };
               }
               if (response.status >= 500 && attempt < retryDelays.length) continue;
               const rawCode = typeof result.code === "string" ? result.code : typeof result.error === "string" ? result.error : String(response.status);
@@ -1129,7 +1128,8 @@ const Game = () => {
       enteringInitialsRef.current = false;
       setInitialsError("");
 
-      if (!isCloudHighScore(score)) {
+      if (!isCloudHighScore(score) || !pendingSubmissionRef.current?.token) {
+        // No cloud session could be started for this run — save locally only.
         setCloudStatus("local");
         return;
       }
