@@ -417,6 +417,9 @@ const Game = () => {
   const [isTouchDevice, setIsTouchDevice] = useState(false);
   const [nowPlaying, setNowPlaying] = useState<{ artist: string; title: string } | null>(null);
   const nowPlayingRef = useRef<{ artist: string; title: string } | null>(null);
+  const [isRadioPlaying, setIsRadioPlaying] = useState(false);
+  const [quitConfirm, setQuitConfirm] = useState(false);
+  const quitConfirmTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [gameMode, setGameMode] = useState<GameMode>("menu");
   const gameModeRef = useRef<GameMode>("menu");
   const [showBootAnimation, setShowBootAnimation] = useState(true);
@@ -4891,12 +4894,18 @@ const Game = () => {
   }, []);
 
   const handleRadioPause = useCallback(() => {
+    setIsRadioPlaying(false);
     setUserPaused(true);
     setAutoPlayMusic(false);
   }, []);
 
   const handleRadioPlay = useCallback(() => {
+    setIsRadioPlaying(true);
     setUserPaused(false);
+  }, []);
+
+  useEffect(() => () => {
+    if (quitConfirmTimerRef.current) clearTimeout(quitConfirmTimerRef.current);
   }, []);
 
   // Persist autoPlayMusic setting
@@ -6347,7 +6356,7 @@ const Game = () => {
   }
 
   return (
-    <div className="min-h-screen bg-[hsl(var(--game-background))] flex flex-col items-center justify-center p-4">
+    <div className="min-h-dvh bg-[hsl(var(--game-background))] flex flex-col items-center p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] md:justify-center">
       {/* HUD */}
       {gameMode === "solo" && (
         <div
@@ -6957,91 +6966,141 @@ const Game = () => {
         )}
       </div>
 
+      <div className="mt-2 h-11 w-full max-w-[800px] flex shrink-0 items-center gap-2 rounded-md border border-border/60 bg-[hsl(var(--game-background))]/80 px-2 font-mono">
+        <button
+          type="button"
+          aria-label={isRadioPlaying ? "Pause radio" : "Play radio"}
+          aria-pressed={isRadioPlaying}
+          onClick={() => {
+            const audio = audioRef.current;
+            if (!audio) return;
+            if (isRadioPlaying) audio.pause();
+            else audio.play().catch(() => {});
+          }}
+          className="relative h-9 w-9 shrink-0 rounded border border-[hsl(var(--game-foreground))]/60 text-[hsl(var(--game-foreground))] before:absolute before:-inset-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+        >
+          <span aria-hidden="true">{isRadioPlaying ? "❚❚" : "▶"}</span>
+        </button>
+        <a
+          href="https://scenestream.net/demovibes/"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="min-w-0 flex-1 truncate text-[10px] text-[hsl(var(--game-foreground))] opacity-80 hover:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+        >
+          ♪ {nowPlaying ? `${nowPlaying.artist} – ${nowPlaying.title}` : "NECTARINE RADIO"}
+        </a>
+        <button
+          type="button"
+          aria-label="Automatic radio playback"
+          aria-pressed={autoPlayMusic}
+          onClick={() => setAutoPlayMusic((enabled) => !enabled)}
+          className={`relative h-8 min-w-[52px] shrink-0 rounded border px-2 text-[10px] before:absolute before:-inset-y-1.5 before:inset-x-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
+            autoPlayMusic
+              ? "border-[hsl(var(--game-foreground))] bg-[hsl(var(--game-foreground))] text-[hsl(var(--game-background))]"
+              : "border-[hsl(var(--game-foreground))]/60 text-[hsl(var(--game-foreground))]"
+          }`}
+        >
+          AUTO
+        </button>
+        {isTouchDevice && (
+          <button
+            type="button"
+            aria-label="Pause"
+            onClick={togglePause}
+            className="relative h-9 w-9 shrink-0 rounded border border-[hsl(var(--game-foreground))]/60 text-[hsl(var(--game-foreground))] before:absolute before:-inset-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+          >
+            <span aria-hidden="true">⏸</span>
+          </button>
+        )}
+        <audio
+          ref={audioRef}
+          autoPlay={autoPlayMusic && !userPaused}
+          preload={autoPlayMusic ? "auto" : "none"}
+          className="hidden"
+          onPause={handleRadioPause}
+          onPlay={handleRadioPlay}
+          onError={(e) => console.error("Audio loading error:", e.currentTarget.error?.message)}
+        >
+          <source src="https://nectarine.inversi0n.org/necta192.mp3" type="audio/mpeg" />
+        </audio>
+      </div>
+
+      {DEBUG_ENABLED && (
+        <label className="flex h-5 items-center gap-2 font-mono text-[10px] text-[hsl(var(--game-danger))] opacity-70">
+          <input
+            type="checkbox"
+            checked={trainerMode}
+            onChange={(e) => setTrainerMode(e.target.checked)}
+            className="accent-[hsl(var(--game-danger))]"
+          />
+          TRAINER (NO SCORES)
+        </label>
+      )}
+
       {isTouchDevice && (gameMode === "solo" || gameMode === "online_coop" || gameMode === "online") && (
         <div
-          className="mt-4 w-full max-w-[800px] select-none"
-          style={{ touchAction: "none", userSelect: "none", WebkitUserSelect: "none" }}
+          className="mt-auto w-full max-w-[800px] select-none touch-none px-2 [-webkit-touch-callout:none] [-webkit-tap-highlight-color:transparent]"
+          onContextMenu={(e) => e.preventDefault()}
         >
-          <div className="flex justify-between items-end px-2">
-            <div className="flex gap-3">
+          <button
+            type="button"
+            aria-label="Hyperspace"
+            className="mx-auto mb-2 flex h-11 min-w-[120px] touch-none select-none items-center justify-center rounded-full border-2 border-[hsl(var(--game-powerup))] bg-[hsl(var(--game-background))]/70 px-4 font-mono text-[10px] font-bold text-[hsl(var(--game-powerup))] shadow-[0_0_10px_hsl(var(--game-powerup)/0.3)] backdrop-blur-sm active:bg-[hsl(var(--game-powerup))]/25 motion-safe:transition-transform motion-safe:active:scale-95 motion-reduce:transform-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary [-webkit-touch-callout:none] [-webkit-tap-highlight-color:transparent]"
+            onContextMenu={(e) => e.preventDefault()}
+            onTouchStart={(e) => {
+              e.preventDefault();
+              hyperspace();
+            }}
+          >
+            HYPERSPACE
+          </button>
+          <div className="flex items-end justify-between gap-4">
+            <div className="flex gap-4">
               <button
-                className="w-16 h-16 rounded-full border-2 border-[hsl(var(--game-foreground))] text-[hsl(var(--game-foreground))] font-mono text-2xl active:bg-[hsl(var(--game-foreground))]/30 flex items-center justify-center"
-                onTouchStart={(e) => {
-                  e.preventDefault();
-                  keysRef.current["ArrowLeft"] = true;
-                }}
-                onTouchEnd={(e) => {
-                  e.preventDefault();
-                  keysRef.current["ArrowLeft"] = false;
-                }}
-                onTouchCancel={() => {
-                  keysRef.current["ArrowLeft"] = false;
-                }}
+                type="button"
+                aria-label="Rotate left"
+                className="flex h-[72px] w-[72px] touch-none select-none items-center justify-center rounded-full border-2 border-[hsl(var(--game-foreground))] bg-[hsl(var(--game-background))]/70 font-mono text-2xl text-[hsl(var(--game-foreground))] shadow-[0_0_10px_hsl(var(--game-foreground)/0.3)] backdrop-blur-sm active:bg-[hsl(var(--game-foreground))]/25 motion-safe:transition-transform motion-safe:active:scale-95 motion-reduce:transform-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary [-webkit-touch-callout:none] [-webkit-tap-highlight-color:transparent]"
+                onContextMenu={(e) => e.preventDefault()}
+                onTouchStart={(e) => { e.preventDefault(); keysRef.current["ArrowLeft"] = true; }}
+                onTouchEnd={(e) => { e.preventDefault(); keysRef.current["ArrowLeft"] = false; }}
+                onTouchCancel={(e) => { e.preventDefault(); keysRef.current["ArrowLeft"] = false; }}
               >
-                ◄
+                <span aria-hidden="true">◀</span>
               </button>
               <button
-                className="w-16 h-16 rounded-full border-2 border-[hsl(var(--game-foreground))] text-[hsl(var(--game-foreground))] font-mono text-2xl active:bg-[hsl(var(--game-foreground))]/30 flex items-center justify-center"
-                onTouchStart={(e) => {
-                  e.preventDefault();
-                  keysRef.current["ArrowRight"] = true;
-                }}
-                onTouchEnd={(e) => {
-                  e.preventDefault();
-                  keysRef.current["ArrowRight"] = false;
-                }}
-                onTouchCancel={() => {
-                  keysRef.current["ArrowRight"] = false;
-                }}
+                type="button"
+                aria-label="Rotate right"
+                className="flex h-[72px] w-[72px] touch-none select-none items-center justify-center rounded-full border-2 border-[hsl(var(--game-foreground))] bg-[hsl(var(--game-background))]/70 font-mono text-2xl text-[hsl(var(--game-foreground))] shadow-[0_0_10px_hsl(var(--game-foreground)/0.3)] backdrop-blur-sm active:bg-[hsl(var(--game-foreground))]/25 motion-safe:transition-transform motion-safe:active:scale-95 motion-reduce:transform-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary [-webkit-touch-callout:none] [-webkit-tap-highlight-color:transparent]"
+                onContextMenu={(e) => e.preventDefault()}
+                onTouchStart={(e) => { e.preventDefault(); keysRef.current["ArrowRight"] = true; }}
+                onTouchEnd={(e) => { e.preventDefault(); keysRef.current["ArrowRight"] = false; }}
+                onTouchCancel={(e) => { e.preventDefault(); keysRef.current["ArrowRight"] = false; }}
               >
-                ►
+                <span aria-hidden="true">▶</span>
               </button>
             </div>
-
-            <div className="flex flex-col items-end gap-2">
-              <div className="flex gap-3">
-                <button
-                  className="w-16 h-16 rounded-full border-2 border-[hsl(var(--game-glow))] text-[hsl(var(--game-glow))] font-mono text-xs font-bold active:bg-[hsl(var(--game-glow))]/30 flex items-center justify-center shadow-[0_0_10px_hsl(var(--game-glow)/0.3)]"
-                  onTouchStart={(e) => {
-                    e.preventDefault();
-                    keysRef.current["ArrowUp"] = true;
-                  }}
-                  onTouchEnd={(e) => {
-                    e.preventDefault();
-                    keysRef.current["ArrowUp"] = false;
-                  }}
-                  onTouchCancel={() => {
-                    keysRef.current["ArrowUp"] = false;
-                  }}
-                >
-                  THRUST
-                </button>
-                <button
-                  className="w-16 h-16 rounded-full border-2 border-[hsl(var(--game-danger))] text-[hsl(var(--game-danger))] font-mono text-xs font-bold active:bg-[hsl(var(--game-danger))]/30 flex items-center justify-center shadow-[0_0_10px_hsl(var(--game-danger)/0.3)]"
-                  onTouchStart={(e) => {
-                    e.preventDefault();
-                    shootBullet();
-                    keysRef.current[" "] = true;
-                  }}
-                  onTouchEnd={(e) => {
-                    e.preventDefault();
-                    keysRef.current[" "] = false;
-                  }}
-                  onTouchCancel={() => {
-                    keysRef.current[" "] = false;
-                  }}
-                >
-                  FIRE
-                </button>
-              </div>
+            <div className="flex items-end gap-3">
               <button
-                className="w-[140px] h-10 rounded-full border-2 border-[hsl(var(--game-powerup))] text-[hsl(var(--game-powerup))] font-mono text-xs font-bold active:bg-[hsl(var(--game-powerup))]/30 flex items-center justify-center shadow-[0_0_10px_hsl(var(--game-powerup)/0.3)]"
-                onTouchStart={(e) => {
-                  e.preventDefault();
-                  hyperspace();
-                }}
+                type="button"
+                aria-label="Thrust"
+                className="flex h-[72px] w-[72px] touch-none select-none items-center justify-center rounded-full border-2 border-[hsl(var(--game-glow))] bg-[hsl(var(--game-background))]/70 text-2xl text-[hsl(var(--game-glow))] shadow-[0_0_10px_hsl(var(--game-glow)/0.3)] backdrop-blur-sm active:bg-[hsl(var(--game-glow))]/25 motion-safe:transition-transform motion-safe:active:scale-95 motion-reduce:transform-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary [-webkit-touch-callout:none] [-webkit-tap-highlight-color:transparent]"
+                onContextMenu={(e) => e.preventDefault()}
+                onTouchStart={(e) => { e.preventDefault(); keysRef.current["ArrowUp"] = true; }}
+                onTouchEnd={(e) => { e.preventDefault(); keysRef.current["ArrowUp"] = false; }}
+                onTouchCancel={(e) => { e.preventDefault(); keysRef.current["ArrowUp"] = false; }}
               >
-                HYPERSPACE
+                <span aria-hidden="true">▲</span><span className="sr-only">Thrust</span>
+              </button>
+              <button
+                type="button"
+                aria-label="Fire"
+                className="flex h-20 w-20 touch-none select-none items-center justify-center rounded-full border-2 border-[hsl(var(--game-danger))] bg-[hsl(var(--game-background))]/70 text-3xl text-[hsl(var(--game-danger))] shadow-[0_0_10px_hsl(var(--game-danger)/0.3)] backdrop-blur-sm active:bg-[hsl(var(--game-danger))]/25 motion-safe:transition-transform motion-safe:active:scale-95 motion-reduce:transform-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary [-webkit-touch-callout:none] [-webkit-tap-highlight-color:transparent]"
+                onContextMenu={(e) => e.preventDefault()}
+                onTouchStart={(e) => { e.preventDefault(); shootBullet(); keysRef.current[" "] = true; }}
+                onTouchEnd={(e) => { e.preventDefault(); keysRef.current[" "] = false; }}
+                onTouchCancel={(e) => { e.preventDefault(); keysRef.current[" "] = false; }}
+              >
+                <span aria-hidden="true">◎</span><span className="sr-only">Fire</span>
               </button>
             </div>
           </div>
@@ -7049,7 +7108,7 @@ const Game = () => {
       )}
 
       {!isTouchDevice && (
-        <div className="mt-2 text-[hsl(var(--game-foreground))] font-mono text-[7px] opacity-50 max-w-[800px] w-full">
+        <div className="mt-2 text-[hsl(var(--game-foreground))] font-mono text-[10px] opacity-70 max-w-[800px] w-full whitespace-nowrap">
           {gameMode === "solo" && (
             <div className="flex justify-center gap-6 flex-wrap">
               <span>⌨ ← → ROTATE | ↑ THRUST | SPACE FIRE | CTRL HYPER | ESC PAUSE</span>
@@ -7073,88 +7132,21 @@ const Game = () => {
         </div>
       )}
 
-      <div className="mt-4 flex flex-col gap-2 max-w-md">
-        <a
-          href="https://scenestream.net/demovibes/"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-[hsl(var(--game-foreground))] font-mono text-sm text-center hover:opacity-80 transition-opacity"
-        >
-          🎵 NECTARINE DEMOSCENE RADIO
-        </a>
-        <div className="flex justify-center mt-2">
-          <a
-            href="https://supaexplorer.com"
-            target="_blank"
-            rel="noopener"
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: "8px",
-              background: "#ffffff",
-              padding: "7px 12px",
-              borderRadius: "999px",
-              textDecoration: "none",
-              fontFamily: "system-ui,-apple-system,sans-serif",
-              border: "1px solid #e2e8f0",
-              boxShadow: "0 1px 3px rgba(0,0,0,0.08)",
-              transition: "box-shadow 0.2s ease",
-            }}
-            onMouseOver={(e) => (e.currentTarget.style.boxShadow = "0 0 12px rgba(62,207,142,0.4)")}
-            onMouseOut={(e) => (e.currentTarget.style.boxShadow = "0 1px 3px rgba(0,0,0,0.08)")}
-          >
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path
-                d="M0 6h16v2A8 8 0 1 1 0 8V6zm2 2a6 6 0 1 0 12 0H2zm0-7h2v4H2V1zm5-1h2v4H7V0zm5 1h2v4h-2V1z"
-                fill="#0f172a"
-                fillRule="evenodd"
-              />
-            </svg>
-            <span style={{ fontSize: "12px", fontWeight: "600", color: "#0f172a" }}>Verified by SupaExplorer</span>
-          </a>
-        </div>
-        <audio
-          ref={audioRef}
-          controls
-          autoPlay={autoPlayMusic && !userPaused}
-          preload="auto"
-          className="w-full"
-          onPause={handleRadioPause}
-          onPlay={handleRadioPlay}
-          onError={(e) => {
-            const target = e.currentTarget;
-            console.error("Audio loading error:", target.error?.message);
-          }}
-        >
-          <source src="https://nectarine.inversi0n.org/necta192.mp3" type="audio/mpeg" />
-        </audio>
-        <label className="flex items-center gap-2 font-mono text-xs text-[hsl(var(--game-foreground))] opacity-70 hover:opacity-100 transition-opacity cursor-pointer justify-center mt-1">
-          <input
-            type="checkbox"
-            checked={autoPlayMusic}
-            onChange={(e) => setAutoPlayMusic(e.target.checked)}
-            className="accent-[hsl(var(--game-foreground))]"
-          />
-          AUTO-PLAY MUSIC
-        </label>
-        {DEBUG_ENABLED && (
-          <label className="flex items-center gap-2 font-mono text-xs text-[#FF4444] opacity-70 hover:opacity-100 transition-opacity cursor-pointer justify-center mt-1">
-            <input
-              type="checkbox"
-              checked={trainerMode}
-              onChange={(e) => setTrainerMode(e.target.checked)}
-              className="accent-[#FF4444]"
-            />
-            TRAINER (NO SCORES)
-          </label>
-        )}
-      </div>
-
       <button
-        onClick={quitToMenu}
-        className="mt-6 px-6 py-2 font-mono text-xs text-[hsl(var(--game-foreground))] opacity-50 hover:opacity-100 transition-opacity uppercase tracking-widest"
+        type="button"
+        onClick={() => {
+          if (quitConfirm) {
+            if (quitConfirmTimerRef.current) clearTimeout(quitConfirmTimerRef.current);
+            quitToMenu();
+            return;
+          }
+          setQuitConfirm(true);
+          if (quitConfirmTimerRef.current) clearTimeout(quitConfirmTimerRef.current);
+          quitConfirmTimerRef.current = setTimeout(() => setQuitConfirm(false), 3000);
+        }}
+        className="mt-1 min-h-11 px-4 font-mono text-[10px] text-[hsl(var(--game-foreground))] opacity-70 hover:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary uppercase tracking-widest"
       >
-        main menu
+        {quitConfirm ? "TAP AGAIN TO QUIT" : "main menu"}
       </button>
     </div>
   );
