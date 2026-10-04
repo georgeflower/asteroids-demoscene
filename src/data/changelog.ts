@@ -10,6 +10,10 @@ export const COMING_NEXT: ChangelogSection[] = [
 ];
 
 export const CHANGELOG: ChangelogRelease[] = [
+  { version: "0.4.1", date: "2026-10-04", title: "Balance pass: lives, rewards & enemy pacing", sections: [
+    { label: "Changed", items: ["Fewer extra lives: first past 40,000, second past 120,000, capped at 5; asteroids never grant an extra life", "NEXT 1UP counts down to the next extra-life threshold", "Boss drops are more even; an extra life only below the 5-life cap", "Green aliens: rarer, slower and shorter-range shots with a charge ring before firing", "Blue sentinels: rarer teleports, never within 220 px, destination ring, leave after 30 s", "Fewer, fairer enemies: new types arrive later, spawns have more room"] },
+    { label: "Fixed", items: ["The green-enemy spawn cooldown announced in 0.3.1 now actually works"] },
+  ] },
   { version: "0.4.0", date: "2026-10-04", title: "Reliable cloud saves & admin review", sections: [
     { label: "Added", items: ["Cloud-save status on Game Over, with TAP TO RETRY CLOUD SAVE", "Admin Monitor: rejected submissions table with APPROVE"] },
     { label: "Changed", items: ["Automatic retries when starting a session and when submitting; a final heartbeat is sent when the run ends", "If the server already holds your score (lost response) the game shows SAVED instead of an error", "No server session: the run is saved locally and no retry is offered"] },
