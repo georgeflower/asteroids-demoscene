@@ -6417,7 +6417,7 @@ const Game = () => {
   }
 
   return (
-    <div className="min-h-dvh bg-[hsl(var(--game-background))] flex flex-col items-center p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] md:justify-center">
+    <div className="min-h-dvh overflow-x-hidden bg-[hsl(var(--game-background))] flex flex-col items-center p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] md:justify-center">
       {/* HUD */}
       {gameMode === "solo" && (
         <div
@@ -7052,10 +7052,11 @@ const Game = () => {
       )}
 
       {isTouchDevice && (gameMode === "solo" || gameMode === "online_coop" || gameMode === "online") && (
-        <div
-          className="mt-auto w-full max-w-[800px] select-none touch-none px-2 [-webkit-touch-callout:none] [-webkit-tap-highlight-color:transparent]"
-          onContextMenu={(e) => e.preventDefault()}
-        >
+          <div
+            style={{ "--btn": "clamp(52px, calc((100vw - 4rem) / 4.4), 72px)" } as React.CSSProperties}
+            className="mt-auto w-full max-w-[800px] select-none touch-none px-1 [-webkit-touch-callout:none] [-webkit-tap-highlight-color:transparent]"
+            onContextMenu={(e) => e.preventDefault()}
+          >
           <button
             type="button"
             aria-label="Hyperspace"
@@ -7068,12 +7069,12 @@ const Game = () => {
           >
             HYPERSPACE
           </button>
-          <div className="flex items-end justify-between gap-4">
-            <div className="flex gap-4">
+          <div className="flex items-end justify-between gap-2">
+            <div className="flex gap-2">
               <button
                 type="button"
                 aria-label="Rotate left"
-                className="flex h-[72px] w-[72px] touch-none select-none items-center justify-center rounded-full border-2 border-[hsl(var(--game-foreground))] bg-[hsl(var(--game-background))]/70 font-mono text-2xl text-[hsl(var(--game-foreground))] shadow-[0_0_10px_hsl(var(--game-foreground)/0.3)] backdrop-blur-sm active:bg-[hsl(var(--game-foreground))]/25 motion-safe:transition-transform motion-safe:active:scale-95 motion-reduce:transform-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary [-webkit-touch-callout:none] [-webkit-tap-highlight-color:transparent]"
+                className="flex h-[var(--btn)] w-[var(--btn)] touch-none select-none items-center justify-center rounded-full border-2 border-[hsl(var(--game-foreground))] bg-[hsl(var(--game-background))]/70 font-mono text-2xl text-[hsl(var(--game-foreground))] shadow-[0_0_10px_hsl(var(--game-foreground)/0.3)] backdrop-blur-sm active:bg-[hsl(var(--game-foreground))]/25 motion-safe:transition-transform motion-safe:active:scale-95 motion-reduce:transform-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary [-webkit-touch-callout:none] [-webkit-tap-highlight-color:transparent]"
                 onContextMenu={(e) => e.preventDefault()}
                 onTouchStart={(e) => { e.preventDefault(); keysRef.current["ArrowLeft"] = true; }}
                 onTouchEnd={(e) => { e.preventDefault(); keysRef.current["ArrowLeft"] = false; }}
@@ -7084,7 +7085,7 @@ const Game = () => {
               <button
                 type="button"
                 aria-label="Rotate right"
-                className="flex h-[72px] w-[72px] touch-none select-none items-center justify-center rounded-full border-2 border-[hsl(var(--game-foreground))] bg-[hsl(var(--game-background))]/70 font-mono text-2xl text-[hsl(var(--game-foreground))] shadow-[0_0_10px_hsl(var(--game-foreground)/0.3)] backdrop-blur-sm active:bg-[hsl(var(--game-foreground))]/25 motion-safe:transition-transform motion-safe:active:scale-95 motion-reduce:transform-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary [-webkit-touch-callout:none] [-webkit-tap-highlight-color:transparent]"
+                className="flex h-[var(--btn)] w-[var(--btn)] touch-none select-none items-center justify-center rounded-full border-2 border-[hsl(var(--game-foreground))] bg-[hsl(var(--game-background))]/70 font-mono text-2xl text-[hsl(var(--game-foreground))] shadow-[0_0_10px_hsl(var(--game-foreground)/0.3)] backdrop-blur-sm active:bg-[hsl(var(--game-foreground))]/25 motion-safe:transition-transform motion-safe:active:scale-95 motion-reduce:transform-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary [-webkit-touch-callout:none] [-webkit-tap-highlight-color:transparent]"
                 onContextMenu={(e) => e.preventDefault()}
                 onTouchStart={(e) => { e.preventDefault(); keysRef.current["ArrowRight"] = true; }}
                 onTouchEnd={(e) => { e.preventDefault(); keysRef.current["ArrowRight"] = false; }}
@@ -7093,11 +7094,11 @@ const Game = () => {
                 <span aria-hidden="true">▶</span>
               </button>
             </div>
-            <div className="flex items-end gap-3">
+            <div className="flex items-end gap-2">
               <button
                 type="button"
                 aria-label="Thrust"
-                className="flex h-[72px] w-[72px] touch-none select-none items-center justify-center rounded-full border-2 border-[hsl(var(--game-glow))] bg-[hsl(var(--game-background))]/70 text-2xl text-[hsl(var(--game-glow))] shadow-[0_0_10px_hsl(var(--game-glow)/0.3)] backdrop-blur-sm active:bg-[hsl(var(--game-glow))]/25 motion-safe:transition-transform motion-safe:active:scale-95 motion-reduce:transform-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary [-webkit-touch-callout:none] [-webkit-tap-highlight-color:transparent]"
+                className="flex h-[var(--btn)] w-[var(--btn)] touch-none select-none items-center justify-center rounded-full border-2 border-[hsl(var(--game-glow))] bg-[hsl(var(--game-background))]/70 text-2xl text-[hsl(var(--game-glow))] shadow-[0_0_10px_hsl(var(--game-glow)/0.3)] backdrop-blur-sm active:bg-[hsl(var(--game-glow))]/25 motion-safe:transition-transform motion-safe:active:scale-95 motion-reduce:transform-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary [-webkit-touch-callout:none] [-webkit-tap-highlight-color:transparent]"
                 onContextMenu={(e) => e.preventDefault()}
                 onTouchStart={(e) => { e.preventDefault(); keysRef.current["ArrowUp"] = true; }}
                 onTouchEnd={(e) => { e.preventDefault(); keysRef.current["ArrowUp"] = false; }}
@@ -7108,7 +7109,7 @@ const Game = () => {
               <button
                 type="button"
                 aria-label="Fire"
-                className="flex h-20 w-20 touch-none select-none items-center justify-center rounded-full border-2 border-[hsl(var(--game-danger))] bg-[hsl(var(--game-background))]/70 text-3xl text-[hsl(var(--game-danger))] shadow-[0_0_10px_hsl(var(--game-danger)/0.3)] backdrop-blur-sm active:bg-[hsl(var(--game-danger))]/25 motion-safe:transition-transform motion-safe:active:scale-95 motion-reduce:transform-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary [-webkit-touch-callout:none] [-webkit-tap-highlight-color:transparent]"
+                className="flex h-[calc(var(--btn)*1.1)] w-[calc(var(--btn)*1.1)] touch-none select-none items-center justify-center rounded-full border-2 border-[hsl(var(--game-danger))] bg-[hsl(var(--game-background))]/70 text-3xl text-[hsl(var(--game-danger))] shadow-[0_0_10px_hsl(var(--game-danger)/0.3)] backdrop-blur-sm active:bg-[hsl(var(--game-danger))]/25 motion-safe:transition-transform motion-safe:active:scale-95 motion-reduce:transform-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary [-webkit-touch-callout:none] [-webkit-tap-highlight-color:transparent]"
                 onContextMenu={(e) => e.preventDefault()}
                 onTouchStart={(e) => { e.preventDefault(); shootBullet(); keysRef.current[" "] = true; }}
                 onTouchEnd={(e) => { e.preventDefault(); keysRef.current[" "] = false; }}
