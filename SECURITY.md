@@ -314,6 +314,7 @@ Comparison: timing-safe byte-by-byte XOR (`timingSafeEqual`) to prevent timing-o
 #### `rejected_submissions`
 | Column | Type | Description |
 |---|---|---|
+| `id` | uuid | Primary key |
 | `session_token` | text | Session associated with the rejected run |
 | `initials` | text | Submitted initials |
 | `score` | int | Submitted score |
