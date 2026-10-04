@@ -7052,10 +7052,11 @@ const Game = () => {
       )}
 
       {isTouchDevice && (gameMode === "solo" || gameMode === "online_coop" || gameMode === "online") && (
-        <div
-          className="mt-auto w-full max-w-[800px] select-none touch-none px-2 [-webkit-touch-callout:none] [-webkit-tap-highlight-color:transparent]"
-          onContextMenu={(e) => e.preventDefault()}
-        >
+          <div
+            style={{ "--btn": "clamp(52px, calc((100vw - 4rem) / 4.4), 72px)" } as React.CSSProperties}
+            className="mt-auto w-full max-w-[800px] select-none touch-none px-1 [-webkit-touch-callout:none] [-webkit-tap-highlight-color:transparent]"
+            onContextMenu={(e) => e.preventDefault()}
+          >
           <button
             type="button"
             aria-label="Hyperspace"
@@ -7068,8 +7069,8 @@ const Game = () => {
           >
             HYPERSPACE
           </button>
-          <div className="flex items-end justify-between gap-4">
-            <div className="flex gap-4">
+          <div className="flex items-end justify-between gap-2">
+            <div className="flex gap-2">
               <button
                 type="button"
                 aria-label="Rotate left"
@@ -7093,7 +7094,7 @@ const Game = () => {
                 <span aria-hidden="true">▶</span>
               </button>
             </div>
-            <div className="flex items-end gap-3">
+            <div className="flex items-end gap-2">
               <button
                 type="button"
                 aria-label="Thrust"
