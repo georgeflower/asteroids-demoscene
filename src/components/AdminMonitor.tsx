@@ -513,7 +513,7 @@ export function AdminMonitor() {
                   {/* Expanded detail row */}
                   {isSelected && (
                     <tr key={`${s.id}-detail`}>
-                      <td colSpan={7} style={{ padding: "8px 16px", background: "#111", borderBottom: "1px solid #333" }}>
+                      <td colSpan={8} style={{ padding: "8px 16px", background: "#111", borderBottom: "1px solid #333" }}>
                         <div style={{ display: "flex", gap: 32 }}>
                           <div>
                             <div style={{ color: "#888", fontSize: 11 }}>SOURCE</div>
