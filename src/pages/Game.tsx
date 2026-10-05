@@ -6627,7 +6627,7 @@ const Game = () => {
           <GameOverPanel
             score={displayScore}
             runSummary={runSummary}
-            boardTitle={HIGH_SCORES_ENABLED ? `CLOUD LEADERBOARD · SEASON ${seasonId}` : "LOCAL HIGH SCORES"}
+            boardTitle={HIGH_SCORES_ENABLED ? `CLOUD · SEASON ${seasonId}` : "LOCAL HIGH SCORES"}
             entries={(HIGH_SCORES_ENABLED ? leaderboard : localHighScores).slice(0, 10)}
             enteringInitials={enteringInitials}
             initials={initials}
