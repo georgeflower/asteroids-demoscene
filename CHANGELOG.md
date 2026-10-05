@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.6.0] - 2026-10-05 - Feel & polish
+
+### Added
+
+- Screen shake and hit-stop on big hits (shake respects the reduced-motion setting)
+- Wave-clear pause (1.5 s) with a bonus: wave x 100 (max 2,000), +500 if no life was lost in the wave
+- SFX mute toggle in the pause menu (remembered between sessions)
+- Hyperspace cooldown shown on the touch button
+
+### Changed
+
+- Accessibility labels for the remaining unlabeled button
+- Solo fire timing is now tied to the game loop (same fire rates)
+
 ## [0.5.0] - 2026-10-05 — Simpler scoring: combo chain removed
 
 ### Removed

@@ -232,6 +232,8 @@ interface GameState {
   alienSpawnTimer: number;
   bossDefeated: boolean;
   pendingNextWave: boolean;
+  waveClearTimer: number;
+  lifeLostThisWave: boolean;
 }
 
 interface DuelState {
@@ -504,6 +506,32 @@ const Game = () => {
   const drawTimestampRef = useRef<number>(0);
   const lastShotRef = useRef(0);
   const lastShotP2Ref = useRef(0);
+  const shotCooldownTicksRef = useRef(0);
+  const shakeRef = useRef({ amp: 0, ticks: 0, total: 0 });
+  const hitstopRef = useRef(0);
+  const reducedMotionRef = useRef(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.matchMedia) return;
+    const mql = window.matchMedia("(prefers-reduced-motion: reduce)");
+    reducedMotionRef.current = mql.matches;
+    const handleChange = (event: MediaQueryListEvent) => {
+      reducedMotionRef.current = event.matches;
+      if (event.matches) shakeRef.current = { amp: 0, ticks: 0, total: 0 };
+    };
+    mql.addEventListener("change", handleChange);
+    return () => mql.removeEventListener("change", handleChange);
+  }, []);
+
+  // Solo screen shake: keep the larger amplitude and the longer remaining duration
+  const addShake = useCallback((amp: number, ticks: number) => {
+    if (reducedMotionRef.current) return;
+    const sh = shakeRef.current;
+    const curAmp = sh.ticks > 0 ? sh.amp * (sh.ticks / sh.total) : 0;
+    sh.amp = Math.max(curAmp, amp);
+    sh.ticks = Math.max(sh.ticks, ticks);
+    sh.total = sh.ticks;
+  }, []);
   const enteringInitialsRef = useRef(false);
   const submissionGenerationRef = useRef(0);
   const submittingScoreRef = useRef(false);
@@ -623,6 +651,7 @@ const Game = () => {
   const [isPaused, setIsPaused] = useState(false);
   const isPausedRef = useRef(false);
   const [pauseSelection, setPauseSelection] = useState(0); // 0=resume, 1=quit
+  const [sfxMuted, setSfxMuted] = useState(() => soundEffects.isMuted());
   const prevGamepadButtonRef = useRef<boolean[]>([false, false, false, false, false, false, false]);
   const [autoPlayMusic, setAutoPlayMusic] = useState(() => {
     const stored = localStorage.getItem("autoPlayMusic");
@@ -1571,6 +1600,9 @@ const Game = () => {
 
   const initGame = useCallback(() => {
     keysRef.current = {};
+    shakeRef.current = { amp: 0, ticks: 0, total: 0 };
+    hitstopRef.current = 0;
+    shotCooldownTicksRef.current = 0;
     const asteroids: Asteroid[] = [];
     for (let i = 0; i < 4; i++) {
       let x: number, y: number, dist: number;
@@ -1611,6 +1643,8 @@ const Game = () => {
       alienSpawnBudget: 0,
       bossDefeated: false,
       pendingNextWave: false,
+      waveClearTimer: 0,
+      lifeLostThisWave: false,
     };
     runStartTimeRef.current = Date.now();
     setRunSummary(null);
@@ -2303,6 +2337,8 @@ const Game = () => {
 
     state.wave++;
     state.bullets = [];
+    state.waveClearTimer = 0;
+    state.lifeLostThisWave = false;
 
     addDebugLog("wave", `Wave ${state.wave} started`);
     const isBossWave = state.wave % 5 === 0;
@@ -2481,7 +2517,10 @@ const Game = () => {
         `Ship destroyed at (${Math.round(state.ship.pos.x)}, ${Math.round(state.ship.pos.y)}), lives: ${state.lives - 1}`,
       );
       spawnExplosion(state.ship.pos, "#FFFFFF", 20);
+      addShake(8, 20);
+      hitstopRef.current = 8;
       state.lives--;
+      state.lifeLostThisWave = true;
       setDisplayLives(state.lives);
       state.ship = createShip();
       soundEffects.explode();
@@ -2490,6 +2529,8 @@ const Game = () => {
 
       if (state.lives <= 0) {
         state.gameOver = true;
+        shakeRef.current = { amp: 0, ticks: 0, total: 0 };
+        hitstopRef.current = 0;
         balanceStatsRef.current.waveReached = state.wave;
         addDebugLog("death", `balance ${JSON.stringify(balanceStatsRef.current)}`);
         void sendHeartbeat(true);
@@ -2518,16 +2559,14 @@ const Game = () => {
         setShowLifeLost(true);
       }
     },
-    [shouldPromptForInitials, loadLeaderboard, addDebugLog, sendHeartbeat, stopHeartbeatInterval, buildRunSummary],
+    [shouldPromptForInitials, loadLeaderboard, addDebugLog, sendHeartbeat, stopHeartbeatInterval, buildRunSummary, addShake],
   );
 
   const shootBullet = useCallback(() => {
     if (gameModeRef.current === "solo") {
       if (!gameStateRef.current || gameStateRef.current.gameOver) return;
-      const now = Date.now();
-      const fireRate = gameStateRef.current.powerUpActive.rapidFire > 0 ? 100 : 250;
-      if (now - lastShotRef.current < fireRate) return;
-      lastShotRef.current = now;
+      if (shotCooldownTicksRef.current > 0) return;
+      shotCooldownTicksRef.current = gameStateRef.current.powerUpActive.rapidFire > 0 ? 6 : 15;
 
       const { ship } = gameStateRef.current;
       gameStateRef.current.bullets.push({
@@ -2977,6 +3016,13 @@ const Game = () => {
 
     const state = gameStateRef.current;
 
+    if (shotCooldownTicksRef.current > 0) shotCooldownTicksRef.current--;
+
+    if (shakeRef.current.ticks > 0) {
+      shakeRef.current.ticks--;
+      if (shakeRef.current.ticks === 0) shakeRef.current.amp = 0;
+    }
+
     // Resolve deferred wave transition on a clean tick
     if (state.pendingNextWave) {
       state.pendingNextWave = false;
@@ -3064,7 +3110,7 @@ const Game = () => {
 
     // UFO spawn timer
     state.ufoSpawnTimer--;
-    if (state.ufoSpawnTimer <= 0 && state.ufos.length === 0 && !state.boss) {
+    if (state.ufoSpawnTimer <= 0 && state.ufos.length === 0 && !state.boss && state.waveClearTimer === 0) {
       const U = BALANCE.UFO;
       const size = state.wave > U.SMALL_AFTER_WAVE && Math.random() < U.SMALL_CHANCE ? "small" : "large";
       state.ufos.push(createUFO(size));
@@ -3109,7 +3155,7 @@ const Game = () => {
     });
 
     // Alien spawn timer
-    if (!state.boss) {
+    if (!state.boss && state.waveClearTimer === 0) {
       state.alienSpawnTimer--;
       if (state.alienSpawnTimer <= 0 && (state.alienSpawnBudget ?? 0) > 0) {
         // Spawn director: exactly one unit per event (a purple swarm group counts as one unit)
@@ -3730,6 +3776,7 @@ const Game = () => {
           spawnFloatingText(asteroid.pos, `+${pts}`, aColor, 14);
           spawnExplosion(asteroid.pos, aColor, asteroid.size === "large" ? 15 : asteroid.size === "medium" ? 10 : 6);
           if (asteroid.size === "large") {
+            addShake(2, 6);
             newAsteroids.push(createAsteroid(asteroid.pos.x, asteroid.pos.y, "medium", state.wave));
             newAsteroids.push(createAsteroid(asteroid.pos.x, asteroid.pos.y, "medium", state.wave));
             soundEffects.explode();
@@ -3758,6 +3805,7 @@ const Game = () => {
           awardExtraLives(state, prevScore);
           setDisplayScore(state.score);
           soundEffects.explode();
+          addShake(3, 8);
           spawnFloatingText(ufo.pos, `+${pts}`, "#FFFF66", 18);
           spawnExplosion(ufo.pos, "#FFFF66", 15);
           const powerUp = createPowerUp(ufo.pos.x, ufo.pos.y, ufo.size === "large" ? "ufoLarge" : "ufoSmall");
@@ -3805,6 +3853,7 @@ const Game = () => {
           state.boss.hitFlash = 10;
           spawnExplosion(bullet.pos, "#FF88FF", 5);
           spawnFloatingText(bullet.pos, "HIT!", "#FF88FF", 14);
+          addShake(1.5, 4);
           if (state.boss.hp <= 0) {
             const pts = Math.round((2000 + state.wave * 200) * killMultiplier(state));
             const prevScore = state.score;
@@ -3827,6 +3876,8 @@ const Game = () => {
               lifetime: 600,
               fromBoss: true,
             });
+            addShake(10, 30);
+            hitstopRef.current = 12;
             state.boss = null;
             state.bossDefeated = true;
             state.pendingNextWave = true;
@@ -3925,10 +3976,26 @@ const Game = () => {
     // Check wave completion
     const noEnemies =
       state.asteroids.length === 0 && state.ufos.length === 0 && state.aliens.length === 0 && !state.boss;
-    if (noEnemies && !state.pendingNextWave) {
-      nextWave();
+    if (!state.gameOver) {
+      if (state.waveClearTimer > 0) {
+        state.waveClearTimer--;
+        if (state.waveClearTimer === 0) nextWave();
+      } else if (noEnemies && !state.pendingNextWave) {
+        if (state.wave % 5 === 0) {
+          nextWave();
+        } else {
+          const bonus = Math.min(state.wave, 20) * 100 + (state.lifeLostThisWave ? 0 : 500);
+          const prevScore = state.score;
+          state.score += bonus;
+          awardExtraLives(state, prevScore);
+          setDisplayScore(state.score);
+          state.waveClearTimer = 90;
+          spawnFloatingText({ x: CANVAS_WIDTH / 2, y: CANVAS_HEIGHT / 2 - 20 }, `WAVE ${state.wave} CLEAR`, theme.ship, 24);
+          spawnFloatingText({ x: CANVAS_WIDTH / 2, y: CANVAS_HEIGHT / 2 + 20 }, `+${bonus}`, "#FFFF66", 20);
+        }
+      }
     }
-  }, [nextWave, loseLife, shootBullet, hyperspace, addDebugLog, killMultiplier, awardExtraLives]);
+  }, [nextWave, loseLife, shootBullet, hyperspace, addDebugLog, killMultiplier, awardExtraLives, addShake]);
 
   // ===== SHARED BOSS DRAW HELPER =====
   const drawBossOnCanvas = (ctx: CanvasRenderingContext2D, boss: Boss, hpBarY: number) => {
@@ -4566,6 +4633,7 @@ const Game = () => {
     const ctx = ctx2dRef.current;
     if (!ctx) return;
     ensureCachedOverlays(ctx);
+    let shakeApplied = false;
 
     if ((gameModeRef.current === "duel" || gameModeRef.current === "online") && duelStateRef.current) {
       const ds = duelStateRef.current;
@@ -4793,6 +4861,18 @@ const Game = () => {
     } else {
       const state = gameStateRef.current;
       const theme = getTheme(state.wave);
+
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.fillStyle = theme.bg;
+      ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+      ctx.save();
+      shakeApplied = true;
+      const sh = shakeRef.current;
+      if (sh.ticks > 0 && sh.total > 0 && !isPausedRef.current && !showLifeLostRef.current) {
+        const t = state.tick ?? 0;
+        const mag = sh.amp * (sh.ticks / sh.total);
+        ctx.translate(Math.round(mag * Math.sin(t * 12.9898)), Math.round(mag * Math.cos(t * 78.233)));
+      }
 
       drawCommon(
         ctx,
@@ -5083,6 +5163,7 @@ const Game = () => {
       ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
     }
     ctx.restore();
+    if (shakeApplied) ctx.restore();
   }, []);
 
   const gameLoop = useCallback(
@@ -5249,7 +5330,12 @@ const Game = () => {
           if (gameModeRef.current === "duel") {
             updateDuel();
           } else if (gameModeRef.current === "solo") {
-            update();
+            if (isPausedRef.current) hitstopRef.current = 0;
+            if (hitstopRef.current > 0) {
+              hitstopRef.current--;
+            } else {
+              update();
+            }
           }
           accumulatorRef.current -= FIXED_TIMESTEP;
           updatesThisFrame++;
@@ -6843,6 +6929,18 @@ const Game = () => {
                 {pauseSelection === 2 ? "▸ " : "  "}QUIT TO MENU
               </Button>
             </div>
+            <button
+              type="button"
+              aria-pressed={!sfxMuted}
+              onClick={() => {
+                const next = !sfxMuted;
+                soundEffects.setMuted(next);
+                setSfxMuted(next);
+              }}
+              className="mb-6 min-h-11 min-w-[120px] border border-[hsl(var(--game-foreground))]/40 px-4 font-mono text-xs text-[hsl(var(--game-foreground))] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            >
+              {sfxMuted ? "SFX OFF" : "SFX ON"}
+            </button>
             <div className="text-[hsl(var(--game-foreground))] font-mono text-xs opacity-40">
               ESC or START to resume
             </div>
@@ -7040,6 +7138,7 @@ const Game = () => {
         {DEBUG_ENABLED && isTouchDevice && (
           <button
             onClick={() => setShowDebugPanel((prev) => !prev)}
+            aria-label="Toggle debug panel"
             className="absolute top-2 left-2 z-30 w-8 h-8 rounded border border-[#00FF00]/30 text-[#00FF00] font-mono text-xs flex items-center justify-center opacity-30 hover:opacity-80"
           >
             §
@@ -7079,14 +7178,24 @@ const Game = () => {
           <button
             type="button"
             aria-label="Hyperspace"
-            className="mx-auto mb-2 flex h-11 min-w-[120px] touch-none select-none items-center justify-center rounded-full border-2 border-[hsl(var(--game-powerup))] bg-[hsl(var(--game-background))]/70 px-4 font-mono text-[10px] font-bold text-[hsl(var(--game-powerup))] shadow-[0_0_10px_hsl(var(--game-powerup)/0.3)] backdrop-blur-sm active:bg-[hsl(var(--game-powerup))]/25 motion-safe:transition-transform motion-safe:active:scale-95 motion-reduce:transform-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary [-webkit-touch-callout:none] [-webkit-tap-highlight-color:transparent]"
+            aria-disabled={hyperChargePercent < 100}
+            className={`relative mx-auto mb-2 flex h-11 min-w-[120px] touch-none select-none items-center justify-center overflow-hidden rounded-full border-2 ${hyperChargePercent < 100 ? "border-[hsl(var(--game-powerup))]/40" : "border-[hsl(var(--game-powerup))]"} bg-[hsl(var(--game-background))]/70 px-4 font-mono text-[10px] font-bold text-[hsl(var(--game-powerup))] shadow-[0_0_10px_hsl(var(--game-powerup)/0.3)] backdrop-blur-sm active:bg-[hsl(var(--game-powerup))]/25 motion-safe:transition-transform motion-safe:active:scale-95 motion-reduce:transform-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary [-webkit-touch-callout:none] [-webkit-tap-highlight-color:transparent]`}
             onContextMenu={(e) => e.preventDefault()}
             onTouchStart={(e) => {
               e.preventDefault();
               hyperspace();
             }}
           >
-            HYPERSPACE
+            {hyperChargePercent < 100 && (
+              <span
+                aria-hidden="true"
+                className="absolute inset-y-0 left-0 bg-[hsl(var(--game-powerup))]/25"
+                style={{ width: `${Math.max(0, hyperChargePercent)}%` }}
+              />
+            )}
+            <span className={`relative ${hyperChargePercent >= 100 ? "motion-safe:animate-pulse" : ""}`}>
+              {hyperChargePercent < 100 ? `HYPER ${Math.floor(hyperChargePercent)}%` : "HYPERSPACE"}
+            </span>
           </button>
           <div className="flex items-end justify-between gap-2">
             <div className="flex gap-2">

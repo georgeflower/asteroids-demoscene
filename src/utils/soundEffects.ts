@@ -5,10 +5,40 @@ interface WindowWithWebkitAudio extends Window {
   webkitAudioContext?: typeof AudioContext;
 }
 
+const MASTER_LEVEL = 0.8;
+
 class SoundEffects {
   private audioContext: AudioContext | null = null;
   private thrustOscillator: AudioScheduledSourceNode | null = null;
   private thrustGain: GainNode | null = null;
+  private masterGain: GainNode | null = null;
+  private muted = SoundEffects.readMuted();
+
+  private static readMuted(): boolean {
+    try {
+      return localStorage.getItem("sfxMuted") === "true";
+    } catch {
+      return false;
+    }
+  }
+
+  private applyMasterLevel() {
+    if (this.masterGain) this.masterGain.gain.value = this.muted ? 0 : MASTER_LEVEL;
+  }
+
+  setMuted(muted: boolean) {
+    this.muted = muted;
+    try {
+      localStorage.setItem("sfxMuted", String(muted));
+    } catch {
+      /* ignore storage errors */
+    }
+    this.applyMasterLevel();
+  }
+
+  isMuted(): boolean {
+    return this.muted;
+  }
 
   private getContext(): AudioContext {
     if (!this.audioContext) {
@@ -18,6 +48,9 @@ class SoundEffects {
         throw new Error("AudioContext is not supported in this browser");
       }
       this.audioContext = new AudioContextClass();
+      this.masterGain = this.audioContext.createGain();
+      this.masterGain.connect(this.audioContext.destination);
+      this.applyMasterLevel();
     }
     if (this.audioContext.state === "suspended") {
       void this.audioContext.resume();
@@ -39,7 +72,7 @@ class SoundEffects {
     const gainNode = ctx.createGain();
 
     oscillator.connect(gainNode);
-    gainNode.connect(ctx.destination);
+    gainNode.connect(this.masterGain!);
 
     oscillator.frequency.setValueAtTime(800, ctx.currentTime);
     oscillator.frequency.exponentialRampToValueAtTime(400, ctx.currentTime + 0.1);
@@ -63,7 +96,7 @@ class SoundEffects {
 
     oscillator.connect(filter);
     filter.connect(gainNode);
-    gainNode.connect(ctx.destination);
+    gainNode.connect(this.masterGain!);
 
     oscillator.frequency.setValueAtTime(200, ctx.currentTime);
     oscillator.frequency.exponentialRampToValueAtTime(50, ctx.currentTime + 0.3);
@@ -107,7 +140,7 @@ class SoundEffects {
 
     noiseSource.connect(filter);
     filter.connect(this.thrustGain);
-    this.thrustGain.connect(ctx.destination);
+    this.thrustGain.connect(this.masterGain!);
 
     noiseSource.start();
     this.thrustOscillator = noiseSource;
@@ -130,7 +163,7 @@ class SoundEffects {
     const gainNode = ctx.createGain();
 
     oscillator.connect(gainNode);
-    gainNode.connect(ctx.destination);
+    gainNode.connect(this.masterGain!);
 
     oscillator.frequency.setValueAtTime(400, ctx.currentTime);
     oscillator.frequency.setValueAtTime(600, ctx.currentTime + 0.05);
@@ -152,7 +185,7 @@ class SoundEffects {
 
     oscillator.type = 'sawtooth';
     oscillator.connect(gainNode);
-    gainNode.connect(ctx.destination);
+    gainNode.connect(this.masterGain!);
 
     oscillator.frequency.setValueAtTime(150, ctx.currentTime);
     oscillator.frequency.exponentialRampToValueAtTime(40, ctx.currentTime + 0.15);
@@ -172,7 +205,7 @@ class SoundEffects {
 
     oscillator.type = 'sine';
     oscillator.connect(gainNode);
-    gainNode.connect(ctx.destination);
+    gainNode.connect(this.masterGain!);
 
     oscillator.frequency.setValueAtTime(200, ctx.currentTime);
     oscillator.frequency.exponentialRampToValueAtTime(800, ctx.currentTime + 0.3);
@@ -193,7 +226,7 @@ class SoundEffects {
       const gainNode = ctx.createGain();
       oscillator.type = 'sine';
       oscillator.connect(gainNode);
-      gainNode.connect(ctx.destination);
+      gainNode.connect(this.masterGain!);
       const t = ctx.currentTime + i * 0.07;
       oscillator.frequency.setValueAtTime(freq, t);
       gainNode.gain.setValueAtTime(0.001, t);
