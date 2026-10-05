@@ -8,6 +8,7 @@ interface ChangelogOverlayProps {
 }
 
 const sectionColors: Record<string, string> = {
+  Removed: "text-[#FF6666] border-[#FF6666]/50",
   Added: "text-[#44FF44] border-[#44FF44]/50",
   Changed: "text-[#44AAFF] border-[#44AAFF]/50",
   Fixed: "text-[#FFAA33] border-[#FFAA33]/50",

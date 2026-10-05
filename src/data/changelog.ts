@@ -10,6 +10,10 @@ export const COMING_NEXT: ChangelogSection[] = [
 ];
 
 export const CHANGELOG: ChangelogRelease[] = [
+  { version: "0.5.0", date: "2026-10-05", title: "Simpler scoring: combo chain removed", sections: [
+    { label: "Removed", items: ["Combo chain, the HUD x-multiplier and the CHAIN stat on Game Over"] },
+    { label: "Changed", items: ["Kills score plain base points; 2x power-up still applies (totals ~3-4x lower)", "Extra lives at 10,000 / 30,000 / 60,000 / 100,000 / 150,000, capped at 5", "New season starts with this scoring; earlier scores kept under PAST SEASONS"] },
+  ] },
   { version: "0.4.1", date: "2026-10-04", title: "Balance pass: lives, rewards & enemy pacing", sections: [
     { label: "Changed", items: ["Fewer extra lives: first past 40,000, second past 120,000, capped at 5; asteroids never grant an extra life", "NEXT 1UP counts down to the next extra-life threshold", "Boss drops are more even; an extra life only below the 5-life cap", "Green aliens: rarer, slower and shorter-range shots with a charge ring before firing", "Blue sentinels: rarer teleports, never within 220 px, destination ring, leave after 30 s", "Fewer, fairer enemies: new types arrive later, spawns have more room"] },
     { label: "Fixed", items: ["The green-enemy spawn cooldown announced in 0.3.1 now actually works"] },

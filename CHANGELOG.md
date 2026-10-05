@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.0] - 2026-10-05 — Simpler scoring: combo chain removed
+
+### Removed
+
+- Combo chain, the x-multiplier on the HUD and the CHAIN stat on the Game Over screen
+
+### Changed
+
+- Kills now score plain base points; the 2x power-up still applies. Totals are roughly 3-4x lower than before
+- Extra lives now at 10,000 / 30,000 / 60,000 / 100,000 / 150,000, still capped at 5 lives
+- A new season starts with this scoring: all earlier scores are kept under PAST SEASONS
+
 ## [0.4.1] - 2026-10-04 — Balance pass: lives, rewards & enemy pacing
 
 ### Changed

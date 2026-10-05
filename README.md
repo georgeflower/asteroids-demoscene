@@ -2,7 +2,7 @@
 
 A modern tribute to the classic Asteroids arcade game, infused with demoscene aesthetics and retro computing vibes. Built with React, TypeScript, and Canvas rendering, featuring CRT visual effects, multiple game modes, and a global leaderboard system.
 
-**Current version: 0.4.1** — see [CHANGELOG.md](./CHANGELOG.md) for history and what is coming next.
+**Current version: 0.5.0** — see [CHANGELOG.md](./CHANGELOG.md) for history and what is coming next.
 
 ## ✨ Features
 
@@ -24,9 +24,8 @@ A modern tribute to the classic Asteroids arcade game, infused with demoscene ae
   - Borg Cube (wave 20)
 - **Hyperspace** - Emergency teleportation with charge-up mechanic
 - **Difficulty Scaling** - Speed increases by 5% per wave
-- **Combo chain** - consecutive kills within 2 s raise a score multiplier (+10% per link, up to x5)
-- **Extra lives** - every 10,000 points, plus rare power-up drops
-- **Run summary** - time, wave, accuracy, best chain and personal best after every solo run
+- **Extra lives** - at 10k, 30k, 60k, 100k and 150k points (max 5 lives), plus rare power-up drops
+- **Run summary** - time, wave, accuracy and personal best after every solo run
 - **Mobile play** - compact touch controls, safe-area aware layout
 
 ### Visuals & Audio
@@ -257,7 +256,6 @@ For a complete description of every security layer see [SECURITY.md](./SECURITY.
 | Blue | 600 |
 | Purple | 100 |
 | Boss | 2,000 + 200 per wave |
-| Chain multiplier | x1.0 → x5.0 |
 | Score multiplier power-up | x2 for 15 s |
 
 ## 🔭 Coming next

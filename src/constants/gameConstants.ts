@@ -41,19 +41,10 @@ export const BOSS_NAMES: Record<string, string> = {
   borgCube: "BORG CUBE",
 };
 
-/** Chain combo window in frames (~2s at 60 Hz). */
-export const CHAIN_WINDOW = 120;
-
-/** Score bonus added per chain link (+10%). */
-export const CHAIN_STEP = 0.1;
-
-/** Maximum chain multiplier factor. */
-export const CHAIN_MAX = 5;
-
 // ===== BALANCE (solo lives & reward economy) =====
 export const BALANCE = {
-  EXTRA_LIFE_FIRST: 40000,
-  EXTRA_LIFE_STEP: 40000,
+  EXTRA_LIFE_FIRST: 10000,
+  EXTRA_LIFE_STEP: 10000,
   MAX_LIVES: 5,
   DROP_RATE: { asteroidLarge: 0.04, asteroidMedium: 0.02, asteroidSmall: 0, ufoLarge: 0.2, ufoSmall: 0.35, alien: 0.15 },
   DROP_WEIGHTS: { shield: 40, rapidFire: 30, multiplier: 30 },
@@ -117,6 +108,6 @@ export const BALANCE = {
 
 export type DropSource = keyof typeof BALANCE.DROP_RATE;
 
-/** Score threshold for the n-th extra life (n = 1, 2, 3…): 40k, 120k, 240k, 400k… */
+/** Score threshold for the n-th extra life (n = 1, 2, 3…): 10k, 30k, 60k, 100k, 150k… */
 export const extraLifeThreshold = (n: number): number =>
   BALANCE.EXTRA_LIFE_FIRST * n + (BALANCE.EXTRA_LIFE_STEP * n * (n - 1)) / 2;

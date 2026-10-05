@@ -6,7 +6,6 @@ export interface GameOverRunSummary {
   timeSurvived: number;
   accuracy: number | null;
   asteroids: number;
-  bestChain: number;
   prevBest: { score: number } | null;
 }
 
@@ -51,7 +50,6 @@ export default function GameOverPanel(p: Props) {
   const stats: [string, string][] = [
     ["ACC", rs ? (rs.accuracy === null ? "—" : `${rs.accuracy.toFixed(0)}%`) : "—"],
     ["KILLS", rs ? String(rs.asteroids) : "—"],
-    ["CHAIN", rs ? `x${rs.bestChain}` : "—"],
     ["TIME", rs ? fmtTime(rs.timeSurvived) : "—"],
     ["WAVE", rs ? String(rs.wave) : "—"],
   ];
@@ -81,7 +79,7 @@ export default function GameOverPanel(p: Props) {
         </div>
 
         {/* Row 2: stats */}
-        <div className="grid grid-cols-5 gap-1">
+        <div className="grid grid-cols-4 gap-1">
           {stats.map(([l, v]) => (
             <div key={l} className="h-10 flex flex-col items-center justify-center border border-[hsl(var(--game-foreground))]/30 overflow-hidden">
               <span className="text-[10px] opacity-60 leading-none">{l}</span>
