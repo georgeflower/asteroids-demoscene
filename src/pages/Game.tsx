@@ -4627,7 +4627,7 @@ const Game = () => {
     drawTimestampRef.current = rafTimestamp;
     const canvas = canvasRef.current;
     if (!canvas) return;
-    if (!ctx2dRef.current) {
+    if (!ctx2dRef.current || ctx2dRef.current.canvas !== canvas) {
       ctx2dRef.current = canvas.getContext("2d");
     }
     const ctx = ctx2dRef.current;
