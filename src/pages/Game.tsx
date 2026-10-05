@@ -232,6 +232,8 @@ interface GameState {
   alienSpawnTimer: number;
   bossDefeated: boolean;
   pendingNextWave: boolean;
+  waveClearTimer: number;
+  lifeLostThisWave: boolean;
 }
 
 interface DuelState {
@@ -1638,6 +1640,8 @@ const Game = () => {
       alienSpawnBudget: 0,
       bossDefeated: false,
       pendingNextWave: false,
+      waveClearTimer: 0,
+      lifeLostThisWave: false,
     };
     runStartTimeRef.current = Date.now();
     setRunSummary(null);
@@ -2330,6 +2334,8 @@ const Game = () => {
 
     state.wave++;
     state.bullets = [];
+    state.waveClearTimer = 0;
+    state.lifeLostThisWave = false;
 
     addDebugLog("wave", `Wave ${state.wave} started`);
     const isBossWave = state.wave % 5 === 0;
@@ -2511,6 +2517,7 @@ const Game = () => {
       addShake(8, 20);
       hitstopRef.current = 8;
       state.lives--;
+      state.lifeLostThisWave = true;
       setDisplayLives(state.lives);
       state.ship = createShip();
       soundEffects.explode();
@@ -3100,7 +3107,7 @@ const Game = () => {
 
     // UFO spawn timer
     state.ufoSpawnTimer--;
-    if (state.ufoSpawnTimer <= 0 && state.ufos.length === 0 && !state.boss) {
+    if (state.ufoSpawnTimer <= 0 && state.ufos.length === 0 && !state.boss && state.waveClearTimer === 0) {
       const U = BALANCE.UFO;
       const size = state.wave > U.SMALL_AFTER_WAVE && Math.random() < U.SMALL_CHANCE ? "small" : "large";
       state.ufos.push(createUFO(size));
@@ -3145,7 +3152,7 @@ const Game = () => {
     });
 
     // Alien spawn timer
-    if (!state.boss) {
+    if (!state.boss && state.waveClearTimer === 0) {
       state.alienSpawnTimer--;
       if (state.alienSpawnTimer <= 0 && (state.alienSpawnBudget ?? 0) > 0) {
         // Spawn director: exactly one unit per event (a purple swarm group counts as one unit)
@@ -3966,8 +3973,24 @@ const Game = () => {
     // Check wave completion
     const noEnemies =
       state.asteroids.length === 0 && state.ufos.length === 0 && state.aliens.length === 0 && !state.boss;
-    if (noEnemies && !state.pendingNextWave) {
-      nextWave();
+    if (!state.gameOver) {
+      if (state.waveClearTimer > 0) {
+        state.waveClearTimer--;
+        if (state.waveClearTimer === 0) nextWave();
+      } else if (noEnemies && !state.pendingNextWave) {
+        if (state.wave % 5 === 0) {
+          nextWave();
+        } else {
+          const bonus = Math.min(state.wave, 20) * 100 + (state.lifeLostThisWave ? 0 : 500);
+          const prevScore = state.score;
+          state.score += bonus;
+          awardExtraLives(state, prevScore);
+          setDisplayScore(state.score);
+          state.waveClearTimer = 90;
+          spawnFloatingText({ x: CANVAS_WIDTH / 2, y: CANVAS_HEIGHT / 2 - 20 }, `WAVE ${state.wave} CLEAR`, theme.ship, 24);
+          spawnFloatingText({ x: CANVAS_WIDTH / 2, y: CANVAS_HEIGHT / 2 + 20 }, `+${bonus}`, "#FFFF66", 20);
+        }
+      }
     }
   }, [nextWave, loseLife, shootBullet, hyperspace, addDebugLog, killMultiplier, awardExtraLives, addShake]);
 
