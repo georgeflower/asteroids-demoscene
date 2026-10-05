@@ -7136,6 +7136,7 @@ const Game = () => {
         {DEBUG_ENABLED && isTouchDevice && (
           <button
             onClick={() => setShowDebugPanel((prev) => !prev)}
+            aria-label="Toggle debug panel"
             className="absolute top-2 left-2 z-30 w-8 h-8 rounded border border-[#00FF00]/30 text-[#00FF00] font-mono text-xs flex items-center justify-center opacity-30 hover:opacity-80"
           >
             §
