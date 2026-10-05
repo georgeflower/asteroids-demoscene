@@ -1,15 +1,13 @@
 export interface ChangelogSection { label: string; items: string[] }
 export interface ChangelogRelease { version: string; date: string; title?: string; sections: ChangelogSection[] }
 
-export const COMING_NEXT: ChangelogSection[] = [
-  { label: "Feel & polish", items: [
-    "Screen shake and hit-stop (reduced-motion safe)",
-    "Wave-clear pause with a bonus tally",
-    "SFX mute and a hyperspace cooldown on the touch button",
-  ] },
-];
+export const COMING_NEXT: ChangelogSection[] = [];
 
 export const CHANGELOG: ChangelogRelease[] = [
+  { version: "0.6.0", date: "2026-10-05", title: "Feel & polish", sections: [
+    { label: "Added", items: ["Screen shake and hit-stop on big hits (reduced-motion safe)", "Wave-clear pause with a bonus: wave x 100 (max 2,000), +500 for a no-death wave", "SFX mute toggle in the pause menu", "Hyperspace cooldown on the touch button"] },
+    { label: "Changed", items: ["Accessibility labels for the remaining unlabeled button", "Solo fire timing tied to the game loop (same fire rates)"] },
+  ] },
   { version: "0.5.0", date: "2026-10-05", title: "Simpler scoring: combo chain removed", sections: [
     { label: "Removed", items: ["Combo chain, the HUD x-multiplier and the CHAIN stat on Game Over"] },
     { label: "Changed", items: ["Kills score plain base points; 2x power-up still applies (totals ~3-4x lower)", "Extra lives at 10,000 / 30,000 / 60,000 / 100,000 / 150,000, capped at 5", "New season starts with this scoring; earlier scores kept under PAST SEASONS"] },
