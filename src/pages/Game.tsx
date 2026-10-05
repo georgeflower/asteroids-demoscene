@@ -506,6 +506,7 @@ const Game = () => {
   const drawTimestampRef = useRef<number>(0);
   const lastShotRef = useRef(0);
   const lastShotP2Ref = useRef(0);
+  const shotCooldownTicksRef = useRef(0);
   const shakeRef = useRef({ amp: 0, ticks: 0, total: 0 });
   const hitstopRef = useRef(0);
   const reducedMotionRef = useRef(false);
@@ -1601,6 +1602,7 @@ const Game = () => {
     keysRef.current = {};
     shakeRef.current = { amp: 0, ticks: 0, total: 0 };
     hitstopRef.current = 0;
+    shotCooldownTicksRef.current = 0;
     const asteroids: Asteroid[] = [];
     for (let i = 0; i < 4; i++) {
       let x: number, y: number, dist: number;
@@ -2563,10 +2565,8 @@ const Game = () => {
   const shootBullet = useCallback(() => {
     if (gameModeRef.current === "solo") {
       if (!gameStateRef.current || gameStateRef.current.gameOver) return;
-      const now = Date.now();
-      const fireRate = gameStateRef.current.powerUpActive.rapidFire > 0 ? 100 : 250;
-      if (now - lastShotRef.current < fireRate) return;
-      lastShotRef.current = now;
+      if (shotCooldownTicksRef.current > 0) return;
+      shotCooldownTicksRef.current = gameStateRef.current.powerUpActive.rapidFire > 0 ? 6 : 15;
 
       const { ship } = gameStateRef.current;
       gameStateRef.current.bullets.push({
@@ -3015,6 +3015,8 @@ const Game = () => {
     gameStateRef.current.tick = (gameStateRef.current.tick ?? 0) + 1;
 
     const state = gameStateRef.current;
+
+    if (shotCooldownTicksRef.current > 0) shotCooldownTicksRef.current--;
 
     if (shakeRef.current.ticks > 0) {
       shakeRef.current.ticks--;
