@@ -35,6 +35,7 @@ interface ScoreSubmission {
   timePlayedSeconds?: number;
   source?: string;
   powNonce?: number;
+  clientVersion?: string;
   S?: number;
   hmac?: string;
   asteroidsDestroyed?: number;
@@ -108,6 +109,16 @@ function errorResponse(message: string, status: number, code?: string) {
     JSON.stringify({ error: message, code }),
     { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
   );
+}
+
+function compareVersions(a: string, b: string): number {
+  const pa = a.split('.').map((n) => parseInt(n, 10) || 0);
+  const pb = b.split('.').map((n) => parseInt(n, 10) || 0);
+  for (let i = 0; i < 3; i++) {
+    const d = (pa[i] ?? 0) - (pb[i] ?? 0);
+    if (d !== 0) return d;
+  }
+  return 0;
 }
 
 async function reject(
@@ -582,6 +593,22 @@ async function handleSubmit(req: Request, supabaseAdmin: any) {
     return reject(supabaseAdmin, req, submission, 'MAX_SUBMISSIONS', 'Maximum submissions reached for this session', 403);
   }
 
+  // --- Season minimum client version ---
+  {
+    const { data: season } = await supabaseAdmin
+      .from('seasons')
+      .select('id, min_client_version')
+      .eq('is_current', true)
+      .maybeSingle();
+    const required: string | null = season?.min_client_version ?? null;
+    if (required) {
+      const cv = typeof submission.clientVersion === 'string' ? submission.clientVersion : '';
+      if (!cv || compareVersions(cv, required) < 0) {
+        return reject(supabaseAdmin, req, submission, 'CLIENT_OUTDATED', 'Please reload the game to submit scores', 403, { clientVersion: cv || null, required });
+      }
+    }
+  }
+
   if (session.last_submission_at) {
     const timeSinceLast = Date.now() - new Date(session.last_submission_at).getTime();
     if (timeSinceLast < MIN_SUBMISSION_INTERVAL_MS) {
@@ -919,7 +946,7 @@ async function handleAdminData(req: Request, supabaseAdmin: any) {
 
   const { data: scores, error: scoresError } = await supabaseAdmin
     .from('current_high_scores')
-    .select('id, initials, score, level, time_played_seconds, source, created_at')
+    .select('id, initials, score, level, time_played_seconds, source, created_at, season')
     .order('created_at', { ascending: false })
     .limit(100);
 
