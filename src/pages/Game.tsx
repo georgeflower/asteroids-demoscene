@@ -650,6 +650,7 @@ const Game = () => {
   const [isPaused, setIsPaused] = useState(false);
   const isPausedRef = useRef(false);
   const [pauseSelection, setPauseSelection] = useState(0); // 0=resume, 1=quit
+  const [sfxMuted, setSfxMuted] = useState(() => soundEffects.isMuted());
   const prevGamepadButtonRef = useRef<boolean[]>([false, false, false, false, false, false, false]);
   const [autoPlayMusic, setAutoPlayMusic] = useState(() => {
     const stored = localStorage.getItem("autoPlayMusic");
@@ -6926,6 +6927,18 @@ const Game = () => {
                 {pauseSelection === 2 ? "▸ " : "  "}QUIT TO MENU
               </Button>
             </div>
+            <button
+              type="button"
+              aria-pressed={!sfxMuted}
+              onClick={() => {
+                const next = !sfxMuted;
+                soundEffects.setMuted(next);
+                setSfxMuted(next);
+              }}
+              className="mb-6 min-h-11 min-w-[120px] border border-[hsl(var(--game-foreground))]/40 px-4 font-mono text-xs text-[hsl(var(--game-foreground))] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            >
+              {sfxMuted ? "SFX OFF" : "SFX ON"}
+            </button>
             <div className="text-[hsl(var(--game-foreground))] font-mono text-xs opacity-40">
               ESC or START to resume
             </div>
