@@ -1057,7 +1057,7 @@ const Game = () => {
   }, []);
 
   const saveToLeaderboard = useCallback(
-    async (playerInitials: string): Promise<{ ok: boolean; code?: string; validation?: string }> => {
+    async (playerInitials: string): Promise<{ ok: boolean; code?: string; validation?: string; outdated?: boolean }> => {
       // Trainer mode: don't save scores
       if (DEBUG_ENABLED && trainerModeRef.current) {
         console.log("Trainer mode: score not saved");
