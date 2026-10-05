@@ -22,6 +22,7 @@ interface Score {
   time_played_seconds: number | null;
   source: string | null;
   created_at: string;
+  season?: number | null;
 }
 
 interface Flag {
@@ -432,6 +433,7 @@ export function AdminMonitor() {
         <table style={{ width: "100%", borderCollapse: "collapse" }}>
           <thead>
             <tr style={{ borderBottom: "1px solid #333", color: "#888" }}>
+              <th style={th}>SEASON</th>
               <th style={th}>INITIALS</th>
               <th style={th}>SCORE</th>
               <th style={th}>LEVEL</th>
@@ -457,6 +459,7 @@ export function AdminMonitor() {
                     }}
                     onClick={() => setSelectedScore(isSelected ? null : s.id)}
                   >
+                    <td style={td}>S{s.season ?? 1}</td>
                     <td style={td}>
                       {severity && (
                         <span
@@ -510,7 +513,7 @@ export function AdminMonitor() {
                   {/* Expanded detail row */}
                   {isSelected && (
                     <tr key={`${s.id}-detail`}>
-                      <td colSpan={7} style={{ padding: "8px 16px", background: "#111", borderBottom: "1px solid #333" }}>
+                      <td colSpan={8} style={{ padding: "8px 16px", background: "#111", borderBottom: "1px solid #333" }}>
                         <div style={{ display: "flex", gap: 32 }}>
                           <div>
                             <div style={{ color: "#888", fontSize: 11 }}>SOURCE</div>

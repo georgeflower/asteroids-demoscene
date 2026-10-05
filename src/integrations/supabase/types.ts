@@ -21,6 +21,7 @@ export type Database = {
           initials: string
           level: number | null
           score: number
+          season: number
           session_token: string | null
           source: string | null
           time_played_seconds: number | null
@@ -31,6 +32,7 @@ export type Database = {
           initials: string
           level?: number | null
           score: number
+          season?: number
           session_token?: string | null
           source?: string | null
           time_played_seconds?: number | null
@@ -41,11 +43,20 @@ export type Database = {
           initials?: string
           level?: number | null
           score?: number
+          season?: number
           session_token?: string | null
           source?: string | null
           time_played_seconds?: number | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "current_high_scores_season_fkey"
+            columns: ["season"]
+            isOneToOne: false
+            referencedRelation: "seasons"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       game_session_checkpoints: {
         Row: {
@@ -240,6 +251,30 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      seasons: {
+        Row: {
+          id: number
+          is_current: boolean
+          min_client_version: string | null
+          name: string
+          started_at: string
+        }
+        Insert: {
+          id: number
+          is_current?: boolean
+          min_client_version?: string | null
+          name: string
+          started_at?: string
+        }
+        Update: {
+          id?: number
+          is_current?: boolean
+          min_client_version?: string | null
+          name?: string
+          started_at?: string
+        }
+        Relationships: []
       }
       submission_flags: {
         Row: {

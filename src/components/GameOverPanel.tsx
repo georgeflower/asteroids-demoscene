@@ -148,7 +148,7 @@ export default function GameOverPanel(p: Props) {
             {p.cloudStatus === "failed" ? (
               <span className="flex h-full flex-col items-center justify-center">
                 <span>{cloudStatusText}</span>
-                <span>TAP TO RETRY CLOUD SAVE</span>
+                {!cloudStatusText.includes("TAP TO") && <span>TAP TO RETRY CLOUD SAVE</span>}
               </span>
             ) : cloudStatusText}
           </button>
