@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useCallback, type RefObject } from "react"
 import { useNavigate } from "react-router-dom";
 import { APP_VERSION as GAME_VERSION } from "@/constants/version";
 import { supabase } from "@/integrations/supabase/client";
+import { useSeasons, fetchSeasons, seasonKey } from "@/hooks/useSeasons";
 import { Button } from "@/components/ui/button";
 import hyperspaceIcon from "@/assets/hyperspace.png";
 import bmcIcon from "@/assets/buymeacoffee.png";
@@ -635,9 +636,16 @@ const Game = () => {
   const onelinerGifsRef = useRef<Record<string, HTMLImageElement>>({});
   const [userPaused, setUserPaused] = useState(false);
   const [showFullLeaderboard, setShowFullLeaderboard] = useState(false);
+  const { current: currentSeason, past: pastSeasons } = useSeasons();
+  const seasonId = currentSeason?.id ?? 1;
+  const seasonIdRef = useRef(seasonId);
+  seasonIdRef.current = seasonId;
+  const cloudOutdatedRef = useRef(false);
+  const [pastTab, setPastTab] = useState<number | "legacy">("legacy");
+  const [pastBoard, setPastBoard] = useState<{ initials: string; score: number; date: string }[]>([]);
   const [localHighScores, setLocalHighScores] = useState<LocalScore[]>(() => {
     try {
-      const stored = localStorage.getItem(LOCAL_SCORES_KEY);
+      const stored = localStorage.getItem(seasonKey(LOCAL_SCORES_KEY, seasonId));
       return stored ? JSON.parse(stored) : [];
     } catch {
       return [];
@@ -799,14 +807,43 @@ const Game = () => {
     setDebugLogs(debugLogsRef.current);
   }, []);
 
-  const loadLeaderboard = useCallback(async () => {
-    const { data, error } = await supabase
+  // Re-read the season-scoped local list if the season changes after load.
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(seasonKey(LOCAL_SCORES_KEY, seasonId));
+      setLocalHighScores(stored ? JSON.parse(stored) : []);
+    } catch {
+      setLocalHighScores([]);
+    }
+  }, [seasonId]);
+
+  const loadSeasonBoard = useCallback(async (season: number, limit: number) => {
+    const { data, error } = await (supabase as any)
       .from("current_high_scores")
       .select("initials, score, created_at")
+      .eq("season", season)
+      .order("score", { ascending: false })
+      .limit(limit);
+    if (!error && data) {
+      return (data as { initials: string; score: number; created_at: string }[]).map((row) => ({
+        initials: row.initials,
+        score: row.score,
+        date: new Date(row.created_at).toLocaleDateString(),
+      }));
+    }
+    return [];
+  }, []);
+
+  const loadLeaderboard = useCallback(async () => {
+    const season = (await fetchSeasons()).current?.id ?? seasonIdRef.current;
+    const { data, error } = await (supabase as any)
+      .from("current_high_scores")
+      .select("initials, score, created_at")
+      .eq("season", season)
       .order("score", { ascending: false })
       .limit(10);
     if (!error && data) {
-      return data.map((row) => ({
+      return (data as { initials: string; score: number; created_at: string }[]).map((row) => ({
         initials: row.initials,
         score: row.score,
         date: new Date(row.created_at).toLocaleDateString(),
@@ -1061,6 +1098,7 @@ const Game = () => {
             timePlayedSeconds,
             source: "game_client",
             powNonce: powSolutionRef.current,
+            clientVersion: GAME_VERSION,
             hmac,
             asteroidsDestroyed: snapshot.asteroidsDestroyed,
             bulletsFired: snapshot.bulletsFired,
@@ -1086,6 +1124,7 @@ const Game = () => {
                 );
                 if (exists) return { ok: true };
               }
+              if (result.code === "CLIENT_OUTDATED") return { ok: false, code: "CLIENT_OUTDATED", outdated: true };
               if (response.status >= 500 && attempt < retryDelays.length) continue;
               const rawCode = typeof result.code === "string" ? result.code : typeof result.error === "string" ? result.error : String(response.status);
               return { ok: false, code: rawCode.toUpperCase().replace(/[^A-Z0-9_]/g, "_").slice(0, 12) || String(response.status) };
@@ -1143,7 +1182,7 @@ const Game = () => {
       ]
         .sort((a, b) => b.score - a.score)
         .slice(0, 10);
-      localStorage.setItem(LOCAL_SCORES_KEY, JSON.stringify(updated));
+      localStorage.setItem(seasonKey(LOCAL_SCORES_KEY, seasonIdRef.current), JSON.stringify(updated));
       setLocalHighScores(updated);
 
       // Close form immediately
@@ -1169,6 +1208,10 @@ const Game = () => {
       } else if (result.validation) {
         setCloudStatus("idle");
         setInitialsError(result.validation);
+      } else if ((result as { outdated?: boolean }).outdated) {
+        cloudOutdatedRef.current = true;
+        setInitialsError("OUTDATED VERSION - TAP TO RELOAD");
+        setCloudStatus("failed");
       } else {
         const code = (result.code ?? "NETWORK").toUpperCase().slice(0, 12);
         setInitialsError(`CLOUD SAVE FAILED: ${code}`);
@@ -1179,6 +1222,10 @@ const Game = () => {
   );
 
   const retryCloudSubmission = useCallback(async () => {
+    if (cloudOutdatedRef.current) {
+      window.location.reload();
+      return;
+    }
     if (submittingScoreRef.current || !pendingSubmissionRef.current || !pendingInitialsRef.current) return;
     const generation = submissionGenerationRef.current;
     submittingScoreRef.current = true;
@@ -1192,6 +1239,10 @@ const Game = () => {
     } else if (result.validation) {
       setCloudStatus("idle");
       setInitialsError(result.validation);
+    } else if ((result as { outdated?: boolean }).outdated) {
+      cloudOutdatedRef.current = true;
+      setInitialsError("OUTDATED VERSION - TAP TO RELOAD");
+      setCloudStatus("failed");
     } else {
       const code = (result.code ?? "NETWORK").toUpperCase().slice(0, 12);
       setInitialsError(`CLOUD SAVE FAILED: ${code}`);
@@ -2391,7 +2442,7 @@ const Game = () => {
       accuracy: number | null;
     } | null = null;
     try {
-      const raw = localStorage.getItem("personalBest");
+      const raw = localStorage.getItem(seasonKey("personalBest", seasonIdRef.current));
       if (raw) prevBest = JSON.parse(raw);
     } catch {
       prevBest = null;
@@ -2409,7 +2460,7 @@ const Game = () => {
     if (!prevBest || state.score > prevBest.score) {
       try {
         localStorage.setItem(
-          "personalBest",
+          seasonKey("personalBest", seasonIdRef.current),
           JSON.stringify({ score: state.score, wave: state.wave, timeSurvived, accuracy }),
         );
       } catch {
@@ -6294,6 +6345,7 @@ const Game = () => {
           </div>
 
           <section className="w-full" aria-label="High scores">
+            {HIGH_SCORES_ENABLED && <div className="mb-1 text-right font-mono text-[10px] text-[hsl(var(--game-glow))]">SEASON {seasonId}</div>}
             <div className="overflow-hidden rounded-md border border-[hsl(var(--game-foreground))]/30 bg-[hsl(var(--game-background))]/70">
               <div role="tablist" aria-label="Score source" className="grid grid-cols-2 border-b border-[hsl(var(--game-foreground))]/30">
                 {(["global", "local"] as const).map((tab) => (
@@ -6327,7 +6379,7 @@ const Game = () => {
             <div className="mt-1 grid grid-cols-2 gap-2">
               <button type="button" onClick={() => setShowFullLeaderboard(true)} className="h-11 font-mono text-[10px] text-[hsl(var(--game-foreground))] opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">ALL SCORES ▸</button>
               {HIGH_SCORES_ENABLED && (
-                <button type="button" onClick={() => { loadOldLeaderboard().then(setOldLeaderboard); setShowOldLeaderboard(true); }} className="h-11 font-mono text-[10px] text-[hsl(var(--game-foreground))] opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">OLD HIGHSCORES ▸</button>
+                <button type="button" onClick={() => { const first = pastSeasons[0]?.id; setPastTab(first ?? "legacy"); if (first) loadSeasonBoard(first, 30).then(setPastBoard); loadOldLeaderboard().then(setOldLeaderboard); setShowOldLeaderboard(true); }} className="h-11 font-mono text-[10px] text-[hsl(var(--game-foreground))] opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">PAST SEASONS ▸</button>
               )}
             </div>
           </section>
@@ -6378,17 +6430,31 @@ const Game = () => {
               {activeScores.length === 0 ? <div className="text-center font-mono text-sm text-[hsl(var(--game-foreground))] opacity-70">No scores yet</div> : activeScores.map((entry, index) => <div key={`${entry.initials}-${entry.score}-${index}`} className="flex justify-between py-0.5 font-mono text-sm text-[hsl(var(--game-foreground))]"><span className="whitespace-pre">{(index + 1).toString().padStart(2, " ")}. {entry.initials.padEnd(3, " ")}</span><span>{entry.score.toString().padStart(8, "0")}</span></div>)}
               <div className="mt-4 flex gap-2">
                 <button type="button" onClick={() => setShowFullLeaderboard(false)} className="min-h-11 flex-1 border border-[hsl(var(--game-foreground))]/30 font-mono text-xs text-[hsl(var(--game-foreground))] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">CLOSE</button>
-                {scoreTab === "local" && localHighScores.length > 0 && <button type="button" onClick={() => { localStorage.removeItem(LOCAL_SCORES_KEY); setLocalHighScores([]); }} className="min-h-11 flex-1 border border-[hsl(var(--game-danger))]/30 font-mono text-xs text-[hsl(var(--game-danger))] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">CLEAR SCORES</button>}
+                {scoreTab === "local" && localHighScores.length > 0 && <button type="button" onClick={() => { localStorage.removeItem(seasonKey(LOCAL_SCORES_KEY, seasonId)); setLocalHighScores([]); }} className="min-h-11 flex-1 border border-[hsl(var(--game-danger))]/30 font-mono text-xs text-[hsl(var(--game-danger))] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">CLEAR SCORES</button>}
               </div>
             </div>
           </div>
         )}
 
         {HIGH_SCORES_ENABLED && showOldLeaderboard && (
-          <div role="dialog" aria-modal="true" aria-label="Old high scores" className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4" onClick={() => setShowOldLeaderboard(false)}>
+          <div role="dialog" aria-modal="true" aria-label="Past seasons" className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4" onClick={() => setShowOldLeaderboard(false)}>
             <div className="max-h-[80dvh] w-full max-w-sm overflow-auto border-2 border-[hsl(var(--game-foreground))]/40 bg-[hsl(var(--game-background))] p-4" onClick={(event) => event.stopPropagation()}>
-              <div className="mb-4 text-center font-mono text-lg tracking-wider text-[#FFD700]">★ OLD HIGHSCORES ★</div>
-              {oldLeaderboard.map((entry, index) => <div key={`${entry.initials}-${entry.score}-${index}`} className="flex justify-between py-0.5 font-mono text-sm text-[hsl(var(--game-foreground))]"><span className="whitespace-pre">{(index + 1).toString().padStart(2, " ")}. {entry.initials.padEnd(3, " ")}</span><span>{entry.score.toString().padStart(8, "0")}</span></div>)}
+              <div className="mb-3 text-center font-mono text-lg tracking-wider text-[#FFD700]">★ PAST SEASONS ★</div>
+              <div role="tablist" aria-label="Season" className="mb-3 flex flex-wrap justify-center gap-1">
+                {[...pastSeasons.map((ps) => ps.id as number | "legacy"), "legacy" as const].map((tab) => (
+                  <button
+                    key={tab}
+                    type="button"
+                    role="tab"
+                    aria-selected={pastTab === tab}
+                    onClick={() => { setPastTab(tab); if (tab !== "legacy") { setPastBoard([]); loadSeasonBoard(tab, 30).then(setPastBoard); } }}
+                    className={`min-h-9 px-2 font-mono text-[10px] border border-[hsl(var(--game-foreground))]/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${pastTab === tab ? "bg-[hsl(var(--game-foreground))] text-[hsl(var(--game-background))]" : "text-[hsl(var(--game-foreground))]"}`}
+                  >
+                    {tab === "legacy" ? "LEGACY" : `S${tab}`}
+                  </button>
+                ))}
+              </div>
+              {(pastTab === "legacy" ? oldLeaderboard : pastBoard).map((entry, index) => <div key={`${entry.initials}-${entry.score}-${index}`} className="flex justify-between py-0.5 font-mono text-sm text-[hsl(var(--game-foreground))]"><span className="whitespace-pre">{(index + 1).toString().padStart(2, " ")}. {entry.initials.padEnd(3, " ")}</span><span>{entry.score.toString().padStart(8, "0")}</span></div>)}
               <button type="button" onClick={() => setShowOldLeaderboard(false)} className="mt-4 min-h-11 w-full border border-[hsl(var(--game-foreground))]/30 font-mono text-xs text-[hsl(var(--game-foreground))] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">CLOSE</button>
             </div>
           </div>
@@ -6561,7 +6627,7 @@ const Game = () => {
           <GameOverPanel
             score={displayScore}
             runSummary={runSummary}
-            boardTitle={HIGH_SCORES_ENABLED ? "CLOUD LEADERBOARD" : "LOCAL HIGH SCORES"}
+            boardTitle={HIGH_SCORES_ENABLED ? `CLOUD LEADERBOARD · SEASON ${seasonId}` : "LOCAL HIGH SCORES"}
             entries={(HIGH_SCORES_ENABLED ? leaderboard : localHighScores).slice(0, 10)}
             enteringInitials={enteringInitials}
             initials={initials}
