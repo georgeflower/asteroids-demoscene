@@ -310,6 +310,7 @@ const ONLINE_STATE_BROADCAST_TICK_INTERVAL = 3;
 
 
 const LOCAL_SCORES_KEY = "asteroids_local_highscores";
+const HEARTBEAT_MIN_GAP_MS = 5500;
 interface LocalScore {
   initials: string;
   score: number;
@@ -984,10 +985,20 @@ const Game = () => {
     return null;
   }, [solvePoW]);
 
+  const lastHeartbeatSentRef = useRef(0);
   const sendHeartbeat = useCallback(async (force = false) => {
     const token = gameSessionTokenRef.current;
     const state = gameStateRef.current;
     if (!token || !state || (!force && (state.gameOver || isPausedRef.current))) return;
+    // The server refuses check-ins closer than 5 s apart. Skip optional ones,
+    // and make forced (final) ones wait until the gap has passed.
+    const sinceLast = Date.now() - lastHeartbeatSentRef.current;
+    if (sinceLast < HEARTBEAT_MIN_GAP_MS) {
+      if (!force) return;
+      await new Promise((resolve) => setTimeout(resolve, HEARTBEAT_MIN_GAP_MS - sinceLast));
+      if (gameSessionTokenRef.current !== token) return;
+    }
+    lastHeartbeatSentRef.current = Date.now();
     try {
       const score = state.score;
       const level = state.wave;
@@ -1024,7 +1035,7 @@ const Game = () => {
       }
       if (!response.ok) {
         const body = await response.json().catch(() => ({}));
-        console.warn("[heartbeat]", response.status, body.error);
+        if (response.status !== 429) console.warn("[heartbeat]", response.status, body.error);
       }
     } catch (error) {
       console.warn("[heartbeat]", "NETWORK", error);
@@ -1046,7 +1057,7 @@ const Game = () => {
   }, []);
 
   const saveToLeaderboard = useCallback(
-    async (playerInitials: string): Promise<{ ok: boolean; code?: string; validation?: string }> => {
+    async (playerInitials: string): Promise<{ ok: boolean; code?: string; validation?: string; outdated?: boolean }> => {
       // Trainer mode: don't save scores
       if (DEBUG_ENABLED && trainerModeRef.current) {
         console.log("Trainer mode: score not saved");
