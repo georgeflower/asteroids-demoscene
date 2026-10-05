@@ -19,7 +19,7 @@ import ChangelogOverlay from "@/components/ChangelogOverlay";
 import { loadBindings, displayKeyName, type ControlBindings } from "@/hooks/useControlSettings";
 import type { DuelNetState, CoopNetState, SessionMode } from "@/types/multiplayer";
 import { DEBUG_ENABLED, DEBUG_CATEGORIES, type DebugCategory, type DebugLogEntry } from "@/constants/debug";
-import { SPAWN_INVULNERABILITY_FRAMES, SHIELD_DURATION, RAPID_FIRE_DURATION, MULTIPLIER_DURATION, DEFAULT_TURN_SPEED, BULLET_LIFETIME, BOSS_TYPES, BOSS_NAMES, HIGH_SCORES_ENABLED, MIN_SCORE_FOR_INITIALS, CHAIN_WINDOW, CHAIN_STEP, CHAIN_MAX, BALANCE, extraLifeThreshold, type DropSource } from "@/constants/gameConstants";
+import { SPAWN_INVULNERABILITY_FRAMES, SHIELD_DURATION, RAPID_FIRE_DURATION, MULTIPLIER_DURATION, DEFAULT_TURN_SPEED, BULLET_LIFETIME, BOSS_TYPES, BOSS_NAMES, HIGH_SCORES_ENABLED, MIN_SCORE_FOR_INITIALS, BALANCE, extraLifeThreshold, type DropSource } from "@/constants/gameConstants";
 import { readGamepad as readGamepadUtil } from "@/hooks/useInput";
 
 interface Vector {
@@ -232,9 +232,6 @@ interface GameState {
   alienSpawnTimer: number;
   bossDefeated: boolean;
   pendingNextWave: boolean;
-  chain: number;
-  chainTimer: number;
-  bestChain: number;
 }
 
 interface DuelState {
@@ -621,7 +618,6 @@ const Game = () => {
     timeSurvived: number;
     accuracy: number | null;
     asteroids: number;
-    bestChain: number;
     prevBest: { score: number; wave: number; timeSurvived: number; accuracy: number | null } | null;
   } | null>(null);
   const [isPaused, setIsPaused] = useState(false);
@@ -657,7 +653,6 @@ const Game = () => {
   const lastOnelinerTimeRef = useRef<string>("");
   const olTextCacheRef = useRef<{ text: string; totalWidth: number } | null>(null);
   const nowPlayingTextCacheRef = useRef<{ text: string; width: number } | null>(null);
-  const chainTextCacheRef = useRef<{ text: string; width: number } | null>(null);
 
   // Debug-only layout-shift detector
   useEffect(() => {
@@ -1616,9 +1611,6 @@ const Game = () => {
       alienSpawnBudget: 0,
       bossDefeated: false,
       pendingNextWave: false,
-      chain: 0,
-      chainTimer: 0,
-      bestChain: 0,
     };
     runStartTimeRef.current = Date.now();
     setRunSummary(null);
@@ -2427,16 +2419,8 @@ const Game = () => {
     }
   }, []);
 
-  // Register a scoring kill on the chain combo (solo only)
-  const bumpChain = useCallback((state: GameState) => {
-    state.chain++;
-    state.chainTimer = CHAIN_WINDOW;
-    state.bestChain = Math.max(state.bestChain, state.chain);
-  }, []);
-
   const killMultiplier = useCallback((state: GameState) => {
-    const powerUpMult = state.powerUpActive.multiplier > 0 ? 2 : 1;
-    return powerUpMult * Math.min(1 + state.chain * CHAIN_STEP, CHAIN_MAX);
+    return state.powerUpActive.multiplier > 0 ? 2 : 1;
   }, []);
 
 
@@ -2464,7 +2448,6 @@ const Game = () => {
       timeSurvived,
       accuracy,
       asteroids: gameStatsRef.current.asteroidsDestroyed,
-      bestChain: state.bestChain,
       prevBest,
     });
     // Update the stored PB after capturing the comparison snapshot
@@ -2499,8 +2482,6 @@ const Game = () => {
       );
       spawnExplosion(state.ship.pos, "#FFFFFF", 20);
       state.lives--;
-      state.chain = 0;
-      state.chainTimer = 0;
       setDisplayLives(state.lives);
       state.ship = createShip();
       soundEffects.explode();
@@ -3599,7 +3580,6 @@ const Game = () => {
           if (hitIdx >= 0) {
             state.bullets.splice(hitIdx, 1);
             spawnExplosion(mc.pos, "#00FF44", 4);
-            bumpChain(state);
             const pts = Math.round(25 * killMultiplier(state));
             const prevScore = state.score;
             state.score += pts;
@@ -3630,7 +3610,6 @@ const Game = () => {
             alive = false;
             ms.hp--;
             if (ms.hp <= 0) {
-              bumpChain(state);
               const pts = Math.round(200 * killMultiplier(state));
               const prevScore = state.score;
               state.score += pts;
@@ -3697,14 +3676,6 @@ const Game = () => {
       return powerUp.lifetime > 0;
     });
 
-    // Chain combo decay
-    if (state.chainTimer > 0) {
-      state.chainTimer--;
-      if (state.chainTimer === 0) {
-        state.chain = 0;
-      }
-    }
-
     // Update power-up timers
     Object.keys(state.powerUpActive).forEach((key) => {
       const k = key as keyof typeof state.powerUpActive;
@@ -3749,7 +3720,6 @@ const Game = () => {
         const radius = asteroid.size === "large" ? 40 : asteroid.size === "medium" ? 25 : 12;
         if (checkCollision(bullet.pos, 2, asteroid.pos, radius)) {
           killedAsteroids.add(asteroid);
-          bumpChain(state);
           const pts = Math.round(ASTEROID_POINTS[asteroid.size] * killMultiplier(state));
           const prevScore = state.score;
           state.score += pts;
@@ -3782,7 +3752,6 @@ const Game = () => {
         const radius = ufo.size === "large" ? 20 : 10;
         if (checkCollision(bullet.pos, 2, ufo.pos, radius)) {
           killedUFOs.add(ufo);
-          bumpChain(state);
           const pts = Math.round(UFO_POINTS[ufo.size] * killMultiplier(state));
           const prevScore = state.score;
           state.score += pts;
@@ -3805,7 +3774,6 @@ const Game = () => {
           alien.hp--;
           if (alien.hp <= 0) {
             killedAliens.add(alien);
-            bumpChain(state);
             const ptsMap: Record<string, number> = { brown: 300, greenMan: 500, blueSentinel: 600, purpleSwarm: 100 };
             const pts = Math.round((ptsMap[alien.type] ?? 300) * killMultiplier(state));
             const prevScore = state.score;
@@ -3838,7 +3806,6 @@ const Game = () => {
           spawnExplosion(bullet.pos, "#FF88FF", 5);
           spawnFloatingText(bullet.pos, "HIT!", "#FF88FF", 14);
           if (state.boss.hp <= 0) {
-            bumpChain(state);
             const pts = Math.round((2000 + state.wave * 200) * killMultiplier(state));
             const prevScore = state.score;
             state.score += pts;
@@ -3961,7 +3928,7 @@ const Game = () => {
     if (noEnemies && !state.pendingNextWave) {
       nextWave();
     }
-  }, [nextWave, loseLife, shootBullet, hyperspace, addDebugLog, bumpChain, killMultiplier, awardExtraLives]);
+  }, [nextWave, loseLife, shootBullet, hyperspace, addDebugLog, killMultiplier, awardExtraLives]);
 
   // ===== SHARED BOSS DRAW HELPER =====
   const drawBossOnCanvas = (ctx: CanvasRenderingContext2D, boss: Boss, hpBarY: number) => {
@@ -4966,31 +4933,6 @@ const Game = () => {
         ctx.fillStyle = "#FFD700";
         ctx.textAlign = "right";
         ctx.fillText(`TOP: ${topScoreSource[0].score.toString().padStart(8, "0")}`, CANVAS_WIDTH - 10, 38);
-        ctx.restore();
-      }
-
-      // Chain combo indicator (solo only)
-      if (state.chain >= 2) {
-        const chainMult = Math.min(1 + state.chain * CHAIN_STEP, CHAIN_MAX);
-        const chainText = `x${chainMult.toFixed(1)} CHAIN`;
-        ctx.save();
-        const pulse = state.chainTimer > CHAIN_WINDOW - 10 ? 0.2 : 0;
-        const scale = 1 + Math.min(state.chain, 30) * 0.02 + pulse;
-        ctx.font = `${Math.round(10 * scale)}px 'Press Start 2P', monospace`;
-        let chainWidth: number;
-        if (chainTextCacheRef.current?.text === chainText) {
-          chainWidth = chainTextCacheRef.current.width;
-        } else {
-          chainWidth = ctx.measureText(chainText).width;
-          chainTextCacheRef.current = { text: chainText, width: chainWidth };
-        }
-        const chainY = 10 + activePowerUps.length * 18 + 16;
-        ctx.globalAlpha = 0.9;
-        ctx.fillStyle = "#FFAA33";
-        ctx.textAlign = "left";
-        ctx.fillText(chainText, 10, chainY);
-        ctx.globalAlpha = 0.6;
-        ctx.fillRect(10, chainY + 5, Math.max(0, chainWidth * (state.chainTimer / CHAIN_WINDOW)), 3);
         ctx.restore();
       }
 
