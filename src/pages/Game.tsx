@@ -504,6 +504,31 @@ const Game = () => {
   const drawTimestampRef = useRef<number>(0);
   const lastShotRef = useRef(0);
   const lastShotP2Ref = useRef(0);
+  const shakeRef = useRef({ amp: 0, ticks: 0, total: 0 });
+  const hitstopRef = useRef(0);
+  const reducedMotionRef = useRef(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.matchMedia) return;
+    const mql = window.matchMedia("(prefers-reduced-motion: reduce)");
+    reducedMotionRef.current = mql.matches;
+    const handleChange = (event: MediaQueryListEvent) => {
+      reducedMotionRef.current = event.matches;
+      if (event.matches) shakeRef.current = { amp: 0, ticks: 0, total: 0 };
+    };
+    mql.addEventListener("change", handleChange);
+    return () => mql.removeEventListener("change", handleChange);
+  }, []);
+
+  // Solo screen shake: keep the larger amplitude and the longer remaining duration
+  const addShake = useCallback((amp: number, ticks: number) => {
+    if (reducedMotionRef.current) return;
+    const sh = shakeRef.current;
+    const curAmp = sh.ticks > 0 ? sh.amp * (sh.ticks / sh.total) : 0;
+    sh.amp = Math.max(curAmp, amp);
+    sh.ticks = Math.max(sh.ticks, ticks);
+    sh.total = sh.ticks;
+  }, []);
   const enteringInitialsRef = useRef(false);
   const submissionGenerationRef = useRef(0);
   const submittingScoreRef = useRef(false);
@@ -1571,6 +1596,8 @@ const Game = () => {
 
   const initGame = useCallback(() => {
     keysRef.current = {};
+    shakeRef.current = { amp: 0, ticks: 0, total: 0 };
+    hitstopRef.current = 0;
     const asteroids: Asteroid[] = [];
     for (let i = 0; i < 4; i++) {
       let x: number, y: number, dist: number;
@@ -2481,6 +2508,8 @@ const Game = () => {
         `Ship destroyed at (${Math.round(state.ship.pos.x)}, ${Math.round(state.ship.pos.y)}), lives: ${state.lives - 1}`,
       );
       spawnExplosion(state.ship.pos, "#FFFFFF", 20);
+      addShake(8, 20);
+      hitstopRef.current = 8;
       state.lives--;
       setDisplayLives(state.lives);
       state.ship = createShip();
@@ -2490,6 +2519,8 @@ const Game = () => {
 
       if (state.lives <= 0) {
         state.gameOver = true;
+        shakeRef.current = { amp: 0, ticks: 0, total: 0 };
+        hitstopRef.current = 0;
         balanceStatsRef.current.waveReached = state.wave;
         addDebugLog("death", `balance ${JSON.stringify(balanceStatsRef.current)}`);
         void sendHeartbeat(true);
@@ -2518,7 +2549,7 @@ const Game = () => {
         setShowLifeLost(true);
       }
     },
-    [shouldPromptForInitials, loadLeaderboard, addDebugLog, sendHeartbeat, stopHeartbeatInterval, buildRunSummary],
+    [shouldPromptForInitials, loadLeaderboard, addDebugLog, sendHeartbeat, stopHeartbeatInterval, buildRunSummary, addShake],
   );
 
   const shootBullet = useCallback(() => {
@@ -2976,6 +3007,11 @@ const Game = () => {
     gameStateRef.current.tick = (gameStateRef.current.tick ?? 0) + 1;
 
     const state = gameStateRef.current;
+
+    if (shakeRef.current.ticks > 0) {
+      shakeRef.current.ticks--;
+      if (shakeRef.current.ticks === 0) shakeRef.current.amp = 0;
+    }
 
     // Resolve deferred wave transition on a clean tick
     if (state.pendingNextWave) {
@@ -3730,6 +3766,7 @@ const Game = () => {
           spawnFloatingText(asteroid.pos, `+${pts}`, aColor, 14);
           spawnExplosion(asteroid.pos, aColor, asteroid.size === "large" ? 15 : asteroid.size === "medium" ? 10 : 6);
           if (asteroid.size === "large") {
+            addShake(2, 6);
             newAsteroids.push(createAsteroid(asteroid.pos.x, asteroid.pos.y, "medium", state.wave));
             newAsteroids.push(createAsteroid(asteroid.pos.x, asteroid.pos.y, "medium", state.wave));
             soundEffects.explode();
@@ -3758,6 +3795,7 @@ const Game = () => {
           awardExtraLives(state, prevScore);
           setDisplayScore(state.score);
           soundEffects.explode();
+          addShake(3, 8);
           spawnFloatingText(ufo.pos, `+${pts}`, "#FFFF66", 18);
           spawnExplosion(ufo.pos, "#FFFF66", 15);
           const powerUp = createPowerUp(ufo.pos.x, ufo.pos.y, ufo.size === "large" ? "ufoLarge" : "ufoSmall");
@@ -3805,6 +3843,7 @@ const Game = () => {
           state.boss.hitFlash = 10;
           spawnExplosion(bullet.pos, "#FF88FF", 5);
           spawnFloatingText(bullet.pos, "HIT!", "#FF88FF", 14);
+          addShake(1.5, 4);
           if (state.boss.hp <= 0) {
             const pts = Math.round((2000 + state.wave * 200) * killMultiplier(state));
             const prevScore = state.score;
@@ -3827,6 +3866,8 @@ const Game = () => {
               lifetime: 600,
               fromBoss: true,
             });
+            addShake(10, 30);
+            hitstopRef.current = 12;
             state.boss = null;
             state.bossDefeated = true;
             state.pendingNextWave = true;
@@ -3928,7 +3969,7 @@ const Game = () => {
     if (noEnemies && !state.pendingNextWave) {
       nextWave();
     }
-  }, [nextWave, loseLife, shootBullet, hyperspace, addDebugLog, killMultiplier, awardExtraLives]);
+  }, [nextWave, loseLife, shootBullet, hyperspace, addDebugLog, killMultiplier, awardExtraLives, addShake]);
 
   // ===== SHARED BOSS DRAW HELPER =====
   const drawBossOnCanvas = (ctx: CanvasRenderingContext2D, boss: Boss, hpBarY: number) => {
@@ -4566,6 +4607,7 @@ const Game = () => {
     const ctx = ctx2dRef.current;
     if (!ctx) return;
     ensureCachedOverlays(ctx);
+    let shakeApplied = false;
 
     if ((gameModeRef.current === "duel" || gameModeRef.current === "online") && duelStateRef.current) {
       const ds = duelStateRef.current;
@@ -4793,6 +4835,18 @@ const Game = () => {
     } else {
       const state = gameStateRef.current;
       const theme = getTheme(state.wave);
+
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.fillStyle = theme.bg;
+      ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+      ctx.save();
+      shakeApplied = true;
+      const sh = shakeRef.current;
+      if (sh.ticks > 0 && sh.total > 0 && !isPausedRef.current && !showLifeLostRef.current) {
+        const t = state.tick ?? 0;
+        const mag = sh.amp * (sh.ticks / sh.total);
+        ctx.translate(Math.round(mag * Math.sin(t * 12.9898)), Math.round(mag * Math.cos(t * 78.233)));
+      }
 
       drawCommon(
         ctx,
@@ -5083,6 +5137,7 @@ const Game = () => {
       ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
     }
     ctx.restore();
+    if (shakeApplied) ctx.restore();
   }, []);
 
   const gameLoop = useCallback(
@@ -5249,7 +5304,12 @@ const Game = () => {
           if (gameModeRef.current === "duel") {
             updateDuel();
           } else if (gameModeRef.current === "solo") {
-            update();
+            if (isPausedRef.current) hitstopRef.current = 0;
+            if (hitstopRef.current > 0) {
+              hitstopRef.current--;
+            } else {
+              update();
+            }
           }
           accumulatorRef.current -= FIXED_TIMESTEP;
           updatesThisFrame++;
