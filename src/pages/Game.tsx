@@ -7175,14 +7175,24 @@ const Game = () => {
           <button
             type="button"
             aria-label="Hyperspace"
-            className="mx-auto mb-2 flex h-11 min-w-[120px] touch-none select-none items-center justify-center rounded-full border-2 border-[hsl(var(--game-powerup))] bg-[hsl(var(--game-background))]/70 px-4 font-mono text-[10px] font-bold text-[hsl(var(--game-powerup))] shadow-[0_0_10px_hsl(var(--game-powerup)/0.3)] backdrop-blur-sm active:bg-[hsl(var(--game-powerup))]/25 motion-safe:transition-transform motion-safe:active:scale-95 motion-reduce:transform-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary [-webkit-touch-callout:none] [-webkit-tap-highlight-color:transparent]"
+            aria-disabled={hyperChargePercent < 100}
+            className={`relative mx-auto mb-2 flex h-11 min-w-[120px] touch-none select-none items-center justify-center overflow-hidden rounded-full border-2 ${hyperChargePercent < 100 ? "border-[hsl(var(--game-powerup))]/40" : "border-[hsl(var(--game-powerup))]"} bg-[hsl(var(--game-background))]/70 px-4 font-mono text-[10px] font-bold text-[hsl(var(--game-powerup))] shadow-[0_0_10px_hsl(var(--game-powerup)/0.3)] backdrop-blur-sm active:bg-[hsl(var(--game-powerup))]/25 motion-safe:transition-transform motion-safe:active:scale-95 motion-reduce:transform-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary [-webkit-touch-callout:none] [-webkit-tap-highlight-color:transparent]`}
             onContextMenu={(e) => e.preventDefault()}
             onTouchStart={(e) => {
               e.preventDefault();
               hyperspace();
             }}
           >
-            HYPERSPACE
+            {hyperChargePercent < 100 && (
+              <span
+                aria-hidden="true"
+                className="absolute inset-y-0 left-0 bg-[hsl(var(--game-powerup))]/25"
+                style={{ width: `${Math.max(0, hyperChargePercent)}%` }}
+              />
+            )}
+            <span className={`relative ${hyperChargePercent >= 100 ? "motion-safe:animate-pulse" : ""}`}>
+              {hyperChargePercent < 100 ? `HYPER ${Math.floor(hyperChargePercent)}%` : "HYPERSPACE"}
+            </span>
           </button>
           <div className="flex items-end justify-between gap-2">
             <div className="flex gap-2">
