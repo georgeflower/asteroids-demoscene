@@ -4,6 +4,10 @@ export interface ChangelogRelease { version: string; date: string; title?: strin
 export const COMING_NEXT: ChangelogSection[] = [];
 
 export const CHANGELOG: ChangelogRelease[] = [
+  { version: "0.6.1", date: "2026-10-06", title: "More drops", sections: [
+    { label: "Changed", items: ["Power-ups drop about twice as often, last 7 s, and a drop is guaranteed after 30 s without one", "Rare extra-life drops from normal enemies (never at 4+ lives)"] },
+    { label: "Fixed", items: ["High scores always save to both local and cloud boards", "Black screen after returning to the menu and starting Solo again"] },
+  ] },
   { version: "0.6.0", date: "2026-10-05", title: "Feel & polish", sections: [
     { label: "Added", items: ["Screen shake and hit-stop on big hits (reduced-motion safe)", "Wave-clear pause with a bonus: wave x 100 (max 2,000), +500 for a no-death wave", "SFX mute toggle in the pause menu", "Hyperspace cooldown on the touch button"] },
     { label: "Changed", items: ["Accessibility labels for the remaining unlabeled button", "Solo fire timing tied to the game loop (same fire rates)"] },

@@ -42,15 +42,23 @@ export const BOSS_NAMES: Record<string, string> = {
 };
 
 // ===== BALANCE (solo lives & reward economy) =====
+// DROP_RATE: chance per kill (large asteroid 8%, medium 4%, small 0%, UFO 30%/50%, alien 25%).
+// Max 2 power-ups on screen, 300-tick (5 s) cooldown between drops, normal drops live 420 ticks (7 s).
+// PITY_TICKS: 1800 ticks (30 s) without a drop guarantees the next non-small-asteroid drop.
+// EXTRA_LIFE_DROP: weight 6 (12 at 1 life) added to the pool only at <=3 lives,
+// at least 3600 ticks (60 s) apart and max 1 per wave.
 export const BALANCE = {
   EXTRA_LIFE_FIRST: 10000,
   EXTRA_LIFE_STEP: 10000,
   MAX_LIVES: 5,
-  DROP_RATE: { asteroidLarge: 0.04, asteroidMedium: 0.02, asteroidSmall: 0, ufoLarge: 0.2, ufoSmall: 0.35, alien: 0.15 },
+  DROP_RATE: { asteroidLarge: 0.08, asteroidMedium: 0.04, asteroidSmall: 0, ufoLarge: 0.30, ufoSmall: 0.50, alien: 0.25 },
   DROP_WEIGHTS: { shield: 40, rapidFire: 30, multiplier: 30 },
   BOSS_DROP_WEIGHTS: { extraLife: 35, shield: 35, rapidFire: 15, multiplier: 15 },
   MAX_POWERUPS_ON_SCREEN: 2,
-  DROP_COOLDOWN_TICKS: 480,
+  DROP_COOLDOWN_TICKS: 300,
+  POWERUP_LIFETIME_TICKS: 420,
+  PITY_TICKS: 1800,
+  EXTRA_LIFE_DROP: { WEIGHT: 6, WEIGHT_LOW: 12, MAX_LIVES_FOR_DROP: 3, MIN_GAP_TICKS: 3600, MAX_PER_WAVE: 1 },
   ALIENS: {
     INTRO_WAVE: { brown: 3, greenMan: 7, blueSentinel: 11, purpleSwarm: 14 },
     TYPE_CAP: { brown: 2, greenMan: 1, blueSentinel: 1, purpleSwarm: 1 },
