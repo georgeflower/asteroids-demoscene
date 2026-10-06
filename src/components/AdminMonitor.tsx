@@ -12,7 +12,7 @@
  *  - Export suspicious submissions as CSV
  */
 
-import { useState, useEffect, useCallback, Fragment } from "react";
+import { useState, useEffect, useCallback, useMemo, Fragment } from "react";
 
 interface Score {
   id: string;
