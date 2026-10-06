@@ -208,6 +208,8 @@ interface GameState {
   alienSpawnBudget?: number;
   extraLifeCount?: number;
   lastDropTick?: number;
+  lastLifeDropTick?: number;
+  lifeDropsThisWave?: number;
   tick?: number;
   ship: Ship;
   asteroids: Asteroid[];
@@ -576,6 +578,8 @@ const Game = () => {
     livesGained: { score: 0, pickup: 0, boss: 0 } as Record<string, number>,
     deaths: { asteroid: 0, ufo: 0, ufoBullet: 0, greenBullet: 0, blueBullet: 0, alienTouch: 0, boss: 0, bossBullet: 0 } as Record<string, number>,
     waveReached: 1,
+    dropsByType: { shield: 0, rapidFire: 0, multiplier: 0, extraLife: 0 } as Record<string, number>,
+    pityDrops: 0,
   });
   const balanceStatsRef = useRef(freshBalanceStats());
   const recordDeath = (cause: string) => {
@@ -1225,7 +1229,7 @@ const Game = () => {
       enteringInitialsRef.current = false;
       setInitialsError("");
 
-      if (!isCloudHighScore(score) || !pendingSubmissionRef.current?.token) {
+      if (!HIGH_SCORES_ENABLED || !pendingSubmissionRef.current?.token || score < MIN_SCORE_FOR_INITIALS) {
         // No cloud session could be started for this run — save locally only.
         setCloudStatus("local");
         return;
@@ -1253,7 +1257,7 @@ const Game = () => {
         setCloudStatus("failed");
       }
     },
-    [localHighScores, isCloudHighScore, saveToLeaderboard],
+    [localHighScores, saveToLeaderboard],
   );
 
   const retryCloudSubmission = useCallback(async () => {
@@ -1572,15 +1576,34 @@ const Game = () => {
       if (st.powerUps.length >= BALANCE.MAX_POWERUPS_ON_SCREEN) return null;
       if (tick - (st.lastDropTick ?? -Infinity) < BALANCE.DROP_COOLDOWN_TICKS) return null;
     }
-    if (Math.random() >= BALANCE.DROP_RATE[source]) return null;
+    const pity = source !== "asteroidSmall" && tick - Math.max(st?.lastDropTick ?? 0, 0) >= BALANCE.PITY_TICKS;
+    if (!pity && Math.random() >= BALANCE.DROP_RATE[source]) return null;
     if (st) st.lastDropTick = tick;
-    const type: PowerUp["type"] = pickWeighted(BALANCE.DROP_WEIGHTS);
+    const L = BALANCE.EXTRA_LIFE_DROP;
+    const weights: Record<string, number> = { ...BALANCE.DROP_WEIGHTS };
+    if (
+      st &&
+      source !== "asteroidSmall" &&
+      st.lives <= L.MAX_LIVES_FOR_DROP &&
+      tick - (st.lastLifeDropTick ?? -Infinity) >= L.MIN_GAP_TICKS &&
+      (st.lifeDropsThisWave ?? 0) < L.MAX_PER_WAVE
+    ) {
+      weights.extraLife = st.lives <= 1 ? L.WEIGHT_LOW : L.WEIGHT;
+    }
+    const type = pickWeighted(weights) as PowerUp["type"];
+    if (st && type === "extraLife") {
+      st.lastLifeDropTick = tick;
+      st.lifeDropsThisWave = (st.lifeDropsThisWave ?? 0) + 1;
+    }
+    const bs = balanceStatsRef.current;
+    bs.dropsByType[type] = (bs.dropsByType[type] ?? 0) + 1;
+    if (pity) bs.pityDrops++;
     return {
       pos: { x, y },
       vel: { x: (Math.random() - 0.5) * 0.5, y: (Math.random() - 0.5) * 0.5 },
       rotation: 0,
       type,
-      lifetime: 300,
+      lifetime: BALANCE.POWERUP_LIFETIME_TICKS,
     };
   };
 
@@ -1628,6 +1651,8 @@ const Game = () => {
       score: 0,
       extraLifeCount: 0,
       lastDropTick: -Infinity,
+      lastLifeDropTick: -Infinity,
+      lifeDropsThisWave: 0,
       tick: 0,
       lives: 3,
       wave: 1,
@@ -2339,6 +2364,7 @@ const Game = () => {
     state.bullets = [];
     state.waveClearTimer = 0;
     state.lifeLostThisWave = false;
+    state.lifeDropsThisWave = 0;
 
     addDebugLog("wave", `Wave ${state.wave} started`);
     const isBossWave = state.wave % 5 === 0;

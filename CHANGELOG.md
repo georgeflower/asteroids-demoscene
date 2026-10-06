@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.6.1] - 2026-10-06 — More drops
+
+### Changed
+
+- Power-ups drop about twice as often from asteroids, UFOs and aliens, last 7 seconds, and a guaranteed drop arrives if none has appeared for 30 seconds
+- Extra lives can now drop rarely from normal enemies (never when you have 4 or more lives)
+
+### Fixed
+
+- A high score is now always saved to both the local and the cloud leaderboard
+- Black screen after returning to the main menu and starting Solo again
+
 ## [0.6.0] - 2026-10-05 - Feel & polish
 
 ### Added
