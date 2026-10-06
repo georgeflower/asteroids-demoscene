@@ -83,6 +83,16 @@ export function AdminMonitor() {
   const [showRejected, setShowRejected] = useState(true);
   const [expandedRejected, setExpandedRejected] = useState<string | null>(null);
 
+  // Rejected-submissions filters (in memory; survive REFRESH and APPROVE refetch)
+  const [fCode, setFCode] = useState<string>("ALL");
+  const [fStatus, setFStatus] = useState<"ALL" | "PENDING" | "APPROVED">("ALL");
+  const [fRange, setFRange] = useState<"ALL" | "24H" | "7D" | "30D" | "CUSTOM">("ALL");
+  const [fFrom, setFFrom] = useState<string>("");
+  const [fTo, setFTo] = useState<string>("");
+
+  // Scores table season filter
+  const [fSeason, setFSeason] = useState<string>("ALL");
+
   const fetchData = useCallback(async (key: string) => {
     setLoading(true);
     setError(null);
