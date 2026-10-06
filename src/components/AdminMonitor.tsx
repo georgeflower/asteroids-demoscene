@@ -179,9 +179,7 @@ export function AdminMonitor() {
   };
 
   const exportCSV = () => {
-    const flaggedScoreIds = new Set(flags.map((f) => f.score_id));
-    const rows = scores
-      .filter((s) => filter === "all" || flaggedScoreIds.has(s.id))
+    const rows = displayScores
       .map((s) => {
         const scoreFlags = flags.filter((f) => f.score_id === s.id);
         return [
