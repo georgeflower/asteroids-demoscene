@@ -12,7 +12,7 @@
  *  - Export suspicious submissions as CSV
  */
 
-import { useState, useEffect, useCallback, Fragment } from "react";
+import { useState, useEffect, useCallback, useMemo, Fragment } from "react";
 
 interface Score {
   id: string;
@@ -82,6 +82,16 @@ export function AdminMonitor() {
   const [selectedScore, setSelectedScore] = useState<string | null>(null);
   const [showRejected, setShowRejected] = useState(true);
   const [expandedRejected, setExpandedRejected] = useState<string | null>(null);
+
+  // Rejected-submissions filters (in memory; survive REFRESH and APPROVE refetch)
+  const [fCode, setFCode] = useState<string>("ALL");
+  const [fStatus, setFStatus] = useState<"ALL" | "PENDING" | "APPROVED">("ALL");
+  const [fRange, setFRange] = useState<"ALL" | "24H" | "7D" | "30D" | "CUSTOM">("ALL");
+  const [fFrom, setFFrom] = useState<string>("");
+  const [fTo, setFTo] = useState<string>("");
+
+  // Scores table season filter
+  const [fSeason, setFSeason] = useState<string>("ALL");
 
   const fetchData = useCallback(async (key: string) => {
     setLoading(true);
@@ -169,9 +179,7 @@ export function AdminMonitor() {
   };
 
   const exportCSV = () => {
-    const flaggedScoreIds = new Set(flags.map((f) => f.score_id));
-    const rows = scores
-      .filter((s) => filter === "all" || flaggedScoreIds.has(s.id))
+    const rows = displayScores
       .map((s) => {
         const scoreFlags = flags.filter((f) => f.score_id === s.id);
         return [
@@ -195,8 +203,84 @@ export function AdminMonitor() {
     URL.revokeObjectURL(url);
   };
 
+  // Distinct rejection codes with counts over the whole loaded list (null/empty → "(none)")
+  const codeCounts = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const r of rejected) {
+      const c = r.code && r.code.trim() ? r.code : "(none)";
+      m.set(c, (m.get(c) ?? 0) + 1);
+    }
+    return [...m.entries()].sort((a, b) => b[1] - a[1]);
+  }, [rejected]);
+
+  const filtersActive =
+    fCode !== "ALL" || fStatus !== "ALL" || fRange !== "ALL" || fFrom !== "" || fTo !== "";
+
+  const clearFilters = () => {
+    setFCode("ALL");
+    setFStatus("ALL");
+    setFRange("ALL");
+    setFFrom("");
+    setFTo("");
+  };
+
+  const visibleRejected = useMemo(() => {
+    let from = 0;
+    let to = Infinity;
+    if (fRange === "24H") from = Date.now() - 24 * 3600 * 1000;
+    else if (fRange === "7D") from = Date.now() - 7 * 24 * 3600 * 1000;
+    else if (fRange === "30D") from = Date.now() - 30 * 24 * 3600 * 1000;
+    else if (fRange === "CUSTOM") {
+      if (fFrom) {
+        const d = new Date(fFrom + "T00:00:00");
+        if (!isNaN(d.getTime())) from = d.getTime();
+      }
+      if (fTo) {
+        const d = new Date(fTo + "T23:59:59.999");
+        if (!isNaN(d.getTime())) to = d.getTime();
+      }
+      if (from > to) [from, to] = [to, from];
+    }
+    return rejected
+      .filter((r) => {
+        if (fCode !== "ALL") {
+          const c = r.code && r.code.trim() ? r.code : "(none)";
+          if (c !== fCode) return false;
+        }
+        if (fStatus === "PENDING" && r.approved) return false;
+        if (fStatus === "APPROVED" && !r.approved) return false;
+        const t = new Date(r.created_at).getTime();
+        if (t < from || t > to) return false;
+        return true;
+      })
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  }, [rejected, fCode, fStatus, fRange, fFrom, fTo]);
+
+  // Collapse the expanded rejected row if it was filtered out
+  useEffect(() => {
+    if (expandedRejected && !visibleRejected.some((r) => r.id === expandedRejected)) {
+      setExpandedRejected(null);
+    }
+  }, [visibleRejected, expandedRejected]);
+
+  // Distinct seasons present in the loaded scores, newest first
+  const seasonCounts = useMemo(() => {
+    const m = new Map<number, number>();
+    for (const s of scores) m.set(s.season ?? 1, (m.get(s.season ?? 1) ?? 0) + 1);
+    return [...m.entries()].sort((a, b) => b[0] - a[0]);
+  }, [scores]);
+
   const flaggedScoreIds = new Set(flags.map((f) => f.score_id));
-  const displayScores = filter === "all" ? scores : scores.filter((s) => flaggedScoreIds.has(s.id));
+  const displayScores = useMemo(
+    () =>
+      scores.filter((s) => {
+        if (filter === "flagged" && !flaggedScoreIds.has(s.id)) return false;
+        if (fSeason !== "ALL" && String(s.season ?? 1) !== fSeason) return false;
+        return true;
+      }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [scores, filter, fSeason, flags]
+  );
 
   const getScoreFlags = (scoreId: string) => flags.filter((f) => f.score_id === scoreId);
   const getAudit = (scoreId: string) => auditLogs.find((a) => a.score_id === scoreId);
