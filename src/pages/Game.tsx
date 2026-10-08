@@ -1065,6 +1065,14 @@ const Game = () => {
       }
       if (!response.ok) {
         const body = await response.json().catch(() => ({}));
+        if (response.status === 403 && body.error === "Session expired") {
+          // Server sessions last 1 hour; further check-ins for this run are pointless.
+          if (heartbeatIntervalRef.current) {
+            clearInterval(heartbeatIntervalRef.current);
+            heartbeatIntervalRef.current = null;
+          }
+          return;
+        }
         if (response.status !== 429) console.warn("[heartbeat]", response.status, body.error);
       }
     } catch (error) {
