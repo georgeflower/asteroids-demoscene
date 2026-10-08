@@ -1,6 +1,6 @@
 // Set to true to enable debug logging panel, trainer mode, and level skip cheats.
 // This flag gates ALL debug features — when false, zero overhead.
-export const DEBUG_ENABLED = false;
+export const DEBUG_ENABLED = true; // TEMP for browser verification; revert before finish
 
 export type DebugCategory = "collision" | "spawn" | "wave" | "powerup" | "death" | "boss" | "input";
 
