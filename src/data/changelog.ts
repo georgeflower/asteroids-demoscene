@@ -4,6 +4,9 @@ export interface ChangelogRelease { version: string; date: string; title?: strin
 export const COMING_NEXT: ChangelogSection[] = [];
 
 export const CHANGELOG: ChangelogRelease[] = [
+  { version: "0.6.2", date: "2026-10-08", title: "Game Over fix", sections: [
+    { label: "Fixed", items: ["Pressing Enter on the Game Over screen with your initials already filled in now saves the score instead of starting a new game", "Holding the fire key when you die no longer skips the Game Over screen"] },
+  ] },
   { version: "0.6.1", date: "2026-10-06", title: "More drops", sections: [
     { label: "Changed", items: ["Power-ups drop about twice as often, last 7 s, and a drop is guaranteed after 30 s without one", "Rare extra-life drops from normal enemies (never at 4+ lives)"] },
     { label: "Fixed", items: ["High scores always save to both local and cloud boards", "Black screen after returning to the menu and starting Solo again"] },
