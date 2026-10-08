@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.6.2] - 2026-10-08 — Game Over fix
+
+### Fixed
+
+- Pressing Enter on the Game Over screen with your initials already filled in now saves the score instead of starting a new game
+- Holding the fire key when you die no longer skips the Game Over screen
+
 ## [0.6.1] - 2026-10-06 — More drops
 
 ### Changed
