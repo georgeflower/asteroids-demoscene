@@ -2,9 +2,9 @@
 // This flag gates ALL debug features — when false, zero overhead.
 export const DEBUG_ENABLED = false;
 
-export type DebugCategory = "collision" | "spawn" | "wave" | "powerup" | "death" | "boss" | "input";
+export type DebugCategory = "collision" | "spawn" | "wave" | "powerup" | "death" | "boss" | "input" | "respawn";
 
-export const DEBUG_CATEGORIES: DebugCategory[] = ["collision", "spawn", "wave", "powerup", "death", "boss", "input"];
+export const DEBUG_CATEGORIES: DebugCategory[] = ["collision", "spawn", "wave", "powerup", "death", "boss", "input", "respawn"];
 
 export interface DebugLogEntry {
   timestamp: number;

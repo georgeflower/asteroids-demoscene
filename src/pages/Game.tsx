@@ -323,6 +323,8 @@ interface LocalScore {
 // const HIGH_SCORES_ENABLED = false; // imported from gameConstants
 
 const SHIP_SIZE = 10;
+const wrapDelta = (a: number, b: number, size: number) => { let d = a - b; if (d > size / 2) d -= size; if (d < -size / 2) d += size; return d; };
+const torusDist = (a: Vector, b: Vector) => Math.hypot(wrapDelta(a.x, b.x, CANVAS_WIDTH), wrapDelta(a.y, b.y, CANVAS_HEIGHT));
 const BULLET_SPEED = 7;
 const ASTEROID_SPEEDS = { large: 0.5, medium: 0.8, small: 1.2 };
 const ASTEROID_POINTS = { large: 20, medium: 50, small: 100 };
@@ -1401,6 +1403,52 @@ const Game = () => {
     hyperspaceCooldown: 0,
   });
 
+  /** Solo respawn: pick the candidate point farthest (wrap-aware, with lookahead) from all hazards. */
+  const findQuietSpot = (state: GameState): Vector => {
+    const S = BALANCE.SAFETY;
+    const minX = S.RESPAWN_MARGIN_X, maxX = CANVAS_WIDTH - S.RESPAWN_MARGIN_X;
+    const minY = S.RESPAWN_MARGIN_Y, maxY = CANVAS_HEIGHT - S.RESPAWN_MARGIN_Y;
+    const candidates: Vector[] = [];
+    for (let i = 0; i < 9; i++) {
+      for (let j = 0; j < 6; j++) {
+        candidates.push({ x: minX + ((i + 0.5) * (maxX - minX)) / 9, y: minY + ((j + 0.5) * (maxY - minY)) / 6 });
+      }
+    }
+    for (let k = 0; k < 40; k++) {
+      candidates.push({ x: minX + Math.random() * (maxX - minX), y: minY + Math.random() * (maxY - minY) });
+    }
+    type Hazard = { pos: Vector; vel: Vector; r: number; maxT: number };
+    const hazards: Hazard[] = [];
+    for (const a of state.asteroids) hazards.push({ pos: a.pos, vel: a.vel, r: a.size === "large" ? 40 : a.size === "medium" ? 25 : 12, maxT: Infinity });
+    for (const u of state.ufos) hazards.push({ pos: u.pos, vel: u.vel, r: u.size === "large" ? 20 : 10, maxT: Infinity });
+    for (const al of state.aliens) hazards.push({ pos: al.pos, vel: al.vel, r: 14, maxT: Infinity });
+    if (state.boss) hazards.push({ pos: state.boss.pos, vel: { x: 0, y: 0 }, r: 65, maxT: Infinity });
+    for (const b of state.bullets) {
+      if (b.isUFO || b.isAlien) hazards.push({ pos: b.pos, vel: b.vel, r: 4, maxT: b.lifetime });
+    }
+    const cx = CANVAS_WIDTH / 2, cy = CANVAS_HEIGHT / 2;
+    let best = { x: cx, y: cy };
+    let bestScore = -Infinity;
+    let bestCenter = Infinity;
+    for (const c of candidates) {
+      let score = Infinity;
+      for (const h of hazards) {
+        for (const t of S.RESPAWN_LOOKAHEAD_TICKS) {
+          if (t > h.maxT) continue;
+          const p = { x: h.pos.x + h.vel.x * t, y: h.pos.y + h.vel.y * t };
+          const s = torusDist(c, p) - h.r - SHIP_SIZE;
+          if (s < score) score = s;
+        }
+      }
+      const centre = Math.hypot(c.x - cx, c.y - cy);
+      if (score > bestScore || (score === bestScore && centre < bestCenter)) {
+        best = c; bestScore = score; bestCenter = centre;
+      }
+    }
+    addDebugLog("respawn", `Respawn at (${Math.round(best.x)}, ${Math.round(best.y)}), score ${bestScore === Infinity ? "Infinity" : Math.round(bestScore)}`);
+    return best;
+  };
+
   const createAsteroid = (x: number, y: number, size: "large" | "medium" | "small", wave = 1): Asteroid => {
     const points: Vector[] = [];
     const numPoints = 8 + Math.floor(Math.random() * 4);
@@ -2376,7 +2424,9 @@ const Game = () => {
       addDebugLog("boss", `Boss spawned for wave ${state.wave}, HP: ${state.boss.hp}`);
       state.asteroids = [];
       state.aliens = [];
-      state.ship = createShip();
+      state.ship.hyperspaceCooldown = 0;
+      state.ship.invulnerable = true;
+      state.ship.invulnerableTime = Math.max(state.ship.invulnerableTime, BALANCE.SAFETY.BOSS_START_GRACE_TICKS);
       setDisplayWave(state.wave);
 
       const theme = getTheme(state.wave);
@@ -2394,21 +2444,21 @@ const Game = () => {
     const asteroids: Asteroid[] = [];
 
     for (let i = 0; i < numAsteroids; i++) {
-      let x: number, y: number, dist: number;
-      let retries = 0;
-      do {
-        x = Math.random() * CANVAS_WIDTH;
-        y = Math.random() * CANVAS_HEIGHT;
-        dist = Math.hypot(x - CANVAS_WIDTH / 2, y - CANVAS_HEIGHT / 2);
-        retries++;
-      } while (dist <= 150 && retries < 100);
-      if (dist > 150) {
-        asteroids.push(createAsteroid(x, y, "large", state.wave));
+      let best: Vector = { x: 0, y: 0 };
+      let bestDist = -1;
+      for (let retries = 0; retries < 100; retries++) {
+        const p = { x: Math.random() * CANVAS_WIDTH, y: Math.random() * CANVAS_HEIGHT };
+        const d = torusDist(p, state.ship.pos);
+        if (d > bestDist) { bestDist = d; best = p; }
+        if (d >= BALANCE.SAFETY.WAVE_START_MIN_DIST) break;
       }
+      asteroids.push(createAsteroid(best.x, best.y, "large", state.wave));
     }
 
     state.asteroids = asteroids;
-    state.ship = createShip();
+    state.ship.hyperspaceCooldown = 0;
+    state.ship.invulnerable = true;
+    state.ship.invulnerableTime = Math.max(state.ship.invulnerableTime, BALANCE.SAFETY.WAVE_START_GRACE_TICKS);
     state.alienSpawnTimer = BALANCE.ALIENS.FIRST_EVENT_TICKS;
     state.alienSpawnBudget = Math.min(BALANCE.ALIENS.BUDGET_BASE + Math.floor(state.wave / BALANCE.ALIENS.BUDGET_PER_WAVES), BALANCE.ALIENS.BUDGET_MAX);
     setDisplayWave(state.wave);
@@ -2548,7 +2598,8 @@ const Game = () => {
       state.lives--;
       state.lifeLostThisWave = true;
       setDisplayLives(state.lives);
-      state.ship = createShip();
+      const spot = findQuietSpot(state);
+      state.ship = createShip(spot.x, spot.y);
       soundEffects.explode();
       soundEffects.stopThrust();
       haptics.heavy();

@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.6.3] - 2026-10-09 — Safer respawns
+
+### Changed
+
+- After losing a life the ship now respawns in the quietest part of the screen
+- The ship stays where it is when a wave is cleared; new asteroids appear away from it
+
 ## [0.6.2] - 2026-10-08 — Game Over fix
 
 ### Fixed

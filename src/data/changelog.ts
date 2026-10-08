@@ -4,6 +4,9 @@ export interface ChangelogRelease { version: string; date: string; title?: strin
 export const COMING_NEXT: ChangelogSection[] = [];
 
 export const CHANGELOG: ChangelogRelease[] = [
+  { version: "0.6.3", date: "2026-10-09", title: "Safer respawns", sections: [
+    { label: "Changed", items: ["Respawn in the quietest part of the screen after losing a life", "Ship keeps its place when a wave clears; new asteroids appear away from it"] },
+  ] },
   { version: "0.6.2", date: "2026-10-08", title: "Game Over fix", sections: [
     { label: "Fixed", items: ["Pressing Enter on the Game Over screen with your initials already filled in now saves the score instead of starting a new game", "Holding the fire key when you die no longer skips the Game Over screen"] },
   ] },
