@@ -1445,7 +1445,7 @@ const Game = () => {
         best = c; bestScore = score; bestCenter = centre;
       }
     }
-    addDebugLog("respawn" as DebugCategory, `Respawn at (${Math.round(best.x)}, ${Math.round(best.y)}), score ${bestScore === Infinity ? "Infinity" : Math.round(bestScore)}`);
+    addDebugLog("respawn", `Respawn at (${Math.round(best.x)}, ${Math.round(best.y)}), score ${bestScore === Infinity ? "Infinity" : Math.round(bestScore)}`);
     return best;
   };
 

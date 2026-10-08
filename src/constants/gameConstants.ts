@@ -103,6 +103,15 @@ export const BALANCE = {
     BURST_GAP_RAND: 60,
     LIFETIME_TICKS: 1800,
   },
+  // Solo respawn / wave-start safety: respawn search area and lookahead, asteroid spawn distance, start grace.
+  SAFETY: {
+    RESPAWN_MARGIN_X: 100,
+    RESPAWN_MARGIN_Y: 80,
+    RESPAWN_LOOKAHEAD_TICKS: [0, 30, 60, 90],
+    WAVE_START_MIN_DIST: 220,
+    WAVE_START_GRACE_TICKS: 60,
+    BOSS_START_GRACE_TICKS: 120,
+  },
   UFO: {
     SMALL_AFTER_WAVE: 9,
     SMALL_CHANCE: 0.35,
