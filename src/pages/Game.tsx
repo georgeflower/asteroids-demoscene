@@ -5917,10 +5917,19 @@ const Game = () => {
     if (!showGameOver) return;
     if (gameMode === "online" || gameMode === "online_coop") return;
     const handleGameOverKey = (e: KeyboardEvent) => {
+      // Held-key auto-repeat must never trigger a game-over action
+      if (e.repeat) return;
       if (e.key !== "Enter" && e.key !== " ") return;
       // Do not intercept if the initials text input has focus
       if (document.activeElement instanceof HTMLInputElement) return;
       e.preventDefault();
+      // Initials form showing: Enter saves the score, Space does nothing
+      if (enteringInitialsRef.current) {
+        if (e.key === "Enter" && initials.trim().length > 0) {
+          submitInitials(initials, displayScore);
+        }
+        return;
+      }
       if (gameOverSelectionRef.current === 0) {
         initGame();
       } else {
@@ -5935,7 +5944,7 @@ const Game = () => {
     };
     window.addEventListener("keydown", handleGameOverKey);
     return () => window.removeEventListener("keydown", handleGameOverKey);
-  }, [showGameOver, gameMode, initGame]);
+  }, [showGameOver, gameMode, initGame, initials, displayScore, submitInitials]);
 
   const continueAfterLifeLost = useCallback(() => {
     showLifeLostRef.current = false;
@@ -6304,7 +6313,13 @@ const Game = () => {
               setGameOverSelection(next);
             }
             if (justA) {
-              if (gameOverSelectionRef.current === 0) {
+              if (enteringInitialsRef.current) {
+                // Initials form showing: A saves the score when initials are present
+                if (initials.trim().length > 0) {
+                  submitInitials(initials, displayScore);
+                }
+                // Empty initials: nothing to do (no way to type on a pad)
+              } else if (gameOverSelectionRef.current === 0) {
                 initGame();
               } else {
                 gameStateRef.current = null;
