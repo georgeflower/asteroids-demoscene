@@ -6344,7 +6344,7 @@ const Game = () => {
     };
     rafId = requestAnimationFrame(poll);
     return () => cancelAnimationFrame(rafId);
-  }, [initGame, initDuel, initCoop, showGameOver, togglePause, resumeGame, quitToMenu, canUseKeyboard]);
+  }, [initGame, initDuel, initCoop, showGameOver, togglePause, resumeGame, quitToMenu, canUseKeyboard, initials, displayScore, submitInitials]);
 
   // ===== CRT BOOT ANIMATION =====
   if (showBootAnimation) {
