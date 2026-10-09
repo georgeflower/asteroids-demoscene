@@ -138,6 +138,10 @@ interface Boss extends GameObject {
   bounceVelY?: number;
   rotAngle?: number;
   lastBounceFrame?: number;
+  ballStage?: number;
+  dashTimer?: number;
+  dashState?: "hover" | "drop";
+  dashTicks?: number;
   // Flying Saucer specific
   tractorBeamAngle?: number;
   tractorBeamActive?: boolean;
@@ -784,8 +788,8 @@ const Game = () => {
   const marqueeGradientRef = useRef<CanvasGradient | null>(null);
   const olMarqueeGradientRef = useRef<CanvasGradient | null>(null);
   const cachedCanvasSize = useRef<{ w: number; h: number }>({ w: 0, h: 0 });
-  // Pre-rendered Amiga Ball boss cache (avoids ~1100 fillRect calls per frame)
-  const amigaBallCacheRef = useRef<{ canvas: OffscreenCanvas; lastRotAngle: number; lastHitFlash: boolean } | null>(null);
+  // One checker cycle, shared by solo and worker boss drawing; no per-tick rasterization.
+  const amigaBallCacheRef = useRef<{ frames: OffscreenCanvas[]; silhouette: OffscreenCanvas } | null>(null);
   // Pre-rendered star layer canvases (one per parallax layer, avoids 120 arc() calls/frame)
   const starLayerCanvasesRef = useRef<(OffscreenCanvas | null)[]>([null, null, null]);
   const starLayerStarsRef = useRef<Star[]>([]);
@@ -1656,8 +1660,10 @@ const Game = () => {
     if (bossType === "amigaBall") {
       base.hp = Math.floor(baseHp * 1.2);
       base.maxHp = base.hp;
-      base.bounceVelX = 1 + Math.random() * 1;
-      base.bounceVelY = -3;
+      base.bounceVelX = Math.random() < 0.5 ? -1 : 1;
+      base.bounceVelY = 0;
+      base.ballStage = 0;
+      base.dashTimer = BALANCE.AMIGA.DASH_INTERVAL_TICKS[0] + Math.floor(Math.random() * (BALANCE.AMIGA.DASH_INTERVAL_TICKS[1] - BALANCE.AMIGA.DASH_INTERVAL_TICKS[0] + 1));
       base.rotAngle = 0;
       base.lastBounceFrame = 0;
       base.targetY = 150;
@@ -3586,61 +3592,126 @@ const Game = () => {
           }
         }
       } else if (boss.bossType === "amigaBall") {
-        // Bouncing ball physics
-        boss.rotAngle = (boss.rotAngle ?? 0) + 0.015;
-        const gravity = 0.025;
-        boss.bounceVelY = (boss.bounceVelY ?? 0) + gravity;
-        boss.bounceVelX = boss.bounceVelX ?? 1 + Math.random() * 1.5;
-        boss.pos.x += boss.bounceVelX;
-        boss.pos.y += boss.bounceVelY;
-        boss.lastBounceFrame = (boss.lastBounceFrame ?? 0) + 1;
-
-        // Wall bounce
-        if (boss.pos.x < 60 || boss.pos.x > CANVAS_WIDTH - 60) {
-          boss.bounceVelX *= -1;
-          boss.pos.x = Math.max(60, Math.min(CANVAS_WIDTH - 60, boss.pos.x));
+        // Solo Boing ball (worker movement and attacks stay independent).
+        const a = BALANCE.AMIGA;
+        const stage = boss.hp > a.STAGE_HP[0] * boss.maxHp ? 0 : boss.hp > a.STAGE_HP[1] * boss.maxHp ? 1 : 2;
+        const ring = () => {
+          for (let i = 0; i < 12; i++) {
+            const ang = (i / 12) * Math.PI * 2;
+            state.particles.push({
+              pos: { x: boss.pos.x, y: boss.pos.y + a.RADIUS },
+              vel: { x: Math.cos(ang) * 4, y: Math.sin(ang) * 1.5 },
+              lifetime: 30, maxLifetime: 30, color: "#FF4444", size: 3,
+            });
+          }
+          soundEffects.explode();
+        };
+        if (stage > (boss.ballStage ?? 0)) {
+          ring();
+          addShake(3, 12);
+          // A stage change must not leave the slower stage's long attack gap.
+          boss.shootTimer = Math.min(boss.shootTimer, Math.max(a.BURST_MIN_TICKS, Math.floor(Math.max(90, 180 - state.wave * 2) * a.BURST_INTERVAL_MUL[stage])));
         }
-        // Floor/ceiling bounce
-        if (boss.pos.y > CANVAS_HEIGHT - 80) {
-          boss.bounceVelY = -(Math.abs(boss.bounceVelY) * 0.5 + 0.5 + Math.random() * 2);
-          boss.pos.y = CANVAS_HEIGHT - 80;
-          // Shockwave on bounce
-          if (boss.lastBounceFrame > 30) {
-            boss.lastBounceFrame = 0;
-            for (let i = 0; i < 12; i++) {
-              const ang = (i / 12) * Math.PI * 2;
-              state.particles.push({
-                pos: { x: boss.pos.x, y: boss.pos.y + 50 },
-                vel: { x: Math.cos(ang) * 4, y: Math.sin(ang) * 1.5 },
-                lifetime: 30,
-                maxLifetime: 30,
-                color: "#FF4444",
-                size: 3,
-              });
+        boss.ballStage = stage;
+        const speedX = Math.min(a.SPEED_X_MAX, (a.SPEED_X_BASE + a.SPEED_X_PER_WAVE * Math.min(state.wave, 30)) * a.SPEED_X_STAGE_MUL[stage]);
+        const rerollDash = () => a.DASH_INTERVAL_TICKS[0] + Math.floor(Math.random() * (a.DASH_INTERVAL_TICKS[1] - a.DASH_INTERVAL_TICKS[0] + 1));
+        if (stage === 2 && !boss.dashState) boss.dashTimer = Math.max(0, (boss.dashTimer ?? rerollDash()) - 1);
+        const wasDashing = boss.dashState !== undefined;
+        const previousVy = boss.bounceVelY ?? 0;
+        if (boss.dashState === "hover") {
+          boss.bounceVelX = 0;
+          boss.bounceVelY = 0;
+          if ((boss.dashTicks ?? 0) > a.DASH_LOCK_TICKS) {
+            const dx = state.ship.pos.x - boss.pos.x;
+            boss.pos.x = Math.max(60, Math.min(CANVAS_WIDTH - 60, boss.pos.x + Math.max(-a.DASH_TRACK_SPEED, Math.min(a.DASH_TRACK_SPEED, dx))));
+          }
+          boss.dashTicks = Math.max(0, (boss.dashTicks ?? 0) - 1);
+          if (boss.dashTicks === 0) {
+            boss.dashState = "drop";
+            boss.bounceVelY = a.DASH_DROP_SPEED;
+          }
+        } else {
+          if (boss.dashState === "drop") {
+            boss.bounceVelX = 0;
+            boss.bounceVelY = a.DASH_DROP_SPEED;
+          } else {
+            boss.bounceVelX = (Math.sign(boss.bounceVelX ?? 0) || Math.sign(boss.vel.x) || 1) * speedX;
+            boss.bounceVelY = previousVy + a.GRAVITY;
+          }
+          boss.pos.x += boss.bounceVelX;
+          boss.pos.y += boss.bounceVelY;
+          if (boss.pos.x < 60 || boss.pos.x > CANVAS_WIDTH - 60) {
+            boss.bounceVelX *= -1;
+            boss.pos.x = Math.max(60, Math.min(CANVAS_WIDTH - 60, boss.pos.x));
+          }
+          if (boss.pos.y >= CANVAS_HEIGHT - a.FLOOR_OFFSET) {
+            boss.pos.y = CANVAS_HEIGHT - a.FLOOR_OFFSET;
+            boss.bounceVelY = -a.BOUNCE_VY[stage] * (1 + (Math.random() * 2 - 1) * a.BOUNCE_VARIANCE);
+            let direction = Math.sign(boss.bounceVelX) || Math.sign(boss.vel.x) || 1;
+            const dx = state.ship.pos.x - boss.pos.x;
+            if (Math.random() < a.TURN_TO_SHIP[stage] && Math.abs(dx) > 150) direction = Math.sign(dx);
+            boss.bounceVelX = direction * speedX;
+            if (boss.dashState === "drop") {
+              boss.dashState = undefined;
+              boss.dashTicks = undefined;
+              boss.dashTimer = rerollDash();
             }
-            soundEffects.explode();
+            ring();
+            addShake(1.5, 8);
+            for (const side of [-1, 1]) {
+              for (let i = 0; i < a.SLAM_PER_SIDE[stage]; i++) {
+                const speed = a.SLAM_SPEED[stage] + i * a.SLAM_EXTRA_SPEED;
+                const distance = side < 0 ? boss.pos.x : CANVAS_WIDTH - boss.pos.x;
+                state.bullets.push({
+                  pos: { x: boss.pos.x, y: CANVAS_HEIGHT - 50 },
+                  vel: { x: side * speed, y: 0 }, rotation: side < 0 ? Math.PI : 0,
+                  // Generic bullets wrap before expiry: remove at/before the first edge crossing.
+                  lifetime: Math.max(1, Math.floor(distance / speed)), isUFO: true, color: "#FF4444",
+                });
+              }
+            }
+          }
+          if (boss.pos.y < 40) {
+            boss.bounceVelY = Math.abs(boss.bounceVelY);
+            boss.pos.y = 40;
+          }
+          const apex = previousVy < 0 && boss.bounceVelY >= 0;
+          if (apex && !wasDashing) {
+            if (stage === 2 && (boss.dashTimer ?? 1) <= 0) {
+              // Preserve travel direction in the existing velocity while dash velocities are zero.
+              boss.vel.x = boss.bounceVelX;
+              boss.bounceVelX = 0;
+              boss.bounceVelY = 0;
+              boss.dashState = "hover";
+              boss.dashTicks = a.DASH_HOVER_TICKS;
+            } else {
+              const count = a.VOLLEY_COUNT[stage];
+              const aim = Math.atan2(state.ship.pos.y - boss.pos.y, state.ship.pos.x - boss.pos.x);
+              for (let i = 0; i < count; i++) {
+                const ang = aim + (i - (count - 1) / 2) * a.VOLLEY_SPREAD_DEG * Math.PI / 180;
+                state.bullets.push({
+                  pos: { ...boss.pos }, vel: { x: Math.cos(ang) * a.VOLLEY_SPEED[stage], y: Math.sin(ang) * a.VOLLEY_SPEED[stage] },
+                  rotation: ang, lifetime: BULLET_LIFETIME * 2.5, isUFO: true, color: "#CC0000",
+                });
+              }
+            }
           }
         }
-        if (boss.pos.y < 40) {
-          boss.bounceVelY = Math.abs(boss.bounceVelY);
-          boss.pos.y = 40;
-        }
-
-        // Radial burst attack
-        boss.shootTimer--;
-        if (boss.shootTimer <= 0) {
-          boss.shootTimer = Math.max(90, 180 - state.wave * 2);
-          const count = 8;
-          for (let i = 0; i < count; i++) {
-            const ang = (i / count) * Math.PI * 2;
-            state.bullets.push({
-              pos: { ...boss.pos },
-              vel: { x: Math.cos(ang) * 2, y: Math.sin(ang) * 2 },
-              rotation: ang,
-              lifetime: BULLET_LIFETIME * 2.5,
-              isUFO: true,
-              color: "#CC0000",
-            });
+        boss.rotAngle = (boss.rotAngle ?? 0) + Math.sign(boss.bounceVelX ?? 0) * a.SPIN_PER_TICK;
+        if (!wasDashing && !boss.dashState) {
+          boss.shootTimer--;
+          if (boss.shootTimer <= 0) {
+            boss.shootTimer = Math.max(a.BURST_MIN_TICKS, Math.floor(Math.max(90, 180 - state.wave * 2) * a.BURST_INTERVAL_MUL[stage]));
+            const count = a.BURST_COUNT[stage];
+            const offset = ((boss.lastBounceFrame ?? 0) % 2) * Math.PI / count;
+            boss.lastBounceFrame = (boss.lastBounceFrame ?? 0) + 1;
+            for (let i = 0; i < count; i++) {
+              const ang = (i / count) * Math.PI * 2 + offset;
+              state.bullets.push({
+                pos: { ...boss.pos }, vel: { x: Math.cos(ang) * a.BURST_SPEED[stage], y: Math.sin(ang) * a.BURST_SPEED[stage] },
+                rotation: ang, lifetime: BULLET_LIFETIME * 2.5, isUFO: true, color: "#CC0000",
+              });
+            }
           }
         }
       } else if (boss.bossType === "flyingSaucer") {
@@ -4208,20 +4279,51 @@ const Game = () => {
       ctx.arc(0, -5, 6, 0, Math.PI * 2);
       ctx.fill();
     } else if (boss.bossType === "amigaBall") {
-      const radius = 50;
+      const a = BALANCE.AMIGA;
+      const radius = a.RADIUS;
       const rotAngle = boss.rotAngle ?? 0;
       const hitFlash = boss.hitFlash > 0;
       const ballCanvas = getAmigaBallCanvas(radius, rotAngle, hitFlash);
-      ctx.drawImage(ballCanvas, -radius - 2, -radius - 2);
-      // Shadow beneath ball
-      ctx.save();
-      ctx.translate(0, radius + 10);
-      ctx.scale(1, 0.3);
-      ctx.fillStyle = "rgba(0,0,0,0.3)";
+      // Original upright drop shadow follows the sphere, independently of its tilt.
+      ctx.fillStyle = "rgba(60,0,60,0.35)";
       ctx.beginPath();
-      ctx.arc(0, 0, radius * 0.8, 0, Math.PI * 2);
+      ctx.ellipse(a.DROP_SHADOW_X * radius, 0, radius, radius, 0, 0, Math.PI * 2);
       ctx.fill();
-      ctx.restore();
+      const floorContactY = CANVAS_HEIGHT - a.FLOOR_OFFSET;
+      const floorY = floorContactY + radius + 2 - boss.pos.y;
+      const k = Math.max(0, Math.min(1, Math.max(0, floorContactY - boss.pos.y) / 450));
+      const width = radius * 1.3 * (1 - 0.55 * k);
+      ctx.fillStyle = `rgba(60,0,60,${0.38 - 0.24 * k})`;
+      ctx.beginPath();
+      ctx.ellipse(0, floorY, width, width * 0.3, 0, 0, Math.PI * 2);
+      ctx.fill();
+      let jitter = 0;
+      if (boss.dashState === "hover") {
+        const ticks = boss.dashTicks ?? 0;
+        ctx.save();
+        ctx.strokeStyle = "#FF4444";
+        ctx.globalAlpha *= 0.35;
+        ctx.lineWidth = 1;
+        ctx.setLineDash([4, 4]);
+        ctx.beginPath();
+        ctx.moveTo(0, radius + 2);
+        ctx.lineTo(0, floorY);
+        ctx.stroke();
+        ctx.restore();
+        const alpha = reducedMotionRef.current ? 0.9 : (0.55 + 0.45 * Math.sin(ticks * 0.4)) * (ticks <= a.DASH_LOCK_TICKS && Math.floor(ticks / 4) % 2 === 0 ? 0 : 1);
+        ctx.save();
+        ctx.globalAlpha *= alpha;
+        ctx.fillStyle = "#FF4444";
+        ctx.beginPath();
+        ctx.moveTo(0, floorY - 14);
+        ctx.lineTo(-9, floorY);
+        ctx.lineTo(9, floorY);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+        if (!reducedMotionRef.current) jitter = Math.sin(ticks * 2.1) * 2;
+      }
+      ctx.drawImage(ballCanvas, -radius - 2 + jitter, -radius - 2);
     } else if (boss.bossType === "flyingSaucer") {
       const flash = boss.hitFlash > 0;
       ctx.fillStyle = flash ? "#FFFFFF" : "#446688";
@@ -4391,59 +4493,57 @@ const Game = () => {
   const renderAmigaBall = (radius: number, rotAngle: number, hitFlash: boolean): OffscreenCanvas => {
     const size = radius * 2 + 4;
     const oc = new OffscreenCanvas(size, size);
-    const octx = oc.getContext("2d")!;
-    const lx = -0.5, ly = -0.7, lz = 0.5;
-    const llen = Math.hypot(lx, ly, lz);
-    const ldx = lx / llen, ldy = ly / llen, ldz = lz / llen;
-    const step = 3;
-    const cx = radius + 2, cy = radius + 2;
-    for (let py = -radius; py < radius; py += step) {
-      const xRange = Math.sqrt(radius * radius - py * py);
-      for (let px = -xRange; px < xRange; px += step) {
-        const nz = Math.sqrt(Math.max(0, radius * radius - px * px - py * py)) / radius;
-        const nx = px / radius;
-        const ny = py / radius;
-        const theta = Math.atan2(ny, nx);
-        const phi = Math.asin(Math.min(1, Math.max(-1, nz)));
-        const u = (((theta + rotAngle) / Math.PI) * 4 + 100) % 1;
-        const v = (((phi + Math.PI / 2) / Math.PI) * 4 + 100) % 1;
-        const isRed = (Math.floor(u * 2) + Math.floor(v * 2)) % 2 === 0;
-        const dot = nx * ldx + ny * ldy + nz * ldz;
-        const diffuse = Math.max(0.15, dot);
-        const reflZ = 2 * dot * nz - ldz;
-        const spec = Math.pow(Math.max(0, reflZ), 20) * 0.6;
-        let r: number, g: number, b: number;
-        if (hitFlash) {
-          r = g = b = 255;
-        } else if (isRed) {
-          r = Math.min(255, Math.floor(204 * diffuse + spec * 255));
-          g = Math.min(255, Math.floor(spec * 255));
-          b = Math.min(255, Math.floor(spec * 255));
-        } else {
-          r = Math.min(255, Math.floor(255 * diffuse + spec * 255));
-          g = Math.min(255, Math.floor(255 * diffuse + spec * 255));
-          b = Math.min(255, Math.floor(255 * diffuse + spec * 255));
+    const octx = oc.getContext("2d");
+    if (!octx) return oc;
+    const image = octx.createImageData(size, size);
+    const tilt = BALANCE.AMIGA.TILT_DEG * Math.PI / 180;
+    const cosTilt = Math.cos(tilt), sinTilt = Math.sin(tilt);
+    const cellSize = Math.PI / 8;
+    for (let py = 0; py < size; py++) {
+      for (let px = 0; px < size; px++) {
+        let coverage = 0, white = 0;
+        for (const sy of [0.25, 0.75]) {
+          for (const sx of [0.25, 0.75]) {
+            const x = (px + sx - radius - 2) / radius;
+            const y = (py + sy - radius - 2) / radius;
+            const squared = x * x + y * y;
+            if (squared > 1) continue;
+            const z = Math.sqrt(1 - squared);
+            // Undo a clockwise screen-plane tilt: north leans up and right.
+            const xr = x * cosTilt + y * sinTilt;
+            const yr = -x * sinTilt + y * cosTilt;
+            const lon = Math.atan2(xr, z) + rotAngle;
+            const lat = Math.asin(Math.max(-1, Math.min(1, -yr)));
+            const u = Math.floor(lon / cellSize);
+            const v = Math.floor((lat + Math.PI / 2) / cellSize);
+            coverage++;
+            if (hitFlash || ((u + v) & 1) !== 0) white++;
+          }
         }
-        octx.fillStyle = `rgb(${r},${g},${b})`;
-        octx.fillRect(cx + px - step / 2, cy + py - step / 2, step, step);
+        if (coverage === 0) continue;
+        const index = (py * size + px) * 4;
+        image.data[index] = 255;
+        // Average only covered samples: ImageData stores un-premultiplied RGB.
+        image.data[index + 1] = image.data[index + 2] = Math.round(255 * white / coverage);
+        image.data[index + 3] = Math.round(255 * coverage / 4);
       }
     }
+    octx.putImageData(image, 0, 0);
     return oc;
   };
 
   const getAmigaBallCanvas = (radius: number, rotAngle: number, hitFlash: boolean): OffscreenCanvas => {
-    const cache = amigaBallCacheRef.current;
-    const ROT_THRESHOLD = (2 * Math.PI) / 180; // 2 degrees
-    if (
-      cache &&
-      Math.abs(cache.lastRotAngle - rotAngle) < ROT_THRESHOLD &&
-      cache.lastHitFlash === hitFlash
-    ) {
-      return cache.canvas;
+    if (!amigaBallCacheRef.current) {
+      amigaBallCacheRef.current = {
+        frames: Array.from({ length: 48 }, (_, i) => renderAmigaBall(radius, i * Math.PI / 4 / 48, false)),
+        silhouette: renderAmigaBall(radius, 0, true),
+      };
     }
-    const canvas = renderAmigaBall(radius, rotAngle, hitFlash);
-    amigaBallCacheRef.current = { canvas, lastRotAngle: rotAngle, lastHitFlash: hitFlash };
-    return canvas;
+    const cache = amigaBallCacheRef.current;
+    if (hitFlash) return cache.silhouette;
+    const period = Math.PI / 4;
+    const index = Math.floor((((rotAngle % period) + period) % period) / period * 48);
+    return cache.frames[index] ?? cache.silhouette;
   };
 
   // ===== DRAW SHIP HELPER =====
