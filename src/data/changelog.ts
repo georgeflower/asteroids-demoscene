@@ -4,6 +4,10 @@ export interface ChangelogRelease { version: string; date: string; title?: strin
 export const COMING_NEXT: ChangelogSection[] = [];
 
 export const CHANGELOG: ChangelogRelease[] = [
+  { version: "0.7.1", date: "2026-10-09", title: "Boing boss tuning", sections: [
+    { label: "Added", items: ["Stage markers on the boss HP bar and a red pulse on each new stage"] },
+    { label: "Changed", items: ["The Boing ball boss has more HP", "Harder stages start earlier, last longer and bring the first drop attack sooner"] },
+  ] },
   { version: "0.7.0", date: "2026-10-09", title: "Boing ball boss", sections: [
     { label: "Changed", items: ["Faithful tilted red/white Boing ball with its drop shadow and a floor shadow showing where it will land", "Steady bounce energy and three attack stages: ground shockwaves, aimed volleys and a telegraphed drop"] },
   ] },
