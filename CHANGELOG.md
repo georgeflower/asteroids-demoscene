@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.7.0] - 2026-10-09 — Boing ball boss
+
+### Changed
+
+- The Amiga boss is now a faithful Boing ball: tilted red/white checker sphere with its drop shadow, plus a floor shadow showing where it will land
+- The Boing ball keeps its bounce energy, speeds up and gets new attacks in three stages: ground shockwaves, aimed volleys and a telegraphed drop
+
 ## [0.6.4] - 2026-10-09 — Spawn warnings
 
 ### Added

@@ -4,6 +4,9 @@ export interface ChangelogRelease { version: string; date: string; title?: strin
 export const COMING_NEXT: ChangelogSection[] = [];
 
 export const CHANGELOG: ChangelogRelease[] = [
+  { version: "0.7.0", date: "2026-10-09", title: "Boing ball boss", sections: [
+    { label: "Changed", items: ["Faithful tilted red/white Boing ball with its drop shadow and a floor shadow showing where it will land", "Steady bounce energy and three attack stages: ground shockwaves, aimed volleys and a telegraphed drop"] },
+  ] },
   { version: "0.6.4", date: "2026-10-09", title: "Spawn warnings", sections: [
     { label: "Added", items: ["A 2-second arrow at the screen edge shows where a UFO or alien will fly in"] },
     { label: "Changed", items: ["Enemies no longer enter right next to a ship parked at the edge"] },
