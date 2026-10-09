@@ -4,6 +4,10 @@ export interface ChangelogRelease { version: string; date: string; title?: strin
 export const COMING_NEXT: ChangelogSection[] = [];
 
 export const CHANGELOG: ChangelogRelease[] = [
+  { version: "0.6.4", date: "2026-10-09", title: "Spawn warnings", sections: [
+    { label: "Added", items: ["A 2-second arrow at the screen edge shows where a UFO or alien will fly in"] },
+    { label: "Changed", items: ["Enemies no longer enter right next to a ship parked at the edge"] },
+  ] },
   { version: "0.6.3", date: "2026-10-09", title: "Safer respawns", sections: [
     { label: "Changed", items: ["Respawn in the quietest part of the screen after losing a life", "Ship keeps its place when a wave clears; new asteroids appear away from it"] },
   ] },

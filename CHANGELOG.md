@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.6.4] - 2026-10-09 — Spawn warnings
+
+### Added
+
+- A 2-second arrow at the screen edge shows where a UFO or alien will fly in
+
+### Changed
+
+- Enemies no longer enter right next to a ship parked at the edge
+
 ## [0.6.3] - 2026-10-09 — Safer respawns
 
 ### Changed

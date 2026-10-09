@@ -121,6 +121,8 @@ interface Alien extends GameObject {
   flockId?: number;
 }
 
+type PendingSpawn = { kind: "ufo" | "alien"; ticks: number; side: "left" | "right"; ys: number[]; color: string; ufos?: UFO[]; aliens?: Alien[] };
+
 interface Boss extends GameObject {
   hp: number;
   maxHp: number;
@@ -205,6 +207,7 @@ const COLOR_THEMES: ColorTheme[] = [
 ];
 
 interface GameState {
+  pendingSpawns?: PendingSpawn[];
   alienSpawnBudget?: number;
   extraLifeCount?: number;
   lastDropTick?: number;
@@ -325,6 +328,72 @@ interface LocalScore {
 const SHIP_SIZE = 10;
 const wrapDelta = (a: number, b: number, size: number) => { let d = a - b; if (d > size / 2) d -= size; if (d < -size / 2) d += size; return d; };
 const torusDist = (a: Vector, b: Vector) => Math.hypot(wrapDelta(a.x, b.x, CANVAS_WIDTH), wrapDelta(a.y, b.y, CANVAS_HEIGHT));
+
+const schedulePending = (state: GameState, kind: PendingSpawn["kind"], entities: UFO[] | Alien[]) => {
+  const first = entities[0];
+  if (!first) return;
+  const W = BALANCE.WARNING;
+  let side: PendingSpawn["side"] = first.pos.x < CANVAS_WIDTH / 2 ? "left" : "right";
+  const conflicts = () => Math.abs(state.ship.pos.x - (side === "left" ? 0 : CANVAS_WIDTH)) < W.GUARD_EDGE_PX &&
+    entities.some(entity => Math.abs(wrapDelta(state.ship.pos.y, entity.pos.y, CANVAS_HEIGHT)) < W.GUARD_Y_PX);
+  const isGroup = kind === "alien" && entities.length > 1;
+  const margin = kind === "ufo" ? 50 : isGroup ? 60 : 30;
+  for (let tries = 0; conflicts() && tries < W.GUARD_TRIES; tries++) {
+    const centerY = entities.reduce((sum, entity) => sum + entity.pos.y, 0) / entities.length;
+    const shift = margin + Math.random() * (CANVAS_HEIGHT - margin * 2) - centerY;
+    for (const entity of entities) entity.pos.y += shift;
+  }
+  if (conflicts()) {
+    for (const entity of entities) {
+      entity.pos.x = CANVAS_WIDTH - entity.pos.x;
+      entity.vel.x = -entity.vel.x;
+    }
+    side = side === "left" ? "right" : "left";
+  }
+  const colors: Record<Alien["type"], string> = { brown: "#E08844", greenMan: "#44FF44", blueSentinel: "#4488FF", purpleSwarm: "#CC77FF" };
+  const aliens = kind === "alien" ? entities as Alien[] : undefined;
+  const pending: PendingSpawn = {
+    kind, ticks: W.TICKS, side, ys: entities.map(entity => entity.pos.y),
+    color: aliens?.[0] ? colors[aliens[0].type] : "#FF6666",
+    ...(kind === "ufo" ? { ufos: entities as UFO[] } : { aliens }),
+  };
+  (state.pendingSpawns ??= []).push(pending);
+};
+
+const drawSpawnWarnings = (ctx: CanvasRenderingContext2D, pending: PendingSpawn[], tick: number, reduceMotion: boolean) => {
+  ctx.save();
+  ctx.lineWidth = 1;
+  for (const entry of pending) {
+    const alpha = reduceMotion ? 0.9 : entry.ticks <= BALANCE.WARNING.BLINK_LAST_TICKS
+      ? (Math.floor(tick / 4) % 2 === 0 ? 1 : 0) : 0.55 + 0.45 * Math.sin(tick * 0.25);
+    const dir = entry.side === "left" ? 1 : -1;
+    const edge = entry.side === "left" ? 0 : CANVAS_WIDTH;
+    const x = edge + dir * 14;
+    for (const height of entry.ys) {
+      const y = Math.max(16, Math.min(CANVAS_HEIGHT - 16, height));
+      ctx.globalAlpha = 0.25 * alpha;
+      ctx.strokeStyle = entry.color;
+      ctx.setLineDash([4, 4]);
+      ctx.beginPath();
+      ctx.moveTo(edge, y);
+      ctx.lineTo(edge + dir * 70, y);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = entry.color;
+      ctx.strokeStyle = "#000000";
+      ctx.beginPath();
+      ctx.moveTo(x, y - 7);
+      ctx.lineTo(x + dir * 12, y);
+      ctx.lineTo(x, y + 7);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+    }
+  }
+  ctx.restore();
+};
+
 const BULLET_SPEED = 7;
 const ASTEROID_SPEEDS = { large: 0.5, medium: 0.8, small: 1.2 };
 const ASTEROID_POINTS = { large: 20, medium: 50, small: 100 };
@@ -1703,6 +1772,7 @@ const Game = () => {
       asteroids,
       bullets: [],
       ufos: [],
+      pendingSpawns: [],
       powerUps: [],
       score: 0,
       extraLifeCount: 0,
@@ -2417,6 +2487,7 @@ const Game = () => {
     const state = gameStateRef.current;
 
     state.wave++;
+    state.pendingSpawns = [];
     state.bullets = [];
     state.waveClearTimer = 0;
     state.lifeLostThisWave = false;
@@ -3193,13 +3264,25 @@ const Game = () => {
       return bullet.lifetime > 0;
     });
 
+    // Release warned solo entries before scheduling any new enemies.
+    const pendingSpawns = state.pendingSpawns ?? [];
+    for (let i = pendingSpawns.length - 1; i >= 0; i--) {
+      const pending = pendingSpawns[i];
+      pending.ticks--;
+      if (pending.ticks <= 0) {
+        if (pending.ufos) state.ufos.push(...pending.ufos);
+        if (pending.aliens) state.aliens.push(...pending.aliens);
+        pendingSpawns.splice(i, 1);
+      }
+    }
+
     // UFO spawn timer
     state.ufoSpawnTimer--;
-    if (state.ufoSpawnTimer <= 0 && state.ufos.length === 0 && !state.boss && state.waveClearTimer === 0) {
+    if (state.ufoSpawnTimer <= 0 && state.ufos.length === 0 && (state.pendingSpawns ?? []).every(p => p.kind !== "ufo") && !state.boss && state.waveClearTimer === 0) {
       const U = BALANCE.UFO;
       const size = state.wave > U.SMALL_AFTER_WAVE && Math.random() < U.SMALL_CHANCE ? "small" : "large";
-      state.ufos.push(createUFO(size));
-      addDebugLog("spawn", `UFO spawned (${size})`);
+      schedulePending(state, "ufo", [createUFO(size)]);
+      addDebugLog("spawn", `UFO spawned (${size}) (warning)`);
       state.ufoSpawnTimer = Math.max(U.INTERVAL_MIN, U.INTERVAL_BASE - U.INTERVAL_PER_WAVE * state.wave) + Math.random() * U.INTERVAL_RAND;
     }
 
@@ -3248,7 +3331,8 @@ const Game = () => {
         type AType = keyof typeof A.WEIGHTS;
         const units: Record<AType, number> = { brown: 0, greenMan: 0, blueSentinel: 0, purpleSwarm: 0 };
         const flocks = new Set<number | undefined>();
-        for (const a of state.aliens) {
+        const countedAliens = [...state.aliens, ...(state.pendingSpawns ?? []).flatMap(p => p.aliens ?? [])];
+        for (const a of countedAliens) {
           if (a.type === "purpleSwarm") flocks.add(a.flockId);
           else units[a.type]++;
         }
@@ -3269,7 +3353,7 @@ const Game = () => {
         } else {
           const t = pickWeighted(weights);
           if (t === "purpleSwarm") {
-            state.aliens.push(...spawnPurpleSwarmGroup(state.wave));
+            schedulePending(state, "alien", spawnPurpleSwarmGroup(state.wave));
           } else {
             const alien = createAlien(t, state.wave);
             if (t === "greenMan") {
@@ -3278,11 +3362,11 @@ const Game = () => {
               alien.teleportCooldown = BALANCE.BLUE.TELEPORT_COOLDOWN + Math.random() * BALANCE.BLUE.TELEPORT_RAND;
               alien.age = 0;
             }
-            state.aliens.push(alien);
+            schedulePending(state, "alien", [alien]);
           }
           balanceStatsRef.current.aliensSpawned[t]++;
           state.alienSpawnBudget = (state.alienSpawnBudget ?? 0) - 1;
-          addDebugLog("spawn", `${t} spawned (wave ${state.wave}, budget left ${state.alienSpawnBudget})`);
+          addDebugLog("spawn", `${t} spawned (wave ${state.wave}, budget left ${state.alienSpawnBudget}) (warning)`);
           state.alienSpawnTimer =
             Math.max(A.INTERVAL_MIN, A.INTERVAL_BASE - A.INTERVAL_PER_WAVE * state.wave) + Math.random() * A.INTERVAL_RAND;
         }
@@ -4060,7 +4144,7 @@ const Game = () => {
 
     // Check wave completion
     const noEnemies =
-      state.asteroids.length === 0 && state.ufos.length === 0 && state.aliens.length === 0 && !state.boss;
+      state.asteroids.length === 0 && state.ufos.length === 0 && state.aliens.length === 0 && !state.boss && (state.pendingSpawns?.length ?? 0) === 0;
     if (!state.gameOver) {
       if (state.waveClearTimer > 0) {
         state.waveClearTimer--;
@@ -4970,13 +5054,6 @@ const Game = () => {
         theme.asteroids,
       );
 
-      // Ship
-      const shipColor = state.powerUpActive.shield > 0 ? "#7FFF7F" : theme.ship;
-      drawShip(ctx, state.ship, shipColor);
-
-      // Bullets
-      drawBullets(ctx, state.bullets, theme.ship);
-
       // UFOs
       state.ufos.forEach((ufo) => {
         ctx.save();
@@ -5000,6 +5077,16 @@ const Game = () => {
         ctx.globalAlpha = 1;
         ctx.restore();
       });
+
+      // Entry warnings stay underneath the ship and inside the world shake.
+      drawSpawnWarnings(ctx, state.pendingSpawns ?? [], state.tick ?? 0, reducedMotionRef.current);
+
+      // Ship
+      const shipColor = state.powerUpActive.shield > 0 ? "#7FFF7F" : theme.ship;
+      drawShip(ctx, state.ship, shipColor);
+
+      // Bullets
+      drawBullets(ctx, state.bullets, theme.ship);
 
       // Boss
       if (state.boss) {
