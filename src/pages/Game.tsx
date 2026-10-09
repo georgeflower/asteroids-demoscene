@@ -139,6 +139,7 @@ interface Boss extends GameObject {
   rotAngle?: number;
   lastBounceFrame?: number;
   ballStage?: number;
+  stageFlash?: number;
   dashTimer?: number;
   dashState?: "hover" | "drop";
   dashTicks?: number;
@@ -1658,7 +1659,7 @@ const Game = () => {
     };
 
     if (bossType === "amigaBall") {
-      base.hp = Math.floor(baseHp * 1.2);
+      base.hp = Math.floor((3 + wave) * BALANCE.AMIGA.HP_MUL);
       base.maxHp = base.hp;
       base.bounceVelX = Math.random() < 0.5 ? -1 : 1;
       base.bounceVelY = 0;
@@ -3606,9 +3607,14 @@ const Game = () => {
           }
           soundEffects.explode();
         };
+        if ((boss.stageFlash ?? 0) > 0) boss.stageFlash = (boss.stageFlash ?? 0) - 1;
         if (stage > (boss.ballStage ?? 0)) {
           ring();
           addShake(3, 12);
+          boss.stageFlash = 40;
+          if (stage === 2) {
+            boss.dashTimer = Math.min(boss.dashTimer ?? a.FIRST_DASH_TICKS, a.FIRST_DASH_TICKS);
+          }
           // A stage change must not leave the slower stage's long attack gap.
           boss.shootTimer = Math.min(boss.shootTimer, Math.max(a.BURST_MIN_TICKS, Math.floor(Math.max(90, 180 - state.wave * 2) * a.BURST_INTERVAL_MUL[stage])));
         }
@@ -4324,6 +4330,17 @@ const Game = () => {
         if (!reducedMotionRef.current) jitter = Math.sin(ticks * 2.1) * 2;
       }
       ctx.drawImage(ballCanvas, -radius - 2 + jitter, -radius - 2);
+      if ((boss.stageFlash ?? 0) > 0 && !reducedMotionRef.current) {
+        const flash = boss.stageFlash ?? 0;
+        ctx.save();
+        ctx.globalAlpha *= flash / 40;
+        ctx.strokeStyle = "#FF2222";
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(0, 0, radius + (1 - flash / 40) * 40, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+      }
     } else if (boss.bossType === "flyingSaucer") {
       const flash = boss.hitFlash > 0;
       ctx.fillStyle = flash ? "#FFFFFF" : "#446688";
@@ -4463,6 +4480,18 @@ const Game = () => {
     ctx.strokeRect(barX, hpBarY, barW, barH);
     ctx.fillStyle = hpFrac > 0.3 ? barColor : "#FF0000";
     ctx.fillRect(barX, hpBarY, barW * hpFrac, barH);
+    if (boss.bossType === "amigaBall" && boss.ballStage !== undefined) {
+      ctx.globalAlpha = 0.8;
+      ctx.strokeStyle = "#FFFFFF";
+      ctx.lineWidth = 1;
+      for (const threshold of BALANCE.AMIGA.STAGE_HP) {
+        const tickX = barX + barW * threshold;
+        ctx.beginPath();
+        ctx.moveTo(tickX, hpBarY);
+        ctx.lineTo(tickX, hpBarY + barH);
+        ctx.stroke();
+      }
+    }
     ctx.globalAlpha = 0.9;
     ctx.font = "8px 'Press Start 2P', monospace";
     ctx.fillStyle = "#FFFFFF";

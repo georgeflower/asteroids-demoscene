@@ -131,6 +131,7 @@ export const BALANCE = {
   },
   // Boing ball: flat original proportions and readable solo bounce stages.
   AMIGA: {
+    HP_MUL: 1.8,
     RADIUS: 50,
     TILT_DEG: 19,
     SPIN_PER_TICK: 0.05,
@@ -140,11 +141,12 @@ export const BALANCE = {
     BOUNCE_VY: [8.0, 9.0, 9.8],
     BOUNCE_VARIANCE: 0.06,
     SPEED_X_BASE: 1.6, SPEED_X_PER_WAVE: 0.06, SPEED_X_STAGE_MUL: [1, 1.2, 1.45], SPEED_X_MAX: 4.5,
-    STAGE_HP: [0.60, 0.30],
+    STAGE_HP: [0.66, 0.40],
     TURN_TO_SHIP: [0, 0.3, 0.5],
     BURST_COUNT: [8, 10, 12], BURST_SPEED: [2.0, 2.2, 2.4], BURST_INTERVAL_MUL: [1, 0.8, 0.65], BURST_MIN_TICKS: 60,
     SLAM_PER_SIDE: [1, 1, 2], SLAM_SPEED: [3.5, 4.0, 4.5], SLAM_EXTRA_SPEED: 1.5,
     VOLLEY_COUNT: [0, 3, 5], VOLLEY_SPREAD_DEG: 12, VOLLEY_SPEED: [0, 3.0, 3.4],
+    FIRST_DASH_TICKS: 90,
     DASH_INTERVAL_TICKS: [300, 420], DASH_HOVER_TICKS: 75, DASH_LOCK_TICKS: 30, DASH_TRACK_SPEED: 1.5, DASH_DROP_SPEED: 11,
   },
 } as const;

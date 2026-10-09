@@ -2,7 +2,7 @@
 
 A modern tribute to the classic Asteroids arcade game, infused with demoscene aesthetics and retro computing vibes. Built with React, TypeScript, and Canvas rendering, featuring CRT visual effects, multiple game modes, and a global leaderboard system.
 
-**Current version: 0.7.0** — see [CHANGELOG.md](./CHANGELOG.md) for history and what is coming next.
+**Current version: 0.7.1** — see [CHANGELOG.md](./CHANGELOG.md) for history and what is coming next.
 
 ## ✨ Features
 

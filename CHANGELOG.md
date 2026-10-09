@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.7.1] - 2026-10-09 — Boing boss tuning
+
+### Changed
+
+- The Boing ball boss has more HP
+- Its harder stages start earlier and last longer, and its first drop attack comes sooner
+
+### Added
+
+- Stage markers on the boss HP bar and a red pulse when the Boing ball enters a new stage
+
 ## [0.7.0] - 2026-10-09 — Boing ball boss
 
 ### Changed
