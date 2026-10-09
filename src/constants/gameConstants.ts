@@ -121,6 +121,14 @@ export const BALANCE = {
     INTERVAL_RAND: 400,
     SMALL_SCATTER: 0.12,
   },
+  // Solo enemy entry warnings and clearance from a ship parked at the edge.
+  WARNING: {
+    TICKS: 120,
+    BLINK_LAST_TICKS: 30,
+    GUARD_EDGE_PX: 100,
+    GUARD_Y_PX: 80,
+    GUARD_TRIES: 10,
+  },
 } as const;
 
 export type DropSource = keyof typeof BALANCE.DROP_RATE;
