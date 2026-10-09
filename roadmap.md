@@ -1,6 +1,5 @@
-# Spawn warnings 0.6.4
+# Boing ball 0.7.0
 
-- [x] Add solo pending-spawn scheduling, entry guard, release and warning drawing.
-- [x] Update warning constants and release copy to 0.6.4.
-- [x] Verify warning timing, guard, caps, pause and release consistency (isolated logic tests and live solo browser checks).
-- [x] Check version consistency and current preview errors (version check passed; preview build OK).
+- [x] Replace ball rendering and add floor/drop shadows and reduced-motion telegraph.
+- [x] Implement solo stages, energetic bounces, slam, volleys and hover/drop.
+- [x] Update release files; version checker and automatic build passed. Extracted-code tests passed for bounce energy, stage volleys, dash tracking/locking/drop, slam expiry, spin reversal, alternating bursts and cached sphere/flash pixels. Live wave-five desktop/mobile screenshots checked with no runtime errors. Worker physics and mapping untouched; multiplayer session not played.
