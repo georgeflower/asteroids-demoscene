@@ -48,6 +48,10 @@ export const BOSS_NAMES: Record<string, string> = {
 // EXTRA_LIFE_DROP: weight 6 (12 at 1 life) added to the pool only at <=3 lives,
 // at least 3600 ticks (60 s) apart and max 1 per wave.
 export const BALANCE = {
+  // Base pickup bonus points (doubled while the 2x score power-up is active).
+  PICKUP_SCORE: { shield: 150, rapidFire: 150, multiplier: 200, extraLife: 500 },
+  // Solo shield: 420 ticks = 7 s at 60 Hz; shared SHIELD_DURATION stays 300.
+  SHIELD_SOLO_TICKS: 420,
   EXTRA_LIFE_FIRST: 10000,
   EXTRA_LIFE_STEP: 10000,
   MAX_LIVES: 5,
