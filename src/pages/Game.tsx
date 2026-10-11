@@ -19,7 +19,7 @@ import ChangelogOverlay from "@/components/ChangelogOverlay";
 import { loadBindings, displayKeyName, type ControlBindings } from "@/hooks/useControlSettings";
 import type { DuelNetState, CoopNetState, SessionMode } from "@/types/multiplayer";
 import { DEBUG_ENABLED, DEBUG_CATEGORIES, type DebugCategory, type DebugLogEntry } from "@/constants/debug";
-import { SPAWN_INVULNERABILITY_FRAMES, SHIELD_DURATION, RAPID_FIRE_DURATION, MULTIPLIER_DURATION, DEFAULT_TURN_SPEED, BULLET_LIFETIME, BOSS_TYPES, BOSS_NAMES, HIGH_SCORES_ENABLED, MIN_SCORE_FOR_INITIALS, BALANCE, extraLifeThreshold, type DropSource } from "@/constants/gameConstants";
+import { SPAWN_INVULNERABILITY_FRAMES, RAPID_FIRE_DURATION, MULTIPLIER_DURATION, DEFAULT_TURN_SPEED, BULLET_LIFETIME, BOSS_TYPES, BOSS_NAMES, HIGH_SCORES_ENABLED, MIN_SCORE_FOR_INITIALS, BALANCE, extraLifeThreshold, type DropSource } from "@/constants/gameConstants";
 import { readGamepad as readGamepadUtil } from "@/hooks/useInput";
 
 interface Vector {
@@ -656,6 +656,8 @@ const Game = () => {
     waveReached: 1,
     dropsByType: { shield: 0, rapidFire: 0, multiplier: 0, extraLife: 0 } as Record<string, number>,
     pityDrops: 0,
+    pickupScore: 0,
+    pickups: 0,
   });
   const balanceStatsRef = useRef(freshBalanceStats());
   const recordDeath = (cause: string) => {
@@ -3936,12 +3938,13 @@ const Game = () => {
         const label = powerUpLabels[powerUp.type];
         spawnFloatingText(powerUp.pos, label.text, label.color, 28);
 
+        const mult = killMultiplier(state);
         switch (powerUp.type) {
           case "shield":
-            state.powerUpActive.shield = SHIELD_DURATION;
+            state.powerUpActive.shield = BALANCE.SHIELD_SOLO_TICKS;
             state.ship.invulnerable = true;
             // Preserve existing spawn invulnerability; only clear if shield duration is longer
-            state.ship.invulnerableTime = Math.max(state.ship.invulnerableTime, SHIELD_DURATION);
+            state.ship.invulnerableTime = Math.max(state.ship.invulnerableTime, BALANCE.SHIELD_SOLO_TICKS);
             break;
           case "rapidFire":
             state.powerUpActive.rapidFire = RAPID_FIRE_DURATION;
@@ -3958,6 +3961,14 @@ const Game = () => {
             state.powerUpActive.multiplier = MULTIPLIER_DURATION;
             break;
         }
+        const pts = Math.round(BALANCE.PICKUP_SCORE[powerUp.type] * mult);
+        const prevScore = state.score;
+        state.score += pts;
+        awardExtraLives(state, prevScore);
+        setDisplayScore(state.score);
+        balanceStatsRef.current.pickupScore += pts;
+        balanceStatsRef.current.pickups++;
+        spawnFloatingText({ x: powerUp.pos.x, y: powerUp.pos.y + 22 }, `+${pts}`, label.color, 16);
         soundEffects.powerUp();
         addDebugLog(
           "powerup",
@@ -5269,7 +5280,7 @@ const Game = () => {
       // Power-up HUD bars
       const activePowerUps: { label: string; color: string; remaining: number; max: number }[] = [];
       if (state.powerUpActive.shield > 0)
-        activePowerUps.push({ label: "SHIELD", color: "#7FFF7F", remaining: state.powerUpActive.shield, max: 300 });
+        activePowerUps.push({ label: "SHIELD", color: "#7FFF7F", remaining: state.powerUpActive.shield, max: BALANCE.SHIELD_SOLO_TICKS });
       if (state.powerUpActive.rapidFire > 0)
         activePowerUps.push({ label: "RAPID", color: "#FF6666", remaining: state.powerUpActive.rapidFire, max: 600 });
       if (state.powerUpActive.multiplier > 0)
