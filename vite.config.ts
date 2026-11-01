@@ -20,6 +20,8 @@ function versionCheck(): Plugin {
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
+  // Set VITE_BASE=./ when building for a subfolder host (Nekoweb). Default: root.
+  base: process.env.VITE_BASE || "/",
   server: {
     host: "::",
     port: 8080,

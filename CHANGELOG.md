@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.7.2] - 2026-11-01 — Nekoweb build
+
+### Added
+
+- The game can now also be built and hosted from a subfolder (Nekoweb) with its own backend
+
+### Changed
+
+- The backend moved from Lovable Cloud to its own Supabase project (scores kept)
+
 ## [0.7.1] - 2026-10-09 — Boing boss tuning
 
 ### Changed

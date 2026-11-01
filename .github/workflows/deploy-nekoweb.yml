@@ -1,0 +1,25 @@
+name: Deploy to Nekoweb
+on:
+  workflow_dispatch:
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile
+      - run: bun run build
+        env:
+          VITE_BASE: ./
+          VITE_ROUTER: hash
+          VITE_SUPABASE_URL: ${{ vars.NEKOWEB_SUPABASE_URL }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.NEKOWEB_SUPABASE_KEY }}
+          VITE_SUPABASE_PROJECT_ID: ${{ vars.NEKOWEB_SUPABASE_PROJECT_ID }}
+      - uses: mp-pinheiro/nekoweb-deploy@0.3.0
+        with:
+          API_KEY: ${{ secrets.NEKOWEB_API_KEY }}
+          BUILD_DIR: './dist'
+          DEPLOY_DIR: '/games/asteroids'
+          NEKOWEB_PAGENAME: 'qumran'
+          CLEANUP: 'False'
+          DELAY: '0.5'

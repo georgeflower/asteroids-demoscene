@@ -1,4 +1,7 @@
-project_id = "ctrucihctxgwzprpaylb"
+project_id = "octtiovyulpcikcnpfwb"
+
+[functions.submit]
+verify_jwt = true
 
 [functions.scenestream-proxy]
 verify_jwt = false

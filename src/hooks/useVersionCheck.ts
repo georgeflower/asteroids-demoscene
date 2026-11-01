@@ -7,7 +7,7 @@ const VERSION_CHECK_INTERVAL = 3 * 60 * 1000; // 3 minutes
 export function useVersionCheck() {
   const checkVersion = useCallback(async () => {
     try {
-      const res = await fetch(`/version.json?_t=${Date.now()}`, {
+      const res = await fetch(`${import.meta.env.BASE_URL}version.json?_t=${Date.now()}`, {
         cache: "no-store",
       });
       if (!res.ok) return;

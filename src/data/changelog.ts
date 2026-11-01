@@ -4,6 +4,10 @@ export interface ChangelogRelease { version: string; date: string; title?: strin
 export const COMING_NEXT: ChangelogSection[] = [];
 
 export const CHANGELOG: ChangelogRelease[] = [
+  { version: "0.7.2", date: "2026-11-01", title: "Nekoweb build", sections: [
+    { label: "Added", items: ["Can now also be hosted from a subfolder (Nekoweb) with its own backend"] },
+    { label: "Changed", items: ["Backend moved to its own Supabase project; scores kept"] },
+  ] },
   { version: "0.7.1", date: "2026-10-09", title: "Boing boss tuning", sections: [
     { label: "Added", items: ["Stage markers on the boss HP bar and a red pulse on each new stage"] },
     { label: "Changed", items: ["The Boing ball boss has more HP", "Harder stages start earlier, last longer and bring the first drop attack sooner"] },
