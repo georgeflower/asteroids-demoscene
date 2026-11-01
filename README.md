@@ -2,7 +2,7 @@
 
 A modern tribute to the classic Asteroids arcade game, infused with demoscene aesthetics and retro computing vibes. Built with React, TypeScript, and Canvas rendering, featuring CRT visual effects, multiple game modes, and a global leaderboard system.
 
-**Current version: 0.7.1** — see [CHANGELOG.md](./CHANGELOG.md) for history and what is coming next.
+**Current version: 0.7.2** — see [CHANGELOG.md](./CHANGELOG.md) for history and what is coming next.
 
 ## ✨ Features
 
@@ -306,3 +306,18 @@ Under the condition that:
 ---
 
 **🎵 Press START to play! 🎵**
+
+## Building for a subfolder host
+
+For a static host without SPA fallback, such as Nekoweb (`https://qumran.nekoweb.org/games/asteroids/`), build with:
+
+```bash
+VITE_BASE=./ VITE_ROUTER=hash bun run build
+```
+
+- `VITE_BASE=./` makes asset paths relative so the build works from any subfolder, and `/index.html` also works as a direct URL.
+- `VITE_ROUTER=hash` switches to `HashRouter` (`#/game`), because the host cannot rewrite unknown paths to `index.html`.
+- `VITE_SUPABASE_URL` / `VITE_SUPABASE_PUBLISHABLE_KEY` from the environment override `.env`, so another backend can be used for a given build.
+- The manual workflow `.github/workflows/deploy-nekoweb.yml` does this build and uploads `dist` to `/games/asteroids`. It needs the repository variables `NEKOWEB_SUPABASE_URL`, `NEKOWEB_SUPABASE_KEY`, `NEKOWEB_SUPABASE_PROJECT_ID` and the secret `NEKOWEB_API_KEY`.
+- `.github/workflows/keepalive-supabase.yml` pings the database daily so the free Supabase project is not paused.
+- Add the host origin to `ALLOWED_ORIGINS` in `supabase/functions/submit/index.ts` (`https://qumran.nekoweb.org` is included).

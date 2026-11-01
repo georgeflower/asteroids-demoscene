@@ -8,6 +8,7 @@ const ALLOWED_ORIGINS = [
   'https://asteroids-demoscene.lovable.app',
   'https://id-preview--b6edd2f4-8993-4a05-a257-466f1a773f73.lovable.app',
   'https://b6edd2f4-8993-4a05-a257-466f1a773f73.lovableproject.com',
+  'https://qumran.nekoweb.org',
 ];
 
 function getAllowedOrigin(req: Request): string | null {

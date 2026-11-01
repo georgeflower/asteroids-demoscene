@@ -31,9 +31,6 @@ supabase functions deploy submit
 Set the required secrets for the Edge Function:
 
 ```bash
-# Set the application URL (replace with your actual domain)
-supabase secrets set VITE_APP_URL=https://asteroids-demoscene.lovable.app
-
 # Set the admin secret key — choose any strong random string.
 # This is the key you will type into the Admin Monitor "Admin key" prompt.
 supabase secrets set ADMIN_SECRET_KEY=<your-strong-random-secret>
@@ -41,8 +38,7 @@ supabase secrets set ADMIN_SECRET_KEY=<your-strong-random-secret>
 
 Or via Supabase Dashboard:
 1. Go to **Edge Functions → submit → Settings**
-2. Add environment variable: `VITE_APP_URL` = `https://asteroids-demoscene.lovable.app`
-3. Add environment variable: `ADMIN_SECRET_KEY` = `<your-strong-random-secret>`
+2. Add environment variable: `ADMIN_SECRET_KEY` = `<your-strong-random-secret>`
 
 > **Note:** `ADMIN_SECRET_KEY` is a **server-side** secret stored in Supabase and is never exposed to the browser. It is the password you enter in the Admin Monitor dashboard. Without it set, the `/admin-data` and `/admin-delete` endpoints always return `401 Unauthorized`.
 

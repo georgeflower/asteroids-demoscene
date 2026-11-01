@@ -5785,11 +5785,11 @@ const Game = () => {
   // Preload oneliner GIFs
   useEffect(() => {
     const gifMap: Record<string, string> = {
-      ":necta:": "/images/necta.gif",
-      ":nectawall:": "/images/nectawall.gif",
-      "d^^b": "/images/headphones.gif",
-      ":D": "/images/D.gif",
-      ":he-man:": "/images/he-man.gif",
+      ":necta:": `${import.meta.env.BASE_URL}images/necta.gif`,
+      ":nectawall:": `${import.meta.env.BASE_URL}images/nectawall.gif`,
+      "d^^b": `${import.meta.env.BASE_URL}images/headphones.gif`,
+      ":D": `${import.meta.env.BASE_URL}images/D.gif`,
+      ":he-man:": `${import.meta.env.BASE_URL}images/he-man.gif`,
     };
     const imgs: Record<string, HTMLImageElement> = {};
     for (const [key, src] of Object.entries(gifMap)) {
